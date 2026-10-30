@@ -219,11 +219,11 @@ function parse_bytes(
 function parseSomethingFromSequence(
   cursor: XmlCursor
 ): OurCommon.Either<OurTypes.Something, DeserializationError> {
-  let theValue: OurTypes.JsonValue | null = null;
+  let theValue: OurTypes.JsonValue | undefined = undefined;
   let theValues: OurTypes.JsonArray | null = null;
   let theMapping: OurTypes.JsonObject | null = null;
   let theMappingWithConstrainedKey: OurTypes.JsonObject | null = null;
-  let theOptionalValue: OurTypes.JsonValue | null = null;
+  let theOptionalValue: OurTypes.JsonValue | null | undefined = undefined;
   let theOptionalValues: OurTypes.JsonArray | null = null;
   let theOptionalMapping: OurTypes.JsonObject | null = null;
 
@@ -248,7 +248,7 @@ function parseSomethingFromSequence(
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
       case "value": {
-        if (theValue !== null) {
+        if (theValue !== undefined) {
           propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
@@ -312,7 +312,7 @@ function parseSomethingFromSequence(
       }
 
       case "optionalValue": {
-        if (theOptionalValue !== null) {
+        if (theOptionalValue !== undefined) {
           propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
@@ -378,7 +378,7 @@ function parseSomethingFromSequence(
     cursor.skipIgnorable();
   }
 
-  if (theValue === null) {
+  if (theValue === undefined) {
     return newDeserializationError<OurTypes.Something>(
       "The required property 'value' is missing"
     );
@@ -407,7 +407,7 @@ function parseSomethingFromSequence(
     theValues,
     theMapping,
     theMappingWithConstrainedKey,
-    theOptionalValue,
+    theOptionalValue ?? null,
     theOptionalValues,
     theOptionalMapping
   );

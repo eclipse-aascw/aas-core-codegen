@@ -107,6 +107,20 @@ class EnhancedSomething
     instance_->set_optional_mapping(value);
   }
 
+  const common::optional<nlohmann::json>& optional_value() const override {
+    return instance_->optional_value();
+  }
+
+  common::optional<nlohmann::json>& mutable_optional_value() override {
+    return instance_->mutable_optional_value();
+  }
+
+  void set_optional_value(
+    common::optional<nlohmann::json> value
+  ) override {
+    instance_->set_optional_value(value);
+  }
+
   const std::shared_ptr<E>& enhancement() const {
     return enhancement_;
   }

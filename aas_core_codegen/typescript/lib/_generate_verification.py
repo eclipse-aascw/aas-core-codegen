@@ -1236,9 +1236,10 @@ def _generate_verify_json_value(
 
     A JSON-able value is, recursively, exactly as JSON itself is defined, but
     its TypeScript type rules out neither of the two ways of not being one:
-    a non-finite number and a ``null``, which `strictNullChecks` catches at
-    the boundary but not inside a value handed over as `any` by a JavaScript
-    caller. Both are reported here, at any depth.
+    a non-finite number and an ``undefined``, which `strictNullChecks` catches
+    at the boundary but not inside a value handed over as `any` by
+    a JavaScript caller. Both are reported here, at any depth. A ``null`` is
+    a JSON null, and hence a JSON-able value.
 
     The path of an error leads all the way down to the culprit: an item of
     an open JSON array contributes an `IndexSegment` and a member of an open
@@ -1270,7 +1271,11 @@ def _generate_verify_json_value(
 export function *verifyJsonValue(
 {I}value: OurTypes.JsonValue
 ): IterableIterator<VerificationError> {{
-{I}if (value === null || value === undefined) {{
+{I}if (value === null) {{
+{II}return;
+{I}}}
+
+{I}if (value === undefined) {{
 {II}yield new VerificationError(
 {III}`Expected a JSON-able value, but got: ${{value}}`
 {II});
@@ -1299,7 +1304,7 @@ export function *verifyJsonValue(
 
 {II}default:
 {III}yield new VerificationError(
-{IIII}`Expected a JSON-able value (a boolean, a number, a string, ` +
+{IIII}`Expected a JSON-able value (a null, a boolean, a number, a string, ` +
 {IIIII}`an array or an object), but got: ${{typeof value}}`
 {III});
 {III}return;

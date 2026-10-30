@@ -70,12 +70,8 @@ namespace dummy
             )
             {
                 return new Our.Something(
-                    (Nodes.JsonNode)(
-                        System.Text.Json.JsonSerializer.SerializeToNode(
-                            that.Value)
-                        ?? throw new System.InvalidOperationException(
-                            "Expected SerializeToNode to copy a non-null value, "
-                                + "but it returned null")),
+                    System.Text.Json.JsonSerializer.SerializeToNode(
+                        that.Value),
                     (Nodes.JsonArray)(
                         System.Text.Json.JsonSerializer.SerializeToNode(
                             that.Values)
@@ -95,12 +91,8 @@ namespace dummy
                             "Expected SerializeToNode to copy a non-null value, "
                                 + "but it returned null")),
                     (that.OptionalValue != null)
-                        ? (Nodes.JsonNode)(
-                            System.Text.Json.JsonSerializer.SerializeToNode(
-                                that.OptionalValue)
-                            ?? throw new System.InvalidOperationException(
-                                "Expected SerializeToNode to copy a non-null value, "
-                                    + "but it returned null"))
+                        ? System.Text.Json.JsonSerializer.SerializeToNode(
+                            that.OptionalValue)
                         : null,
                     (that.OptionalValues != null)
                         ? (Nodes.JsonArray)(

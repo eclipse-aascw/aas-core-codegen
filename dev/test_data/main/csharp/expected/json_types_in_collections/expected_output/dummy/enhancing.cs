@@ -44,13 +44,13 @@ namespace dummy
                 _instance = instance;
             }
 
-            public List<Nodes.JsonNode> Values
+            public List<Nodes.JsonNode?> Values
             {
                 get => _instance.Values;
                 set => _instance.Values = value;
             }
 
-            public (string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject) TupleWithJson
+            public (string, Nodes.JsonNode?, Nodes.JsonArray, Nodes.JsonObject) TupleWithJson
             {
                 get => _instance.TupleWithJson;
                 set => _instance.TupleWithJson = value;

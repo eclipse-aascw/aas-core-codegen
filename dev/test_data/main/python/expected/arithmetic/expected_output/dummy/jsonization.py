@@ -221,6 +221,7 @@ class DeserializationException(Exception):
 # (see https://github.com/python/mypy/issues/731). We have to use ``Any``
 # here, instead of recursive type annotations.
 Jsonable = Union[
+    None,
     bool,
     int,
     float,
@@ -231,6 +232,7 @@ Jsonable = Union[
 
 
 MutableJsonable = Union[
+    None,
     bool,
     int,
     float,

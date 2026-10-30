@@ -878,8 +878,9 @@ def _generate_json_value_readers(
             f"""\
 // Read the content of an element holding a JSON-able value.
 //
-// The content is a single discriminator element -- `<boolean>`, `<double>`,
-// `<string>`, `<array>` or `<struct>` -- which says what the value is.
+// The content is a single discriminator element -- `<nil>`, `<boolean>`,
+// `<double>`, `<string>`, `<array>` or `<struct>` -- which says what
+// the value is.
 //
 // The `current` token is expected to point to the content of the enclosing
 // element, and the resulting `next` token points to its end element.

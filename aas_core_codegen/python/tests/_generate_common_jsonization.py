@@ -139,7 +139,7 @@ def check_equal(
 {I}:param got: obtained JSON-able value
 {I}:yield: differences
 {I}"""
-{I}if isinstance(expected, (bool, int, float, str, bytes)):
+{I}if expected is None or isinstance(expected, (bool, int, float, str, bytes)):
 {II}if type(expected) is not type(got):
 {III}yield Difference(f"Expected {{type(expected)}}, but got {{type(got)}}")
 

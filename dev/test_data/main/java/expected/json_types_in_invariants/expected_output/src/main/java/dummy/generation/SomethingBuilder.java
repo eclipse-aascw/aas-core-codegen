@@ -21,6 +21,8 @@ public class SomethingBuilder {
 
   private ObjectNode optionalMapping;
 
+  private JsonNode optionalValue;
+
   public SomethingBuilder(
     ObjectNode mapping,
     ArrayNode values) {
@@ -37,10 +39,16 @@ public class SomethingBuilder {
     return this;
   }
 
+  public SomethingBuilder setOptionalValue(JsonNode optionalValue) {
+    this.optionalValue = optionalValue;
+    return this;
+  }
+
   public Something build() {
     return new Something(
       this.mapping,
       this.values,
-      this.optionalMapping);
+      this.optionalMapping,
+      this.optionalValue);
   }
 }

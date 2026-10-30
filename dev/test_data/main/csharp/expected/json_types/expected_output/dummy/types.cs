@@ -58,7 +58,7 @@ namespace dummy
 
     public interface ISomething : IClass
     {
-        public Nodes.JsonNode Value { get; set; }
+        public Nodes.JsonNode? Value { get; set; }
 
         public Nodes.JsonArray Values { get; set; }
 
@@ -75,7 +75,7 @@ namespace dummy
 
     public class Something : ISomething
     {
-        public Nodes.JsonNode Value { get; set; }
+        public Nodes.JsonNode? Value { get; set; }
 
         public Nodes.JsonArray Values { get; set; }
 
@@ -149,7 +149,7 @@ namespace dummy
         }
 
         public Something(
-            Nodes.JsonNode value,
+            Nodes.JsonNode? value,
             Nodes.JsonArray values,
             Nodes.JsonObject mapping,
             Nodes.JsonObject mappingWithConstrainedKey,

@@ -182,7 +182,7 @@ namespace dummy
         /// </summary>
         /// <remarks>
         /// <paramref name="reader" /> is expected to be positioned at the start
-        /// element of the discriminator (<c>&lt;boolean&gt;</c>,
+        /// element of the discriminator (<c>&lt;nil&gt;</c>, <c>&lt;boolean&gt;</c>,
         /// <c>&lt;double&gt;</c>, <c>&lt;string&gt;</c>, <c>&lt;array&gt;</c> or
         /// <c>&lt;struct&gt;</c>). On success, <paramref name="reader" /> is left
         /// positioned at the node right after the discriminator's own end
@@ -199,7 +199,7 @@ namespace dummy
             if (reader.EOF || reader.NodeType != Xml.XmlNodeType.Element)
             {
                 error = new Reporting.Error(
-                    "Expected one of the elements <boolean>, <double>, <string>, " +
+                    "Expected one of the elements <nil>, <boolean>, <double>, <string>, " +
                     "<array> or <struct>, but got " +
                     (
                         reader.EOF
@@ -228,6 +228,13 @@ namespace dummy
             Nodes.JsonNode? result = null;
             switch (discriminator)
             {
+                case "nil":
+                    // NOTE (mristin):
+                    // A <nil> has no content, which consuming its end element below
+                    // checks.
+                    result = null;
+                    break;
+
                 case "boolean":
                     if (isEmpty)
                     {
@@ -319,7 +326,7 @@ namespace dummy
                     // It is this very element which does not belong here, so naming it
                     // in the path as well as in the message would say nothing more.
                     error = new Reporting.Error(
-                        "Expected one of the elements <boolean>, <double>, <string>, " +
+                        "Expected one of the elements <nil>, <boolean>, <double>, <string>, " +
                         $"<array> or <struct>, but got: <{discriminator}>");
                     return null;
             }
@@ -358,7 +365,7 @@ namespace dummy
             if (isEmpty)
             {
                 error = new Reporting.Error(
-                    "Expected one of the elements <boolean>, <double>, <string>, " +
+                    "Expected one of the elements <nil>, <boolean>, <double>, <string>, " +
                     "<array> or <struct> as the content of a <value> element, " +
                     "but got no content at all");
                 return null;
@@ -520,7 +527,7 @@ namespace dummy
             if (isEmptyValue)
             {
                 error = new Reporting.Error(
-                    "Expected one of the elements <boolean>, <double>, <string>, " +
+                    "Expected one of the elements <nil>, <boolean>, <double>, <string>, " +
                     "<array> or <struct> as the content of a <value> element, " +
                     "but got no content at all");
                 error.PrependSegment(
@@ -646,7 +653,7 @@ namespace dummy
             if (isEmpty)
             {
                 error = new Reporting.Error(
-                    "Expected one of the elements <boolean>, <double>, <string>, " +
+                    "Expected one of the elements <nil>, <boolean>, <double>, <string>, " +
                     "<array> or <struct> as the content of a <value> element, " +
                     "but got no content at all");
                 return null;
@@ -675,11 +682,11 @@ namespace dummy
         /// <paramref name="writer" />.
         /// </summary>
         /// <remarks>
-        /// This writes exactly one discriminator element (<c>&lt;boolean&gt;</c>,
-        /// <c>&lt;double&gt;</c>, <c>&lt;string&gt;</c>, <c>&lt;array&gt;</c> or
-        /// <c>&lt;struct&gt;</c>). <paramref name="that" /> must be JSON-able
-        /// (recursively a boolean, a number, a string, an array or an object with
-        /// string keys), and never <c>null</c>, or a
+        /// This writes exactly one discriminator element (<c>&lt;nil&gt;</c>,
+        /// <c>&lt;boolean&gt;</c>, <c>&lt;double&gt;</c>, <c>&lt;string&gt;</c>,
+        /// <c>&lt;array&gt;</c> or <c>&lt;struct&gt;</c>). <paramref name="that" />
+        /// must be JSON-able (recursively a null, a boolean, a number, a string,
+        /// an array or an object with string keys), or a
         /// <see cref="SerializationFailure" /> is thrown, carrying
         /// the path to the culprit within <paramref name="that" />. The enclosing
         /// serializer converts it -- <see cref="Xmlization.Serialize.To" /> does,
@@ -694,10 +701,12 @@ namespace dummy
             switch (that)
             {
                 case null:
-                    throw new SerializationFailure(
-                        new Reporting.Error(
-                            "Expected a JSON-able value (a boolean, a number, " +
-                            "a string, an array or an object), but got null"));
+                    // NOTE (mristin):
+                    // XML-RPC itself knows no null, so we follow the widespread extension,
+                    // and write a JSON null as an empty <nil/>.
+                    writer.WriteStartElement("nil", "");
+                    writer.WriteEndElement();
+                    break;
 
                 case Nodes.JsonArray jsonArray:
                     writer.WriteStartElement("array", "");
@@ -754,7 +763,7 @@ namespace dummy
                     {
                         throw new SerializationFailure(
                             new Reporting.Error(
-                                "Expected a JSON-able value (a boolean, a number, " +
+                                "Expected a JSON-able value (a null, a boolean, a number, " +
                                 "a string, an array or an object), but got a value of " +
                                 $"an unexpected underlying type: {jsonValue}"));
                     }
@@ -763,7 +772,7 @@ namespace dummy
                 default:
                     throw new SerializationFailure(
                         new Reporting.Error(
-                            "Expected a JSON-able value (a boolean, a number, " +
+                            "Expected a JSON-able value (a null, a boolean, a number, " +
                             "a string, an array or an object), but got: " +
                             $"{that.GetType()}"));
             }

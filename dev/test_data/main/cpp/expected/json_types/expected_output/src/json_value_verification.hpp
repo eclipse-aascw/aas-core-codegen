@@ -32,8 +32,8 @@ enum class JsonValueShape {
  * \brief Exhaustively verify that a ``nlohmann::json`` value is JSON-able.
  *
  * A JSON-able value is, recursively, exactly as JSON itself is defined:
- * a boolean, a number, a string, an array of JSON-able values or an object
- * of JSON-able values with string keys -- in particular, ``null``, a binary
+ * a ``null``, a boolean, a number, a string, an array of JSON-able values or
+ * an object of JSON-able values with string keys -- in particular, a binary
  * value and a discarded value are rejected, at any depth.
  *
  * We deliberately walk the value with an explicit stack instead of plain

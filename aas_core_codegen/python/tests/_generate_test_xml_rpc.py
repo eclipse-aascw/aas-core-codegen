@@ -88,16 +88,29 @@ class TestReading(unittest.TestCase):
 {III}f'<member><name>n</name><value><double>1</double></value></member>'
 {III}f'<member><name>f</name><value><double>1.5</double></value></member>'
 {III}f'<member><name>s</name><value><string>x</string></value></member>'
+{III}f'<member><name>z</name><value><nil/></value></member>'
 {III}f'<member><name>a</name><value><array><data>'
 {III}f'<value><double>0</double></value>'
+{III}f'<value><nil></nil></value>'
 {III}f'</data></array></value></member>'
 {III}f'</struct></v>'
 {II})
 
 {II}self.assertEqual(
-{III}{{"b": True, "n": 1.0, "f": 1.5, "s": "x", "a": [0.0]}},
+{III}{{"b": True, "n": 1.0, "f": 1.5, "s": "x", "z": None, "a": [0.0, None]}},
 {III}our_xmlrpc.read_value_content(element, iterator)
 {II})
+
+{I}def test_a_nil_with_text_is_refused(self) -> None:
+{II}element, iterator = _enter(
+{III}f'<v xmlns=\"{{our_xmlcommon.NAMESPACE}}\"><nil xmlns=\"\">x</nil></v>'
+{II})
+
+{II}with self.assertRaises(our_xmlcommon.DeserializationException) as context:
+{III}our_xmlrpc.read_value_content(element, iterator)
+
+{II}self.assertEqual('nil', str(context.exception.path))
+{II}self.assertIn("Expected no text in a <nil> element", context.exception.cause)
 
 {I}def test_a_discriminator_in_the_document_namespace_is_refused(self) -> None:
 {II}# NOTE (mristin):
@@ -288,6 +301,10 @@ class TestWriting(unittest.TestCase):
 {IIII}'<array><data><value><double>0.0</double></value></data></array>'
 {III}),
 {III}(
+{IIII}[None],
+{IIII}'<array><data><value><nil/></value></data></array>'
+{III}),
+{III}(
 {IIII}{{'k': 0.0}},
 {IIII}(
 {IIIII}'<struct><member><name>k</name>'
@@ -310,6 +327,14 @@ class TestWriting(unittest.TestCase):
 {IIII}stream.getvalue(),
 {IIII}f"for the value {{value!r}}"
 {III})
+
+{I}def test_a_null_is_written_as_an_empty_nil(self) -> None:
+{II}stream = io.StringIO()
+{II}writer = our_xmlcommon.Writer(stream)
+
+{II}our_xmlrpc.write_discriminator(None, writer)
+
+{II}self.assertEqual('<nil xmlns=\"\"/>', stream.getvalue())
 
 {I}def test_the_path_of_a_failure_points_into_the_value(self) -> None:
 {II}stream = io.StringIO()

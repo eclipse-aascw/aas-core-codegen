@@ -40,9 +40,17 @@ namespace dummy.Tests
             }
 
             private static bool JsonNodesEqualButDistinct(
-                Nodes.JsonNode that,
-                Nodes.JsonNode other)
+                Nodes.JsonNode? that,
+                Nodes.JsonNode? other)
             {
+                // NOTE (mristin):
+                // A JSON null is a C# null, and there is nothing to be distinct about
+                // two of them.
+                if (that == null || other == null)
+                {
+                    return that == other;
+                }
+
                 // NOTE (mristin):
                 // A JsonNode compares only by reference, so we compare the canonical
                 // JSON text.

@@ -63,6 +63,8 @@ namespace dummy
         public Nodes.JsonArray Values { get; set; }
 
         public Nodes.JsonObject? OptionalMapping { get; set; }
+
+        public Nodes.JsonNode? OptionalValue { get; set; }
     }
 
     public class Something : ISomething
@@ -72,6 +74,8 @@ namespace dummy
         public Nodes.JsonArray Values { get; set; }
 
         public Nodes.JsonObject? OptionalMapping { get; set; }
+
+        public Nodes.JsonNode? OptionalValue { get; set; }
 
         /// <summary>
         /// Iterate over all the class instances referenced from this instance
@@ -135,11 +139,13 @@ namespace dummy
         public Something(
             Nodes.JsonObject mapping,
             Nodes.JsonArray values,
-            Nodes.JsonObject? optionalMapping = null)
+            Nodes.JsonObject? optionalMapping = null,
+            Nodes.JsonNode? optionalValue = null)
         {
             Mapping = mapping;
             Values = values;
             OptionalMapping = optionalMapping;
+            OptionalValue = optionalValue;
         }
     }
 }  // namespace dummy

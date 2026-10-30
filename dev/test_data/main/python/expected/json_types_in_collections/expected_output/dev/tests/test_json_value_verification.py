@@ -139,6 +139,16 @@ class TestJsonValue(unittest.TestCase):
                 paths_and_causes[0][1]
             )
 
+    def test_a_null_is_accepted_at_any_depth(self) -> None:
+        for value in (None, [None], {"a": [None, {"b": None}]}):
+            self.assertEqual(
+                [],
+                _paths_and_causes(
+                    our_json_value_verification.verify_json_value(value)
+                ),
+                f"for the value {value!r}"
+            )
+
     def test_a_value_of_an_unexpected_type_is_refused(self) -> None:
         paths_and_causes = _paths_and_causes(
             our_json_value_verification.verify_json_value({"a": object()})

@@ -201,6 +201,7 @@ public class Xmlization {
       ObjectNode theMapping = null;
       ArrayNode theValues = null;
       ObjectNode theOptionalMapping = null;
+      JsonNode theOptionalValue = null;
 
       if (!isEmptySequence) {
         while (!atEndOfSequence(reader)) {
@@ -260,6 +261,21 @@ public class Xmlization {
               }
               break;
             }
+            case "optionalValue": {
+              if (theOptionalValue != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
+              final Reporting.Result<JsonNode> value =
+                readTextAs_jsonValue(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theOptionalValue = value.getResult();
+              }
+              break;
+            }
             default:
               return unexpectedProperty("Something", elementName);
           }
@@ -295,7 +311,8 @@ public class Xmlization {
       return Reporting.Result.success(new Something(
         theMapping,
         theValues,
-        theOptionalMapping));
+        theOptionalMapping,
+        theOptionalValue));
     }
 
     /**
@@ -495,6 +512,13 @@ public class Xmlization {
         that.getOptionalMapping(),
         writer,
         _VisitorWithWriter::writeJsonObjectContent);
+
+      writeOptionalProperty(
+        "optionalValue",
+        "getOptionalValue()",
+        that.getOptionalValue(),
+        writer,
+        _VisitorWithWriter::writeJsonValueContent);
     }
 
     @Override

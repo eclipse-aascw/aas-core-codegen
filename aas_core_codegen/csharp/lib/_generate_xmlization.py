@@ -1250,6 +1250,26 @@ def _generate_deserialize_property(
     reader_name = _content_reader_name(type_anno)
 
     # NOTE (mristin):
+    # A JSON-able value might be a JSON null, which is a C# ``null``, so we mark
+    # with a flag that we have read it.
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        seen_var = csharp_naming.variable_name(Identifier(f"seen_{prop.name}"))
+        return (
+            Stripped(
+                f"""\
+if ({seen_var})
+{{
+{I}error = DuplicatePropertyError(elementName);
+{I}break;
+}}
+{seen_var} = true;
+{target_var} = {reader_name}(
+{I}reader, isEmptyProperty, out error);"""
+            ),
+            None,
+        )
+
+    # NOTE (mristin):
     # A variable which is not null can only have been set by an earlier turn of
     # the property loop, so it tells us that the property comes a second time.
     # The check precedes the read, so the duplicate is refused without its
@@ -1328,6 +1348,14 @@ internal static Our.{name} {name}FromSequence(
             target_type = Stripped(f"{target_type}?")
 
         init_target_var_stmts.append(Stripped(f"{target_type} {target_var} = null;"))
+
+        if isinstance(
+            intermediate.beneath_optional(prop.type_annotation),
+            intermediate.JsonValueTypeAnnotation,
+        ):
+            seen_var = csharp_naming.variable_name(Identifier(f"seen_{prop.name}"))
+            init_target_var_stmts.append(Stripped(f"bool {seen_var} = false;"))
+
     blocks.append(Stripped("\n".join(init_target_var_stmts)))
 
     # noinspection PyListCreation
@@ -1452,10 +1480,21 @@ if (!isEmptySequence)
         target_var = csharp_naming.variable_name(Identifier(f"the_{prop.name}"))
 
         if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+            # NOTE (mristin):
+            # A JSON-able value might be a JSON null, see the note in
+            # :py:func:`_generate_deserialize_property`.
+            condition = (
+                "!" + csharp_naming.variable_name(Identifier(f"seen_{prop.name}"))
+                if isinstance(
+                    prop.type_annotation, intermediate.JsonValueTypeAnnotation
+                )
+                else f"{target_var} == null"
+            )
+
             blocks.append(
                 Stripped(
                     f"""\
-if ({target_var} == null)
+if ({condition})
 {{
 {I}error = new Reporting.Error(
 {II}"The required property {prop_csharp} has not been given " +
@@ -1522,7 +1561,13 @@ if ({target_var} == null)
         arg_var = csharp_naming.variable_name(Identifier(f"the_{arg.name}"))
 
         init_writer.write(f"{I}{arg_var}")
-        if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+        if not isinstance(
+            prop.type_annotation,
+            (
+                intermediate.OptionalTypeAnnotation,
+                intermediate.JsonValueTypeAnnotation,
+            ),
+        ):
             init_writer.write("\n")
 
             # Dedention could not work here due to prefix indention at the very
@@ -1763,7 +1808,7 @@ def _generate_read_json_content_functions() -> List[Stripped]:
             Stripped(
                 f"""\
 error = new Reporting.Error(
-{I}"Expected one of the elements <boolean>, <double>, <string>, " +
+{I}"Expected one of the elements <nil>, <boolean>, <double>, <string>, " +
 {I}"<array> or <struct> as the content of the element, " +
 {I}"but the element was self-closing");
 return default!;"""
@@ -1796,13 +1841,31 @@ return new Nodes.JsonObject();"""
             ),
         ),
     ):
+        # NOTE (mristin):
+        # A JSON-able value might be a JSON null, which is a C# ``null``, while
+        # an array and an object are never null.
+        is_json_value = function_name == "ReadJsonValueContent"
+
+        return_type = f"{csharp_type}?" if is_json_value else csharp_type
+
+        return_result = (
+            Stripped("return result;")
+            if is_json_value
+            else Stripped(
+                f"""\
+return result
+{I}?? throw new System.InvalidOperationException(
+{II}"Unexpected result null when error is null");"""
+            )
+        )
+
         result.append(
             Stripped(
                 f"""\
 /// <summary>
 /// Read the content of an element typed as <c>{csharp_type}</c>.
 /// </summary>
-private static {csharp_type} {function_name}(
+private static {return_type} {function_name}(
 {I}Xml.XmlReader reader,
 {I}bool isEmpty,
 {I}out Reporting.Error? error)
@@ -1819,9 +1882,7 @@ private static {csharp_type} {function_name}(
 {II}return default!;
 {I}}}
 
-{I}return result
-{II}?? throw new System.InvalidOperationException(
-{III}"Unexpected result null when error is null");
+{I}{indent_but_first_line(return_result, I)}
 }}"""
             )
         )

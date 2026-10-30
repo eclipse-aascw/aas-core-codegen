@@ -681,11 +681,10 @@ def _json_value_from_jsonable(
 {I}Parse :paramref:`jsonable` as a JSON-able value.
 
 {I}A JSON-able value is, recursively, exactly as JSON itself is defined:
-{I}a boolean, a number, a string, an array of JSON-able values or an object
-{I}of JSON-able values with string keys. A ``None`` is rejected at any
-{I}depth, as the JSON ``null`` has no representation as a JSON-able value,
-{I}and so are an infinity and a not-a-number, which JSON can not represent
-{I}at all.
+{I}a ``None`` (JSON null), a boolean, a number, a string, an array of
+{I}JSON-able values or an object of JSON-able values with string keys.
+{I}An infinity and a not-a-number are rejected at any depth, as JSON can not
+{I}represent them at all.
 
 {I}The result is a new structure, and never :paramref:`jsonable` itself, so
 {I}that the parsed instance does not alias the document it came from.
@@ -694,6 +693,9 @@ def _json_value_from_jsonable(
 {I}:return: parsed JSON-able value
 {I}:raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
 {I}"""
+{I}if jsonable is None:
+{II}return None
+
 {I}# NOTE (mristin):
 {I}# A ``bool`` is an ``int`` in Python, so it has to be checked first --
 {I}# otherwise every boolean would come out as a number.
@@ -761,8 +763,8 @@ def _json_value_from_jsonable(
 {II}return items
 
 {I}raise DeserializationException(
-{II}f"Expected a JSON-able value (a boolean, a number, a string, an array "
-{II}f"or an object), but got: {{type(jsonable)}}"
+{II}f"Expected a JSON-able value (a null, a boolean, a number, a string, "
+{II}f"an array or an object), but got: {{type(jsonable)}}"
 {I})'''
         ),
         "_json_array_from_jsonable": Stripped(
@@ -1519,10 +1521,19 @@ if unexpected_key is not None:
             f"The required property {prop.json_name!r} is missing"
         )
 
+        # NOTE (mristin):
+        # A JSON-able value might be a JSON null, which we parse as ``None``,
+        # so we have to check whether the property was there at all.
+        condition = (
+            f"{python_common.string_literal(prop.json_name)} not in mapping"
+            if isinstance(prop.type_annotation, intermediate.JsonValueTypeAnnotation)
+            else f"{variable_by_prop_name[prop.name]} is None"
+        )
+
         blocks.append(
             Stripped(
                 f"""\
-if {variable_by_prop_name[prop.name]} is None:
+if {condition}:
 {I}raise DeserializationException(
 {II}{cause_literal}
 {I})"""
@@ -1706,10 +1717,9 @@ def _json_value_to_jsonable(
 {I}Serialize :paramref:`value` as a JSON-able structure.
 
 {I}A JSON-able value is almost JSON-able as it comes, but not quite: its type
-{I}rules out neither a ``None``, which the JSON ``null`` gives no
-{I}representation for, nor an infinity and a not-a-number, which JSON can not
+{I}rules out neither an infinity and a not-a-number, which JSON can not
 {I}represent at all, nor a non-string key in an object. Each is refused here,
-{I}at any depth.
+{I}at any depth. A ``None`` is written out as a JSON null.
 
 {I}The result is a new structure, and never :paramref:`value` itself, so that
 {I}the serialized document does not alias the instance it came from.
@@ -1718,6 +1728,9 @@ def _json_value_to_jsonable(
 {I}:return: :paramref:`value`, as a JSON-able structure
 {I}:raise: :py:class:`SerializationException` if :paramref:`value` is not JSON-able
 {I}"""
+{I}if value is None:
+{II}return None
+
 {I}# NOTE (mristin):
 {I}# A ``bool`` is an ``int`` in Python, so it has to be checked first --
 {I}# otherwise every boolean would come out as a number.
@@ -1781,8 +1794,8 @@ def _json_value_to_jsonable(
 {II}return items
 
 {I}raise SerializationException(
-{II}f"Expected a JSON-able value (a boolean, a number, a string, an array "
-{II}f"or an object), but got: {{type(value)}}"
+{II}f"Expected a JSON-able value (a null, a boolean, a number, a string, "
+{II}f"an array or an object), but got: {{type(value)}}"
 {I})'''
     )
 
@@ -2800,6 +2813,7 @@ class DeserializationException(Exception):
 # (see https://github.com/python/mypy/issues/731). We have to use ``Any``
 # here, instead of recursive type annotations.
 Jsonable = Union[
+{I}None,
 {I}bool,
 {I}int,
 {I}float,
@@ -2811,6 +2825,7 @@ Jsonable = Union[
         Stripped(
             f"""\
 MutableJsonable = Union[
+{I}None,
 {I}bool,
 {I}int,
 {I}float,

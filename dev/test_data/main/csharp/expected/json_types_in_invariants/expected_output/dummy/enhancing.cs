@@ -62,6 +62,12 @@ namespace dummy
                 set => _instance.OptionalMapping = value;
             }
 
+            public Nodes.JsonNode? OptionalValue
+            {
+                get => _instance.OptionalValue;
+                set => _instance.OptionalValue = value;
+            }
+
             public IEnumerable<Our.IClass> DescendOnce()
             {
                 return _instance.DescendOnce();

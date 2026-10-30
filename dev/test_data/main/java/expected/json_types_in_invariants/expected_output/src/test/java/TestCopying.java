@@ -35,7 +35,8 @@ public class TestCopying {
       return (
         that.getMapping().equals(casted.getMapping())
         && that.getValues().equals(casted.getValues())
-        && that.getOptionalMapping().equals(casted.getOptionalMapping()));
+        && that.getOptionalMapping().equals(casted.getOptionalMapping())
+        && that.getOptionalValue().equals(casted.getOptionalValue()));
     }
   } // class _DeepEqualiser
 
@@ -47,7 +48,8 @@ public class TestCopying {
     return (
       that.getMapping().equals(other.getMapping())
       && that.getValues().equals(other.getValues())
-      && that.getOptionalMapping().equals(other.getOptionalMapping()));
+      && that.getOptionalMapping().equals(other.getOptionalMapping())
+      && that.getOptionalValue().equals(other.getOptionalValue()));
   }
 
   private static Boolean SomethingDeepEquals(Something that, Something other) {

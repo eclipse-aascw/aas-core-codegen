@@ -221,6 +221,7 @@ class DeserializationException(Exception):
 # (see https://github.com/python/mypy/issues/731). We have to use ``Any``
 # here, instead of recursive type annotations.
 Jsonable = Union[
+    None,
     bool,
     int,
     float,
@@ -231,6 +232,7 @@ Jsonable = Union[
 
 
 MutableJsonable = Union[
+    None,
     bool,
     int,
     float,
@@ -290,11 +292,10 @@ def _json_value_from_jsonable(
     Parse :paramref:`jsonable` as a JSON-able value.
 
     A JSON-able value is, recursively, exactly as JSON itself is defined:
-    a boolean, a number, a string, an array of JSON-able values or an object
-    of JSON-able values with string keys. A ``None`` is rejected at any
-    depth, as the JSON ``null`` has no representation as a JSON-able value,
-    and so are an infinity and a not-a-number, which JSON can not represent
-    at all.
+    a ``None`` (JSON null), a boolean, a number, a string, an array of
+    JSON-able values or an object of JSON-able values with string keys.
+    An infinity and a not-a-number are rejected at any depth, as JSON can not
+    represent them at all.
 
     The result is a new structure, and never :paramref:`jsonable` itself, so
     that the parsed instance does not alias the document it came from.
@@ -303,6 +304,9 @@ def _json_value_from_jsonable(
     :return: parsed JSON-able value
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
+    if jsonable is None:
+        return None
+
     # NOTE (mristin):
     # A ``bool`` is an ``int`` in Python, so it has to be checked first --
     # otherwise every boolean would come out as a number.
@@ -370,8 +374,8 @@ def _json_value_from_jsonable(
         return items
 
     raise DeserializationException(
-        f"Expected a JSON-able value (a boolean, a number, a string, an array "
-        f"or an object), but got: {type(jsonable)}"
+        f"Expected a JSON-able value (a null, a boolean, a number, a string, "
+        f"an array or an object), but got: {type(jsonable)}"
     )
 
 
@@ -431,6 +435,7 @@ def something_from_jsonable(
     the_mapping: Optional[our_types.JsonObject] = None
     the_values: Optional[our_types.JsonArray] = None
     the_optional_mapping: Optional[our_types.JsonObject] = None
+    the_optional_value: Optional[our_types.JsonValue] = None
 
     unexpected_key: Optional[str] = None
 
@@ -442,6 +447,8 @@ def something_from_jsonable(
                 the_values = _json_array_from_jsonable(jsonable_value)
             elif key == 'optionalMapping':
                 the_optional_mapping = _json_object_from_jsonable(jsonable_value)
+            elif key == 'optionalValue':
+                the_optional_value = _json_value_from_jsonable(jsonable_value)
             else:
                 unexpected_key = key
                 break
@@ -469,7 +476,8 @@ def something_from_jsonable(
     return our_types.Something(
         the_mapping,
         the_values,
-        the_optional_mapping
+        the_optional_mapping,
+        the_optional_value
     )
 
 
@@ -537,10 +545,9 @@ def _json_value_to_jsonable(
     Serialize :paramref:`value` as a JSON-able structure.
 
     A JSON-able value is almost JSON-able as it comes, but not quite: its type
-    rules out neither a ``None``, which the JSON ``null`` gives no
-    representation for, nor an infinity and a not-a-number, which JSON can not
+    rules out neither an infinity and a not-a-number, which JSON can not
     represent at all, nor a non-string key in an object. Each is refused here,
-    at any depth.
+    at any depth. A ``None`` is written out as a JSON null.
 
     The result is a new structure, and never :paramref:`value` itself, so that
     the serialized document does not alias the instance it came from.
@@ -549,6 +556,9 @@ def _json_value_to_jsonable(
     :return: :paramref:`value`, as a JSON-able structure
     :raise: :py:class:`SerializationException` if :paramref:`value` is not JSON-able
     """
+    if value is None:
+        return None
+
     # NOTE (mristin):
     # A ``bool`` is an ``int`` in Python, so it has to be checked first --
     # otherwise every boolean would come out as a number.
@@ -612,8 +622,8 @@ def _json_value_to_jsonable(
         return items
 
     raise SerializationException(
-        f"Expected a JSON-able value (a boolean, a number, a string, an array "
-        f"or an object), but got: {type(value)}"
+        f"Expected a JSON-able value (a null, a boolean, a number, a string, "
+        f"an array or an object), but got: {type(value)}"
     )
 
 
@@ -643,6 +653,14 @@ def _something_to_jsonable(
             )
         except SerializationException as exception:
             exception._prepend_property('optional_mapping')
+            raise
+    if that.optional_value is not None:
+        try:
+            jsonable['optionalValue'] = _json_value_to_jsonable(
+                that.optional_value
+            )
+        except SerializationException as exception:
+            exception._prepend_property('optional_value')
             raise
     return jsonable
 

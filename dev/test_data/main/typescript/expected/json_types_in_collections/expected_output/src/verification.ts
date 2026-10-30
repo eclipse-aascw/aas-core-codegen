@@ -208,7 +208,11 @@ export class VerificationError {
 export function *verifyJsonValue(
   value: OurTypes.JsonValue
 ): IterableIterator<VerificationError> {
-  if (value === null || value === undefined) {
+  if (value === null) {
+    return;
+  }
+
+  if (value === undefined) {
     yield new VerificationError(
       `Expected a JSON-able value, but got: ${value}`
     );
@@ -237,7 +241,7 @@ export function *verifyJsonValue(
 
     default:
       yield new VerificationError(
-        `Expected a JSON-able value (a boolean, a number, a string, ` +
+        `Expected a JSON-able value (a null, a boolean, a number, a string, ` +
           `an array or an object), but got: ${typeof value}`
       );
       return;

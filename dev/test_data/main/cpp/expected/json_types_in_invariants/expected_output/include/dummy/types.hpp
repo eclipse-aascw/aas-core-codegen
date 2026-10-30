@@ -84,6 +84,14 @@ class ISomething
     common::optional<nlohmann::json> value
   ) = 0;
 
+  virtual const common::optional<nlohmann::json>& optional_value() const = 0;
+
+  virtual common::optional<nlohmann::json>& mutable_optional_value() = 0;
+
+  virtual void set_optional_value(
+    common::optional<nlohmann::json> value
+  ) = 0;
+
   virtual ~ISomething() = default;
 };
 
@@ -97,7 +105,8 @@ class Something
   Something(
     nlohmann::json mapping,
     nlohmann::json values,
-    common::optional<nlohmann::json> optional_mapping = common::nullopt
+    common::optional<nlohmann::json> optional_mapping = common::nullopt,
+    common::optional<nlohmann::json> optional_value = common::nullopt
   );
 
   ModelType model_type() const override;
@@ -138,6 +147,18 @@ class Something
 
   // endregion
 
+  // region Get and set optional_value_
+
+  const common::optional<nlohmann::json>& optional_value() const override;
+
+  common::optional<nlohmann::json>& mutable_optional_value() override;
+
+  void set_optional_value(
+    common::optional<nlohmann::json> value
+  ) override;
+
+  // endregion
+
   ~Something() override = default;
 
  private:
@@ -146,6 +167,8 @@ class Something
   nlohmann::json values_;
 
   common::optional<nlohmann::json> optional_mapping_;
+
+  common::optional<nlohmann::json> optional_value_;
 };
 
 // endregion

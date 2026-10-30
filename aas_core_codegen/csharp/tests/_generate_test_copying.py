@@ -369,9 +369,17 @@ private static bool BytesEqualButDistinct(
             Stripped(
                 f"""\
 private static bool JsonNodesEqualButDistinct(
-{I}Nodes.JsonNode that,
-{I}Nodes.JsonNode other)
+{I}Nodes.JsonNode? that,
+{I}Nodes.JsonNode? other)
 {{
+{I}// NOTE (mristin):
+{I}// A JSON null is a C# null, and there is nothing to be distinct about
+{I}// two of them.
+{I}if (that == null || other == null)
+{I}{{
+{II}return that == other;
+{I}}}
+
 {I}// NOTE (mristin):
 {I}// A JsonNode compares only by reference, so we compare the canonical
 {I}// JSON text.

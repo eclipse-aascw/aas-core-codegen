@@ -156,8 +156,24 @@ test("a value of an unexpected type is refused", () => {{
         ),
         Stripped(
             f"""\
-test("a null is refused at any depth", () => {{
-{I}const value = {{ a: [null] }} as unknown as OurTypes.JsonValue;
+test("a null is accepted at any depth", () => {{
+{I}const values: Array<OurTypes.JsonValue> = [
+{II}null,
+{II}[null],
+{II}{{ a: [null, {{ b: null }}] }}
+{I}];
+
+{I}for (const value of values) {{
+{II}expect(
+{III}pathsAndMessages(OurVerification.verifyJsonValue(value))
+{II}).toStrictEqual([]);
+{I}}}
+}});"""
+        ),
+        Stripped(
+            f"""\
+test("an undefined is refused at any depth", () => {{
+{I}const value = {{ a: [undefined] }} as unknown as OurTypes.JsonValue;
 
 {I}const pathsAndCauses = pathsAndMessages(
 {II}OurVerification.verifyJsonValue(value)
@@ -165,7 +181,7 @@ test("a null is refused at any depth", () => {{
 
 {I}expect(pathsAndCauses.length).toStrictEqual(1);
 {I}expect(pathsAndCauses[0][0]).toStrictEqual('["a"][0]');
-{I}expect(pathsAndCauses[0][1]).toContain("but got: null");
+{I}expect(pathsAndCauses[0][1]).toContain("but got: undefined");
 }});"""
         ),
         Stripped(

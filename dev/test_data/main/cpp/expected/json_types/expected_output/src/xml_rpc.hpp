@@ -88,8 +88,8 @@ common::expected<
  * document which is already being read through \p reader.
  *
  * \p reader is expected to be positioned at the start element of
- * the discriminator (\c \<boolean\>, \c \<double\>, \c \<string\>,
- * \c \<array\> or \c \<struct\>). On success, \p reader is left
+ * the discriminator (\c \<nil\>, \c \<boolean\>, \c \<double\>,
+ * \c \<string\>, \c \<array\> or \c \<struct\>). On success, \p reader is left
  * positioned at the node right after the discriminator's own stop element,
  * mirroring how the primitive ``Deserialize*`` functions in ``xmlization``
  * behave.
@@ -164,8 +164,8 @@ struct SerializationError {
  *
  * \param os the UTF-8-encoded output stream where the XML will be written
  * \param value to be serialized; it must be JSON-able (recursively
- * a boolean, a number, a string, an array or an object with string keys),
- * and never \c null, or a \ref SerializationError is returned
+ * a null, a boolean, a number, a string, an array or an object with string
+ * keys), or a \ref SerializationError is returned
  * \return An error, if any.
  *
  * The XML-RPC elements reside in no namespace at all, as the XML-RPC
@@ -181,8 +181,9 @@ common::optional<SerializationError> SerializeValue(
  * \brief Serialize \p value, embedded within a larger XML document which is
  * already being written through \p writer.
  *
- * This writes exactly one discriminator element (\c \<boolean\>,
- * \c \<double\>, \c \<string\>, \c \<array\> or \c \<struct\>).
+ * This writes exactly one discriminator element (\c \<nil\>,
+ * \c \<boolean\>, \c \<double\>, \c \<string\>, \c \<array\> or
+ * \c \<struct\>).
  *
  * \p undeclare_namespace tells whether that element is the outermost one
  * which resides in no namespace. That one undeclares the default namespace of

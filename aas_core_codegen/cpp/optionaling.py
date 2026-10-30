@@ -185,9 +185,9 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         ):
             # NOTE (mristin):
             # An item of a JSON-able array, and a value of a JSON-able object,
-            # is itself a JSON-able value. A JSON-able value is never optional
-            # -- JSON knows a ``null``, but a ``JSONValue`` deliberately does
-            # not.
+            # is itself a JSON-able value, which is a plain ``nlohmann::json``
+            # and never a ``common::optional``. It might be a JSON null, but
+            # that is a value of ``nlohmann::json`` like any other.
             self.is_optional_map[node] = False
             return None
 

@@ -5,10 +5,11 @@
 # the public headers in ``include/``), just like ``xml_common`` on which it
 # depends. It implements a restricted subset of XML-RPC's own element
 # vocabulary -- ``<boolean>``, ``<double>``, ``<string>``, ``<array>``,
-# ``<data>``, ``<struct>``, ``<member>``, ``<name>`` and ``<value>`` -- to
-# de/serialize a ``nlohmann::json`` value which is JSON-able (*i.e.*,
-# recursively a boolean, a number, a string, an array of JSON-able values or
-# an object of JSON-able values with string keys; never ``null``).
+# ``<data>``, ``<struct>``, ``<member>``, ``<name>`` and ``<value>``, together
+# with the widespread ``<nil/>`` extension -- to de/serialize
+# a ``nlohmann::json`` value which is JSON-able (*i.e.*, recursively a null,
+# a boolean, a number, a string, an array of JSON-able values or an object of
+# JSON-able values with string keys).
 #
 # It is meant to be used in two different ways:
 # * Stand-alone, over a whole ``<value>`` document (see
@@ -124,8 +125,8 @@ common::expected<
  * document which is already being read through \\p reader.
  *
  * \\p reader is expected to be positioned at the start element of
- * the discriminator (\\c \\<boolean\\>, \\c \\<double\\>, \\c \\<string\\>,
- * \\c \\<array\\> or \\c \\<struct\\>). On success, \\p reader is left
+ * the discriminator (\\c \\<nil\\>, \\c \\<boolean\\>, \\c \\<double\\>,
+ * \\c \\<string\\>, \\c \\<array\\> or \\c \\<struct\\>). On success, \\p reader is left
  * positioned at the node right after the discriminator's own stop element,
  * mirroring how the primitive ``Deserialize*`` functions in ``xmlization``
  * behave.
@@ -221,8 +222,8 @@ def _generate_serialize_definitions() -> List[Stripped]:
  *
  * \\param os the UTF-8-encoded output stream where the XML will be written
  * \\param value to be serialized; it must be JSON-able (recursively
- * a boolean, a number, a string, an array or an object with string keys),
- * and never \\c null, or a \\ref SerializationError is returned
+ * a null, a boolean, a number, a string, an array or an object with string
+ * keys), or a \\ref SerializationError is returned
  * \\return An error, if any.
  *
  * The XML-RPC elements reside in no namespace at all, as the XML-RPC
@@ -240,8 +241,9 @@ common::optional<SerializationError> SerializeValue(
  * \\brief Serialize \\p value, embedded within a larger XML document which is
  * already being written through \\p writer.
  *
- * This writes exactly one discriminator element (\\c \\<boolean\\>,
- * \\c \\<double\\>, \\c \\<string\\>, \\c \\<array\\> or \\c \\<struct\\>).
+ * This writes exactly one discriminator element (\\c \\<nil\\>,
+ * \\c \\<boolean\\>, \\c \\<double\\>, \\c \\<string\\>, \\c \\<array\\> or
+ * \\c \\<struct\\>).
  *
  * \\p undeclare_namespace tells whether that element is the outermost one
  * which resides in no namespace. That one undeclares the default namespace of
@@ -529,7 +531,7 @@ def _generate_deserialize_scalar_bodies_implementation() -> List[Stripped]:
     (or, for a ``<string>``, possibly already at the stop element if the
     string is empty). None of them consume the discriminator's own stop
     element -- that is uniformly handled by ``DeserializeValueFrom`` for all
-    five discriminators alike.
+    six discriminators alike.
     """
     return [
         Stripped(
@@ -757,7 +759,7 @@ std::pair<
 {III}common::nullopt,
 {III}common::make_optional<DeserializationError>(
 {IIII}common::Concat(
-{IIIII}L"Expected one of <boolean>, <double>, <string>, <array> "
+{IIIII}L"Expected one of <nil>, <boolean>, <double>, <string>, <array> "
 {IIIII}L"or <struct>, but got ",
 {IIIII}xml_common::NodeToHumanReadableWstring(reader.node())
 {IIII})
@@ -782,7 +784,16 @@ std::pair<
 {I}common::optional<nlohmann::json> value;
 {I}common::optional<DeserializationError> error;
 
-{I}if (discriminator == "boolean") {{
+{I}if (discriminator == "nil") {{
+{II}// NOTE (mristin):
+{II}// XML-RPC itself knows no null, so we follow the widespread extension,
+{II}// and read a JSON null from an empty <nil/>. Any content other than
+{II}// whitespace is refused by the check of the stop element below.
+{II}error = SkipWhitespace(reader);
+{II}if (!error.has_value()) {{
+{III}value = nlohmann::json(nullptr);
+{II}}}
+{I}}} else if (discriminator == "boolean") {{
 {II}std::tie(value, error) = DeserializeBooleanBodyFrom(reader);
 {I}}} else if (discriminator == "double") {{
 {II}std::tie(value, error) = DeserializeDoubleBodyFrom(reader);
@@ -797,7 +808,7 @@ std::pair<
 {III}common::nullopt,
 {III}common::make_optional<DeserializationError>(
 {IIII}common::Concat(
-{IIIII}L"Expected one of <boolean>, <double>, <string>, <array> "
+{IIIII}L"Expected one of <nil>, <boolean>, <double>, <string>, <array> "
 {IIIII}L"or <struct>, but got a start element <",
 {IIIII}common::Utf8ToWstring(discriminator),
 {IIIII}L">"
@@ -1312,7 +1323,13 @@ common::optional<SerializationError> SerializeValueBodyTo(
 {I}const nlohmann::json& value,
 {I}bool undeclare_namespace
 ) {{
-{I}if (value.is_boolean()) {{
+{I}if (value.is_null()) {{
+{II}// NOTE (mristin):
+{II}// XML-RPC itself knows no null, so we follow the widespread extension,
+{II}// and write a JSON null as an empty <nil/>.
+{II}writer.StartElementInNoNamespace("nil", undeclare_namespace);
+{II}writer.StopElement("nil");
+{I}}} else if (value.is_boolean()) {{
 {II}writer.StartElementInNoNamespace(
 {III}"boolean", undeclare_namespace
 {II});
@@ -1383,11 +1400,11 @@ common::optional<SerializationError> SerializeValueBodyTo(
 {II}writer.StopElement("struct");
 {I}}} else {{
 {II}// NOTE (mristin):
-{II}// This covers ``null``, a binary value and a discarded value -- none of
-{II}// which are representable as a ``JSONValue``.
+{II}// This covers a binary value and a discarded value -- neither of which
+{II}// is representable as a ``JSONValue``.
 {II}return common::make_optional<SerializationError>(
 {III}common::Concat(
-{IIII}L"Expected a JSON-able value (a boolean, a number, a string, "
+{IIII}L"Expected a JSON-able value (a null, a boolean, a number, a string, "
 {IIII}L"an array or an object), but got a value of type: ",
 {IIII}common::Utf8ToWstring(value.type_name())
 {III})

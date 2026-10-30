@@ -115,12 +115,26 @@ namespace dummy.Tests
     }
 
     public static void CheckJsonNodesEqual(
-        Nodes.JsonNode that,
-        Nodes.JsonNode other,
+        Nodes.JsonNode? that,
+        Nodes.JsonNode? other,
         out Reporting.Error? error
     )
     {
         error = null;
+
+        // NOTE (mristin):
+        // A JSON null is a C# null.
+        if (that == null || other == null)
+        {
+            if (that != other)
+            {
+                error = new Reporting.Error(
+                    $"Mismatch in nulls: {that?.ToJsonString() ?? "null"} != " +
+                    $"{other?.ToJsonString() ?? "null"}"
+                );
+            }
+            return;
+        }
 
         var thatNodeKind = GetNodeKind(that);
         var otherNodeKind = GetNodeKind(other);
@@ -148,7 +162,7 @@ namespace dummy.Tests
 
                     for (int i = 0; i < thatArray.Count; i++)
                     {
-                        CheckJsonNodesEqual(thatArray[i]!, otherArray[i]!, out error);
+                        CheckJsonNodesEqual(thatArray[i], otherArray[i], out error);
                         if (error != null)
                         {
                             error.PrependSegment(new Reporting.IndexSegment(i));
@@ -160,8 +174,8 @@ namespace dummy.Tests
                 }
             case Nodes.JsonObject thatObject:
                 {
-                    var thatDictionary = thatObject as IDictionary<string, Nodes.JsonNode>;
-                    var otherDictionary = (other as IDictionary<string, Nodes.JsonNode>)!;
+                    var thatDictionary = thatObject as IDictionary<string, Nodes.JsonNode?>;
+                    var otherDictionary = (other as IDictionary<string, Nodes.JsonNode?>)!;
 
                     var thatKeys = thatDictionary.Keys.ToList();
                     thatKeys.Sort();

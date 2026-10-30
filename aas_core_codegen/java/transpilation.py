@@ -1432,6 +1432,18 @@ new java.util.ArrayList<{item_type}>(
             parse_tree.Slice,
         )
 
+        # NOTE (mristin):
+        # A non-optional JSON-able value is never a Java ``null``, but might be
+        # a JSON null, which Jackson represents as a null node.
+        if isinstance(
+            self.type_map[node.value],
+            intermediate_type_inference.JsonValueTypeAnnotation,
+        ):
+            if isinstance(node.value, no_parentheses_types):
+                return Stripped(f"{value}.isNull()"), None
+            else:
+                return Stripped(f"({value}).isNull()"), None
+
         if isinstance(node.value, no_parentheses_types):
             if self._optional_map[node.value]:
                 return Stripped(f"!{value}.isPresent()"), None
@@ -1464,6 +1476,17 @@ new java.util.ArrayList<{item_type}>(
             parse_tree.Index,
             parse_tree.Slice,
         )
+
+        # NOTE (mristin):
+        # See the note in :py:meth:`transform_is_none` on the JSON null.
+        if isinstance(
+            self.type_map[node.value],
+            intermediate_type_inference.JsonValueTypeAnnotation,
+        ):
+            if isinstance(node.value, no_parentheses_types_in_this_context):
+                return Stripped(f"!{value}.isNull()"), None
+            else:
+                return Stripped(f"!({value}).isNull()"), None
 
         if isinstance(node.value, no_parentheses_types_in_this_context):
             if self._optional_map[node.value]:

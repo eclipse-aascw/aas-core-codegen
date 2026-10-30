@@ -50,16 +50,29 @@ class TestReading(unittest.TestCase):
             f'<member><name>n</name><value><double>1</double></value></member>'
             f'<member><name>f</name><value><double>1.5</double></value></member>'
             f'<member><name>s</name><value><string>x</string></value></member>'
+            f'<member><name>z</name><value><nil/></value></member>'
             f'<member><name>a</name><value><array><data>'
             f'<value><double>0</double></value>'
+            f'<value><nil></nil></value>'
             f'</data></array></value></member>'
             f'</struct></v>'
         )
 
         self.assertEqual(
-            {"b": True, "n": 1.0, "f": 1.5, "s": "x", "a": [0.0]},
+            {"b": True, "n": 1.0, "f": 1.5, "s": "x", "z": None, "a": [0.0, None]},
             our_xmlrpc.read_value_content(element, iterator)
         )
+
+    def test_a_nil_with_text_is_refused(self) -> None:
+        element, iterator = _enter(
+            f'<v xmlns="{our_xmlcommon.NAMESPACE}"><nil xmlns="">x</nil></v>'
+        )
+
+        with self.assertRaises(our_xmlcommon.DeserializationException) as context:
+            our_xmlrpc.read_value_content(element, iterator)
+
+        self.assertEqual('nil', str(context.exception.path))
+        self.assertIn("Expected no text in a <nil> element", context.exception.cause)
 
     def test_a_discriminator_in_the_document_namespace_is_refused(self) -> None:
         # NOTE (mristin):
@@ -249,6 +262,10 @@ class TestWriting(unittest.TestCase):
                 '<array><data><value><double>0.0</double></value></data></array>'
             ),
             (
+                [None],
+                '<array><data><value><nil/></value></data></array>'
+            ),
+            (
                 {'k': 0.0},
                 (
                     '<struct><member><name>k</name>'
@@ -271,6 +288,14 @@ class TestWriting(unittest.TestCase):
                 stream.getvalue(),
                 f"for the value {value!r}"
             )
+
+    def test_a_null_is_written_as_an_empty_nil(self) -> None:
+        stream = io.StringIO()
+        writer = our_xmlcommon.Writer(stream)
+
+        our_xmlrpc.write_discriminator(None, writer)
+
+        self.assertEqual('<nil xmlns=""/>', stream.getvalue())
 
     def test_the_path_of_a_failure_points_into_the_value(self) -> None:
         stream = io.StringIO()

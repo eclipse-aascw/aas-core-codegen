@@ -1282,10 +1282,19 @@ def _generate_parse_properties_of_class(cls: intermediate.ConcreteClass) -> Stri
         )
 
         # NOTE (mristin):
+        # A JSON-able value might be a JSON null, so we mark a required JSON-able
+        # property which we have not read yet with ``undefined`` instead.
+        unset = (
+            "undefined"
+            if isinstance(prop.type_annotation, intermediate.JsonValueTypeAnnotation)
+            else "null"
+        )
+
+        # NOTE (mristin):
         # We make all the variables optional since the properties can come in any
         # order, so we can not tell a missing one from one which we have not read yet.
         if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-            var_type = Stripped(f"{var_type} | null")
+            var_type = Stripped(f"{var_type} | {unset}")
 
             message_literal = typescript_common.string_literal(
                 f"The required property {prop.json_name!r} is missing"
@@ -1293,7 +1302,7 @@ def _generate_parse_properties_of_class(cls: intermediate.ConcreteClass) -> Stri
             required_checks.append(
                 Stripped(
                     f"""\
-if ({var_name} === null) {{
+if ({var_name} === {unset}) {{
 {I}return newDeserializationError<
 {II}OurTypes.{cls_name}
 {I}>(
@@ -1303,7 +1312,7 @@ if ({var_name} === null) {{
                 )
             )
 
-        var_declarations.append(Stripped(f"let {var_name}: {var_type} = null;"))
+        var_declarations.append(Stripped(f"let {var_name}: {var_type} = {unset};"))
 
         parse_cases.append(
             _generate_parse_case(
@@ -1716,7 +1725,13 @@ def _generate_json_able_helpers(
 function jsonValueFromJsonable(
 {I}jsonable: JsonValue
 ): OurCommon.Either<OurTypes.JsonValue, DeserializationError> {{
-{I}if (jsonable === null || jsonable === undefined) {{
+{I}if (jsonable === null) {{
+{II}return new OurCommon.Either<OurTypes.JsonValue, DeserializationError>(
+{III}null, null
+{II});
+{I}}}
+
+{I}if (jsonable === undefined) {{
 {II}return newDeserializationError<OurTypes.JsonValue>(
 {III}`Expected a JSON-able value, but got: ${{jsonable}}`
 {II});
@@ -1749,7 +1764,7 @@ function jsonValueFromJsonable(
 
 {II}default:
 {III}return newDeserializationError<OurTypes.JsonValue>(
-{IIII}`Expected a JSON-able value (a boolean, a number, a string, ` +
+{IIII}`Expected a JSON-able value (a null, a boolean, a number, a string, ` +
 {IIIII}`an array or an object), but got: ${{typeof jsonable}}`
 {III});
 {I}}}
@@ -1869,7 +1884,11 @@ function jsonValueToJsonable(that: OurTypes.JsonArray): Array<JsonValue>;
 function jsonValueToJsonable(that: OurTypes.JsonObject): JsonObject;
 function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue;
 function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue {{
-{I}if (that === null || that === undefined) {{
+{I}if (that === null) {{
+{II}return null;
+{I}}}
+
+{I}if (that === undefined) {{
 {II}throw new SerializationError(
 {III}`Expected a JSON-able value, but got: ${{that}}`
 {II});
@@ -1897,7 +1916,7 @@ function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue {{
 
 {II}default:
 {III}throw new SerializationError(
-{IIII}`Expected a JSON-able value (a boolean, a number, a string, ` +
+{IIII}`Expected a JSON-able value (a null, a boolean, a number, a string, ` +
 {IIIII}`an array or an object), but got: ${{typeof that}}`
 {III});
 {I}}}
@@ -2754,7 +2773,13 @@ import * as OurStringification from "./stringification";"""
         ),
         Stripped(
             """\
-export type JsonValue = string | number | boolean | JsonObject | JsonArray;
+export type JsonValue =
+  | null
+  | string
+  | number
+  | boolean
+  | JsonObject
+  | JsonArray;
 
 export type JsonArray = Iterable<JsonValue>;
 export type JsonObject = { [prop: string]: JsonValue };"""

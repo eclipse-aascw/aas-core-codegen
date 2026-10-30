@@ -63,6 +63,16 @@ public class EnhancedSomething<EnhancementT>
     instance.setOptionalMapping(optionalMapping);
   }
 
+  @Override
+  public Optional<JsonNode> getOptionalValue() {
+    return instance.getOptionalValue();
+  }
+
+  @Override
+  public void setOptionalValue(JsonNode optionalValue) {
+    instance.setOptionalValue(optionalValue);
+  }
+
   public Iterable<IClass> descendOnce() {
     return instance.descendOnce();
   }

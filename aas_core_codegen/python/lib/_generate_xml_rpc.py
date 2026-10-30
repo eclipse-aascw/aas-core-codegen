@@ -27,8 +27,10 @@ Read and write the JSON-able values as a subset of XML-RPC.
 
 JSON prescribes no XML representation of its own, so we borrow the one of
 XML-RPC for it: a value is written as a single discriminator element --
-``<boolean>``, ``<double>``, ``<string>``, ``<array>`` or ``<struct>`` --
-which says what the value is.
+``<nil>``, ``<boolean>``, ``<double>``, ``<string>``, ``<array>`` or
+``<struct>`` -- which says what the value is. XML-RPC itself knows no null,
+so we follow the widespread extension, and write a JSON null as an empty
+``<nil/>``.
 
 This module knows nothing of the meta-model beyond the JSON-able types, and
 it drives no document of its own. The caller hands over the very stream of
@@ -57,9 +59,9 @@ def read_value_content(
 {I}"""
 {I}Read the content of :paramref:`element` as a JSON-able value.
 
-{I}The content is a single discriminator element -- ``<boolean>``,
-{I}``<double>``, ``<string>``, ``<array>`` or ``<struct>`` -- which says what
-{I}the value is.
+{I}The content is a single discriminator element -- ``<nil>``,
+{I}``<boolean>``, ``<double>``, ``<string>``, ``<array>`` or ``<struct>`` --
+{I}which says what the value is.
 
 {I}The end element corresponding to :paramref:`element` will be read as well.
 
@@ -77,7 +79,7 @@ def read_value_content(
 {I}discriminator = read_next_start_element(
 {II}iterator,
 {II}'a discriminator '
-{II}'(one of <boolean>, <double>, <string>, <array> or <struct>)'
+{II}'(one of <nil>, <boolean>, <double>, <string>, <array> or <struct>)'
 {I})
 
 {I}result = _read_discriminator(discriminator, iterator)
@@ -109,7 +111,7 @@ def _read_discriminator(
 {I}iterator: Iterator[Tuple[str, Element]]
 ) -> our_types.JsonValue:
 {I}"""
-{I}Read :paramref:`element` as one of the five XML-RPC discriminators.
+{I}Read :paramref:`element` as one of the six XML-RPC discriminators.
 
 {I}The end element corresponding to :paramref:`element` will be read as well.
 
@@ -130,6 +132,19 @@ def _read_discriminator(
 {I}# very element which does not belong here, so naming it in the path as well
 {I}# as in the message would say nothing more.
 {I}try:
+{II}if tag_wo_ns == 'nil':
+{III}read_end_element(element, iterator)
+
+{III}# NOTE (mristin):
+{III}# The text of an element is only complete at its end, so we can check
+{III}# it only now.
+{III}if element.text is not None and len(element.text.strip()) != 0:
+{IIII}raise DeserializationException(
+{IIIII}f"Expected no text in a <nil> element, but got: {{element.text!r}}"
+{IIII})
+
+{III}return None
+
 {II}if tag_wo_ns == 'boolean':
 {III}# NOTE (mristin):
 {III}# Real XML-RPC tooling writes and expects a strict ``1``/``0``, and not
@@ -196,7 +211,7 @@ def _read_discriminator(
 
 {I}raise DeserializationException(
 {II}f"Expected a discriminator element "
-{II}f"(one of <boolean>, <double>, <string>, <array> or <struct>), "
+{II}f"(one of <nil>, <boolean>, <double>, <string>, <array> or <struct>), "
 {II}f"but got: {{tag_wo_ns!r}}"
 {I})'''
         ),
@@ -439,12 +454,16 @@ def write_discriminator(
 {I}writer: Writer
 ) -> None:
 {I}"""
-{I}Write :paramref:`value` as one of the five XML-RPC discriminators.
+{I}Write :paramref:`value` as one of the six XML-RPC discriminators.
 
 {I}:param value: to be serialized
 {I}:param writer: to write to
 {I}:raise: :py:class:`SerializationException` if the value could not be written
 {I}"""
+{I}if value is None:
+{II}writer.write_empty_element_in_no_namespace('nil')
+{II}return
+
 {I}# NOTE (mristin):
 {I}# A ``bool`` is an ``int`` in Python, so it has to be checked first --
 {I}# otherwise every boolean would be written as a number.
@@ -521,8 +540,8 @@ def write_discriminator(
 {II}return
 
 {I}raise SerializationException(
-{II}f"Expected a JSON-able value (a boolean, a number, a string, an array "
-{II}f"or an object), but got: {{type(value)}}"
+{II}f"Expected a JSON-able value (a null, a boolean, a number, a string, "
+{II}f"an array or an object), but got: {{type(value)}}"
 {I})'''
         ),
         Stripped(

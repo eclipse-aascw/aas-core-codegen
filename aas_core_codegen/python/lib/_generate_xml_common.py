@@ -185,6 +185,23 @@ def parse_unqualified_element_tag(
 {II}\"\"\"
 {II}self._open_in_no_namespace -= 1
 {II}self.stream.write(f'</{{name}}>')
+
+{I}def write_empty_element_in_no_namespace(
+{III}self,
+{III}name: str
+{I}) -> None:
+{II}\"\"\"
+{II}Write the empty element with the tag name :paramref:`name`, which resides
+{II}in no namespace at all.
+
+{II}If it is the outermost such element, it undeclares the default namespace.
+
+{II}:param name: of the element tag. Expected to contain no XML special characters.
+{II}\"\"\"
+{II}if self._open_in_no_namespace == 0:
+{III}self.stream.write(f'<{{name}} xmlns=""/>')
+{II}else:
+{III}self.stream.write(f'<{{name}}/>')
 """
         if uses_json_types
         else ""

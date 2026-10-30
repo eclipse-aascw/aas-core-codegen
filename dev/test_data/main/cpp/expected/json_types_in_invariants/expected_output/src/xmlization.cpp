@@ -1386,10 +1386,11 @@ namespace properties {
 enum class OfSomething : std::uint32_t {
   kMapping = 0,
   kValues = 1,
-  kOptionalMapping = 2
+  kOptionalMapping = 2,
+  kOptionalValue = 3
 };  // enum class OfSomething
 
-const std::size_t kPropertyCountOfSomething = 3;
+const std::size_t kPropertyCountOfSomething = 4;
 
 const std::unordered_map<
   std::string,
@@ -1406,6 +1407,10 @@ const std::unordered_map<
   {
     "optionalMapping",
     OfSomething::kOptionalMapping
+  },
+  {
+    "optionalValue",
+    OfSomething::kOptionalValue
   }
 };
 
@@ -1430,6 +1435,8 @@ std::pair<
   common::optional<nlohmann::json> the_values;
 
   common::optional<nlohmann::json> the_optional_mapping;
+
+  common::optional<nlohmann::json> the_optional_value;
 
   // endregion Initialization
 
@@ -1459,6 +1466,16 @@ std::pair<
               the_optional_mapping,
               DeserializeJsonObjectFromXmlRpc(reader)
             );
+          case properties::OfSomething::kOptionalValue: {
+            common::optional<DeserializationError> read_error = ReadInto(
+              the_optional_value,
+              DeserializeJsonValueFromXmlRpc(reader)
+            );
+            if (!read_error.has_value() && the_optional_value->is_null()) {
+              the_optional_value = common::nullopt;
+            }
+            return read_error;
+          }
           default:
             throw UnexpectedPropertyLiteralError(
               "properties::OfSomething",
@@ -1507,7 +1524,8 @@ std::pair<
       new types::Something(
         std::move(*the_mapping),
         std::move(*the_values),
-        std::move(the_optional_mapping)
+        std::move(the_optional_mapping),
+        std::move(the_optional_value)
       )
     ),
     common::nullopt
@@ -1963,6 +1981,22 @@ common::optional<xml_common::SerializationError> SerializeSomethingAsSequence(
   );
   if (error.has_value()) {
     return error;
+  }
+
+  const common::optional<nlohmann::json>& maybe_optional_value(
+    that.optional_value()
+  );
+  if (maybe_optional_value.has_value() && !maybe_optional_value->is_null()) {
+    error = WriteProperty(
+      "optionalValue",
+      *maybe_optional_value,
+      writer,
+      iteration::Property::kOptionalValue,
+      WriteJsonValueToXmlRpc
+    );
+    if (error.has_value()) {
+      return error;
+    }
   }
 
   return common::nullopt;

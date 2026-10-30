@@ -46,8 +46,10 @@ import {
 import {
   parseArrayBody as parse_jsonArray,
   parseStructBody as parse_jsonObject,
+  parseValueContent as parse_jsonValue,
   writeArrayBody as write_jsonArray,
-  writeStructBody as write_jsonObject
+  writeStructBody as write_jsonObject,
+  writeValueContent as write_jsonValue
 } from "./xmlrpc";
 
 export {
@@ -220,6 +222,7 @@ function parseSomethingFromSequence(
   let theMapping: OurTypes.JsonObject | null = null;
   let theValues: OurTypes.JsonArray | null = null;
   let theOptionalMapping: OurTypes.JsonObject | null = null;
+  let theOptionalValue: OurTypes.JsonValue | null | undefined = undefined;
 
   const className = OurTypes.Something.name;
 
@@ -289,6 +292,22 @@ function parseSomethingFromSequence(
         break;
       }
 
+      case "optionalValue": {
+        if (theOptionalValue !== undefined) {
+          propertyError = duplicatePropertyError(propertyLocalName);
+          break;
+        }
+
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_jsonValue
+        );
+        propertyError = parsed.error;
+        theOptionalValue = parsed.value;
+        break;
+      }
+
       default: {
         propertyError = new DeserializationError(
           `Unexpected XML property: ${propertyLocalName}`
@@ -323,7 +342,8 @@ function parseSomethingFromSequence(
   const instance = new OurTypes.Something(
     theMapping,
     theValues,
-    theOptionalMapping
+    theOptionalMapping,
+    theOptionalValue ?? null
   );
   return new OurCommon.Either<OurTypes.Something, DeserializationError>(
     instance,
@@ -358,6 +378,12 @@ function writeSomethingAsSequence(
     "optionalMapping",
     that.optionalMapping,
     write_jsonObject
+  );
+  writeOptionalProperty(
+    parts,
+    "optionalValue",
+    that.optionalValue,
+    write_jsonValue
   );
 }
 

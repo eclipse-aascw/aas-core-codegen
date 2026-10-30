@@ -822,7 +822,7 @@ def _read_something_as_sequence(
     the_optional_values: Optional[our_types.JsonArray] = values.get('optionalValues')
     the_optional_mapping: Optional[our_types.JsonObject] = values.get('optionalMapping')
 
-    if the_value is None:
+    if 'value' not in values:
         raise DeserializationException(
             "The required property 'value' is missing"
         )

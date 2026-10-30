@@ -83,11 +83,15 @@ public class Verification {
    */
   private static Stream<Reporting.Error> verifyJsonValueAt(
       JsonNode node, String path) {
-    if (node == null || node.isNull() || node.isMissingNode()) {
+    if (node == null || node.isMissingNode()) {
       return Stream.of(
         new Reporting.Error(
           "Expected a JSON-able value at " + path
             + ", but got: " + node));
+    }
+
+    if (node.isNull()) {
+      return Stream.empty();
     }
 
     if (node.isNumber()) {
@@ -126,7 +130,7 @@ public class Verification {
 
     return Stream.of(
       new Reporting.Error(
-        "Expected a JSON-able value (a boolean, a number, a string, "
+        "Expected a JSON-able value (a null, a boolean, a number, a string, "
           + "an array or an object) at " + path
           + ", but got: " + node.getNodeType()));
   }
@@ -178,6 +182,36 @@ public class Verification {
     public Stream<Reporting.Error> transformSomething(
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
+
+      if (!(
+        !(that.getOptionalValue().isPresent())
+        || isAcceptable(that.getOptionalValue().orElse(null)))) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(new Reporting.Error(
+            "Invariant violated:\n" +
+            "The optional value must be acceptable")));
+      }
+
+      if (!(
+        !(that.getValues().size() > 0
+        && (that.getValues().get(0).isNull())))) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(new Reporting.Error(
+            "Invariant violated:\n" +
+            "The first value must not be a JSON null")));
+      }
+
+      if (!(
+        !(that.getOptionalMapping().isPresent())
+        || (
+            !that.getOptionalMapping().get().has("type")
+            || (!that.getOptionalMapping().get().get("type").isNull())
+        ))) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(new Reporting.Error(
+            "Invariant violated:\n" +
+            "The type of the optional mapping must not be a JSON null")));
+      }
 
       if (!(
         !(that.getValues().size() >= 1)
@@ -269,6 +303,17 @@ public class Verification {
               .map(error -> {
                 error.prependSegment(
                   new Reporting.NameSegment("optionalMapping"));
+                return error;
+              }));
+      }
+
+      if (that.getOptionalValue().isPresent()) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(that.getOptionalValue().get())
+            .flatMap(Verification::verifyJsonValue)
+              .map(error -> {
+                error.prependSegment(
+                  new Reporting.NameSegment("optionalValue"));
                 return error;
               }));
       }

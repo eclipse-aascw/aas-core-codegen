@@ -349,7 +349,7 @@ std::pair<
       common::nullopt,
       common::make_optional<DeserializationError>(
         common::Concat(
-          L"Expected one of <boolean>, <double>, <string>, <array> "
+          L"Expected one of <nil>, <boolean>, <double>, <string>, <array> "
           L"or <struct>, but got ",
           xml_common::NodeToHumanReadableWstring(reader.node())
         )
@@ -374,7 +374,16 @@ std::pair<
   common::optional<nlohmann::json> value;
   common::optional<DeserializationError> error;
 
-  if (discriminator == "boolean") {
+  if (discriminator == "nil") {
+    // NOTE (mristin):
+    // XML-RPC itself knows no null, so we follow the widespread extension,
+    // and read a JSON null from an empty <nil/>. Any content other than
+    // whitespace is refused by the check of the stop element below.
+    error = SkipWhitespace(reader);
+    if (!error.has_value()) {
+      value = nlohmann::json(nullptr);
+    }
+  } else if (discriminator == "boolean") {
     std::tie(value, error) = DeserializeBooleanBodyFrom(reader);
   } else if (discriminator == "double") {
     std::tie(value, error) = DeserializeDoubleBodyFrom(reader);
@@ -389,7 +398,7 @@ std::pair<
       common::nullopt,
       common::make_optional<DeserializationError>(
         common::Concat(
-          L"Expected one of <boolean>, <double>, <string>, <array> "
+          L"Expected one of <nil>, <boolean>, <double>, <string>, <array> "
           L"or <struct>, but got a start element <",
           common::Utf8ToWstring(discriminator),
           L">"
@@ -874,7 +883,13 @@ common::optional<SerializationError> SerializeValueBodyTo(
   const nlohmann::json& value,
   bool undeclare_namespace
 ) {
-  if (value.is_boolean()) {
+  if (value.is_null()) {
+    // NOTE (mristin):
+    // XML-RPC itself knows no null, so we follow the widespread extension,
+    // and write a JSON null as an empty <nil/>.
+    writer.StartElementInNoNamespace("nil", undeclare_namespace);
+    writer.StopElement("nil");
+  } else if (value.is_boolean()) {
     writer.StartElementInNoNamespace(
       "boolean", undeclare_namespace
     );
@@ -945,11 +960,11 @@ common::optional<SerializationError> SerializeValueBodyTo(
     writer.StopElement("struct");
   } else {
     // NOTE (mristin):
-    // This covers ``null``, a binary value and a discarded value -- none of
-    // which are representable as a ``JSONValue``.
+    // This covers a binary value and a discarded value -- neither of which
+    // is representable as a ``JSONValue``.
     return common::make_optional<SerializationError>(
       common::Concat(
-        L"Expected a JSON-able value (a boolean, a number, a string, "
+        L"Expected a JSON-able value (a null, a boolean, a number, a string, "
         L"an array or an object), but got a value of type: ",
         common::Utf8ToWstring(value.type_name())
       )

@@ -25,8 +25,6 @@ from aas_core_codegen.csharp.common import (
     INDENT4 as IIII,
     INDENT5 as IIIII,
     INDENT6 as IIIIII,
-    INDENT7 as IIIIIII,
-    INDENT8 as IIIIIIII,
 )
 from aas_core_codegen.intermediate import uses as intermediate_uses
 
@@ -1120,10 +1118,19 @@ foreach (var keyValue in obj)
         json_name = cls.properties_by_name[arg.name].json_name
         assert not csharp_common.needs_escaping(json_name)
 
+        # NOTE (mristin):
+        # A JSON-able value might be a JSON null, which is a C# ``null``, so we
+        # have to check whether the property was there at all.
+        condition = (
+            f'!obj.ContainsKey("{json_name}")'
+            if isinstance(arg.type_annotation, intermediate.JsonValueTypeAnnotation)
+            else f"{arg_var} == null"
+        )
+
         required_checks.append(
             Stripped(
                 f"""\
-if ({arg_var} == null)
+if ({condition})
 {{
 {I}error = new Reporting.Error(
 {II}"Required property \\"{json_name}\\" is missing");
@@ -1210,7 +1217,11 @@ if (modelType == null)
 
             init_writer.write(f"{I}{arg_var}")
             if not isinstance(
-                prop.type_annotation, intermediate.OptionalTypeAnnotation
+                prop.type_annotation,
+                (
+                    intermediate.OptionalTypeAnnotation,
+                    intermediate.JsonValueTypeAnnotation,
+                ),
             ):
                 init_writer.write("\n")
 
@@ -1280,14 +1291,13 @@ def _generate_deserialize_json_helpers() -> List[Stripped]:
 /// </summary>
 /// <remarks>
 /// A JSON-able value is, recursively, exactly as JSON itself is defined:
-/// a boolean, a finite number, a string, an array of JSON-able values or
-/// an object of JSON-able values with string keys -- never <c>null</c> and
+/// a <c>null</c> (JSON null), a boolean, a finite number, a string, an array
+/// of JSON-able values or an object of JSON-able values with string keys --
 /// never an infinity or a not-a-number, at any depth.
 /// </remarks>
 /// <param name="node">JSON node to be checked</param>
 /// <param name="error">Error, if any, describing why it is not JSON-able</param>
 private static bool CheckIsJsonAble(
-{I}[CodeAnalysis.NotNullWhen(true)]
 {I}Nodes.JsonNode? node,
 {I}out Reporting.Error? error)
 {{
@@ -1295,9 +1305,7 @@ private static bool CheckIsJsonAble(
 
 {I}if (node == null)
 {I}{{
-{II}error = new Reporting.Error(
-{III}"Expected a JSON-able value, but got a null");
-{II}return false;
+{II}return true;
 {I}}}
 
 {I}switch (node)
@@ -1367,13 +1375,18 @@ private static bool CheckIsJsonAble(
 /// </remarks>
 /// <param name="node">JSON node to be parsed</param>
 /// <param name="error">Error, if any, during the deserialization</param>
-internal static Nodes.JsonNode JsonValueFrom(
+internal static Nodes.JsonNode? JsonValueFrom(
 {I}Nodes.JsonNode? node,
 {I}out Reporting.Error? error)
 {{
 {I}if (!CheckIsJsonAble(node, out error))
 {I}{{
 {II}return default!;
+{I}}}
+
+{I}if (node == null)
+{I}{{
+{II}return null;
 {I}}}
 
 {I}// NOTE (mristin):
@@ -1414,7 +1427,7 @@ internal static Nodes.JsonArray JsonArrayFrom(
 {II}return default!;
 {I}}}
 
-{I}Nodes.JsonNode result = JsonValueFrom(node, out error);
+{I}Nodes.JsonNode? result = JsonValueFrom(node, out error);
 {I}if (error != null)
 {I}{{
 {II}return default!;
@@ -1443,7 +1456,7 @@ internal static Nodes.JsonObject JsonObjectFrom(
 {II}return default!;
 {I}}}
 
-{I}Nodes.JsonNode result = JsonValueFrom(node, out error);
+{I}Nodes.JsonNode? result = JsonValueFrom(node, out error);
 {I}if (error != null)
 {I}{{
 {II}return default!;
@@ -2537,13 +2550,14 @@ def _generate_serialize_json_helpers() -> List[Stripped]:
 /// Check that <paramref name="that" /> is a JSON-able value, at any depth.
 /// </summary>
 /// <remarks>
-/// Neither a <c>null</c> nor a non-finite number has a representation as
-/// a JSON-able value, and <see cref="Nodes.JsonNode" /> rules out neither
-/// of the two statically.
+/// A non-finite number has no representation as a JSON-able value, and
+/// <see cref="Nodes.JsonNode" /> does not rule it out statically. A <c>null</c>
+/// is a JSON null, and hence a JSON-able value.
 /// </remarks>
 /// <exception name="SerializationFailure">
-/// Thrown if either is found anywhere within <paramref name="that" />,
-/// carrying the path to the culprit within <paramref name="that" />.
+/// Thrown if a non-finite number is found anywhere within
+/// <paramref name="that" />, carrying the path to the culprit within
+/// <paramref name="that" />.
 /// </exception>
 private static void CheckIsJsonAbleForSerialization(Nodes.JsonNode that)
 {{
@@ -2555,13 +2569,10 @@ private static void CheckIsJsonAbleForSerialization(Nodes.JsonNode that)
 {III}{{
 {IIII}try
 {IIII}{{
-{IIIII}if (item == null)
+{IIIII}if (item != null)
 {IIIII}{{
-{IIIIII}throw new SerializationFailure(
-{IIIIIII}new Reporting.Error(
-{IIIIIIII}"Expected a JSON-able value, but got a null"));
+{IIIIII}CheckIsJsonAbleForSerialization(item);
 {IIIII}}}
-{IIIII}CheckIsJsonAbleForSerialization(item);
 {IIII}}}
 {IIII}catch (SerializationFailure failure)
 {IIII}{{
@@ -2580,13 +2591,10 @@ private static void CheckIsJsonAbleForSerialization(Nodes.JsonNode that)
 {III}{{
 {IIII}try
 {IIII}{{
-{IIIII}if (member.Value == null)
+{IIIII}if (member.Value != null)
 {IIIII}{{
-{IIIIII}throw new SerializationFailure(
-{IIIIIII}new Reporting.Error(
-{IIIIIIII}"Expected a JSON-able value, but got a null"));
+{IIIIII}CheckIsJsonAbleForSerialization(member.Value);
 {IIIII}}}
-{IIIII}CheckIsJsonAbleForSerialization(member.Value);
 {IIII}}}
 {IIII}catch (SerializationFailure failure)
 {IIII}{{
@@ -2629,11 +2637,16 @@ private static void CheckIsJsonAbleForSerialization(Nodes.JsonNode that)
 /// <paramref name="that" />, never <paramref name="that" /> itself.
 /// </remarks>
 /// <exception name="SerializationFailure">
-/// Thrown if <paramref name="that" /> contains a <c>null</c> or a non-finite
-/// number anywhere, at any depth.
+/// Thrown if <paramref name="that" /> contains a non-finite number anywhere,
+/// at any depth.
 /// </exception>
-private static Nodes.JsonNode SerializeJsonValue(Nodes.JsonNode that)
+private static Nodes.JsonNode? SerializeJsonValue(Nodes.JsonNode? that)
 {{
+{I}if (that == null)
+{I}{{
+{II}return null;
+{I}}}
+
 {I}// NOTE (mristin):
 {I}// A System.Text.Json node remembers its parent, and attaching a node
 {I}// which already has one throws
@@ -2676,7 +2689,7 @@ private static Nodes.JsonNode SerializeJsonValue(Nodes.JsonNode that)
 /// </summary>
 private static Nodes.JsonArray SerializeJsonArray(Nodes.JsonArray that)
 {{
-{I}return (Nodes.JsonArray)SerializeJsonValue(that);
+{I}return (Nodes.JsonArray)SerializeJsonValue(that)!;
 }}"""
         ),
         Stripped(
@@ -2686,7 +2699,7 @@ private static Nodes.JsonArray SerializeJsonArray(Nodes.JsonArray that)
 /// </summary>
 private static Nodes.JsonObject SerializeJsonObject(Nodes.JsonObject that)
 {{
-{I}return (Nodes.JsonObject)SerializeJsonValue(that);
+{I}return (Nodes.JsonObject)SerializeJsonValue(that)!;
 }}"""
         ),
     ]

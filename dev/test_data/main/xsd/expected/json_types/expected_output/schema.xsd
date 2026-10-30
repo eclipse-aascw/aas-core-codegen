@@ -55,6 +55,9 @@
   </xs:complexType>
   <xs:complexType name="jsonValue_t">
     <xs:choice>
+      <xs:element name="nil" form="unqualified">
+        <xs:complexType/>
+      </xs:element>
       <xs:element name="boolean" type="xs:boolean" form="unqualified"/>
       <xs:element name="double" type="xs:double" form="unqualified"/>
       <xs:element name="string" type="xs:string" form="unqualified"/>

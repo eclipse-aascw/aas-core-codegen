@@ -31,10 +31,10 @@ def generate(namespace: csharp_common.NamespaceIdentifier) -> str:
     Generate code to verify JSON-able values.
 
     This checks that a ``System.Text.Json.Nodes.JsonNode`` is JSON-able
-    (*i.e.*, recursively a boolean, a number, a string, an array of
-    JSON-able values or an object of JSON-able values with string keys --
-    never a ``null``, at any depth), and, optionally, that it matches
-    a specific top-level shape (an array or an object).
+    (*i.e.*, recursively a null, a boolean, a number, a string, an array of
+    JSON-able values or an object of JSON-able values with string keys),
+    and, optionally, that it matches a specific top-level shape (an array or
+    an object).
 
     This class does not depend on the meta-model at all, and is invoked from
     the ordinary per-class ``Verification.Verify`` dispatch exactly like
@@ -55,7 +55,7 @@ def generate(namespace: csharp_common.NamespaceIdentifier) -> str:
 public enum ExpectedShape
 {{
 {I}/// <summary>
-{I}/// The value may be any JSON-able shape (a boolean, a number,
+{I}/// The value may be any JSON-able shape (a null, a boolean, a number,
 {I}/// a string, an array or an object).
 {I}/// </summary>
 {I}Any,
@@ -74,14 +74,14 @@ public enum ExpectedShape
         Stripped(
             f"""\
 /// <summary>
-/// Verify that <paramref name="that" /> holds neither a <c>null</c> nor
-/// a non-finite number anywhere, at any depth.
+/// Verify that <paramref name="that" /> holds no non-finite number anywhere,
+/// at any depth.
 /// </summary>
 /// <remarks>
-/// A JSON <c>null</c> has no representation as a JSON-able value, and JSON
-/// knows neither an infinity nor a not-a-number -- yet
+/// JSON knows neither an infinity nor a not-a-number -- yet
 /// <see cref="Nodes.JsonValue" /> holds either happily if it was put
-/// together programmatically.
+/// together programmatically. A <c>null</c> is a JSON null, and hence
+/// a JSON-able value.
 /// </remarks>
 private static IEnumerable<Reporting.Error> VerifyRecursively(
 {I}Nodes.JsonNode that)
@@ -93,15 +93,7 @@ private static IEnumerable<Reporting.Error> VerifyRecursively(
 {IIII}int index = 0;
 {IIII}foreach (Nodes.JsonNode? item in jsonArray)
 {IIII}{{
-{IIIII}if (item == null)
-{IIIII}{{
-{IIIIII}var error = new Reporting.Error(
-{IIIIIII}"Expected a JSON-able value, but got a null");
-{IIIIII}error.PrependSegment(
-{IIIIIII}new Reporting.IndexSegment(index));
-{IIIIII}yield return error;
-{IIIII}}}
-{IIIII}else
+{IIIII}if (item != null)
 {IIIII}{{
 {IIIIII}foreach (var error in VerifyRecursively(item))
 {IIIIII}{{
@@ -121,15 +113,7 @@ private static IEnumerable<Reporting.Error> VerifyRecursively(
 {IIIII}KeyValuePair<string, Nodes.JsonNode?> member
 {IIIIII}in jsonObject)
 {IIII}{{
-{IIIII}if (member.Value == null)
-{IIIII}{{
-{IIIIII}var error = new Reporting.Error(
-{IIIIIII}"Expected a JSON-able value, but got a null");
-{IIIIII}error.PrependSegment(
-{IIIIIII}new Reporting.KeySegment(member.Key));
-{IIIIII}yield return error;
-{IIIII}}}
-{IIIII}else
+{IIIII}if (member.Value != null)
 {IIIII}{{
 {IIIIII}foreach (var error in VerifyRecursively(member.Value))
 {IIIIII}{{
@@ -167,9 +151,8 @@ private static IEnumerable<Reporting.Error> VerifyRecursively(
             f"""\
 /// <summary>
 /// Verify that <paramref name="that" /> is JSON-able (recursively
-/// a boolean, a finite number, a string, an array or an object of
-/// JSON-able values -- never a <c>null</c> and never a non-finite number,
-/// at any depth) and, if
+/// a null, a boolean, a finite number, a string, an array or an object of
+/// JSON-able values -- never a non-finite number, at any depth) and, if
 /// <paramref name="expectedShape" /> is not
 /// <see cref="ExpectedShape.Any" />, that its top-level shape matches.
 /// </summary>
@@ -179,8 +162,13 @@ public static IEnumerable<Reporting.Error> Verify(
 {{
 {I}if (that == null)
 {I}{{
-{II}yield return new Reporting.Error(
-{III}"Expected a JSON-able value, but got a null");
+{II}// NOTE (mristin):
+{II}// A JSON null is a JSON-able value, but neither an array nor an object.
+{II}if (expectedShape != ExpectedShape.Any)
+{II}{{
+{III}yield return new Reporting.Error(
+{IIII}$"Expected a Json{{expectedShape}}, but got a null");
+{II}}}
 {II}yield break;
 {I}}}
 

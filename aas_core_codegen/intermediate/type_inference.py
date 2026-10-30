@@ -623,7 +623,8 @@ class JsonValueTypeAnnotation(AtomicTypeAnnotation):
 
     Since neither its shape nor any further operation on it can be determined
     statically, we treat it analogous to ``Unknown`` -- no member access,
-    indexing or other operation is allowed on a value of this type.
+    indexing or other operation is allowed on a value of this type. The only
+    exception is a nullness check, which asks whether the value is a JSON null.
     """
 
     def __str__(self) -> str:
@@ -5006,15 +5007,23 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         ):
             return False
 
+        # NOTE (mristin):
+        # A guarded index is a ``JSONValue``, and asking whether it is null
+        # asks whether it is a JSON ``null``. This is unambiguous in all
+        # the targets, so we allow it.
+        if not isinstance(self.type_map[value], OptionalTypeAnnotation):
+            return False
+
         self.errors.append(
             Error(
                 value.original_node,
-                f"A JSON-able value is never null, so {check} over an index into "
-                f"a JSON-able object or array really asks whether the key or "
-                f"the position is there. Please ask that directly, as "
-                f"``<key> in <object>`` and as ``len(<array>) > <position>``, "
-                f"which strips the optionality of the index in the guarded "
-                f"expression.",
+                f"An index into a JSON-able object or array might be missing, "
+                f"or hold a JSON null, so {check} over an unguarded index "
+                f"conflates the two. Please first ask whether the key or "
+                f"the position is there, as ``<key> in <object>`` and as "
+                f"``len(<array>) > <position>``, which strips the optionality "
+                f"of the index in the guarded expression. Then {check} over "
+                f"the guarded index asks whether it is a JSON null.",
             )
         )
         return True
@@ -5032,12 +5041,17 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         if self._nullness_check_over_json_index_is_refused(node.value, "``is None``"):
             return None
 
-        if not isinstance(value_type, OptionalTypeAnnotation):
+        # NOTE (mristin):
+        # A ``JSONValue`` might be a JSON null, so it can be checked for
+        # nullness even though it is not optional.
+        if not isinstance(
+            value_type, (OptionalTypeAnnotation, JsonValueTypeAnnotation)
+        ):
             self.errors.append(
                 Error(
                     node.value.original_node,
-                    f"Expected the value to be of an optional type for "
-                    f"a nullness check (``is None``), "
+                    f"Expected the value to be of an optional type, "
+                    f"or a JSONValue, for a nullness check (``is None``), "
                     f"but got {value_type}",
                 )
             )
@@ -5062,12 +5076,16 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         ):
             return None
 
-        if not isinstance(value_type, OptionalTypeAnnotation):
+        # NOTE (mristin):
+        # See the note in :py:meth:`transform_is_none` on ``JSONValue``.
+        if not isinstance(
+            value_type, (OptionalTypeAnnotation, JsonValueTypeAnnotation)
+        ):
             self.errors.append(
                 Error(
                     node.value.original_node,
-                    f"Expected the value to be of an optional type "
-                    f"for a non-nullness check (``is not None``), "
+                    f"Expected the value to be of an optional type, "
+                    f"or a JSONValue, for a non-nullness check (``is not None``), "
                     f"but got {value_type}",
                 )
             )

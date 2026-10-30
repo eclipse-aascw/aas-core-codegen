@@ -136,12 +136,26 @@ private static string GetNodeKind(Nodes.JsonNode node)
         Stripped(
             f"""\
 public static void CheckJsonNodesEqual(
-{I}Nodes.JsonNode that,
-{I}Nodes.JsonNode other,
+{I}Nodes.JsonNode? that,
+{I}Nodes.JsonNode? other,
 {I}out Reporting.Error? error
 )
 {{
 {I}error = null;
+
+{I}// NOTE (mristin):
+{I}// A JSON null is a C# null.
+{I}if (that == null || other == null)
+{I}{{
+{II}if (that != other)
+{II}{{
+{III}error = new Reporting.Error(
+{IIII}$"Mismatch in nulls: {{that?.ToJsonString() ?? "null"}} != " +
+{IIII}$"{{other?.ToJsonString() ?? "null"}}"
+{III});
+{II}}}
+{II}return;
+{I}}}
 
 {I}var thatNodeKind = GetNodeKind(that);
 {I}var otherNodeKind = GetNodeKind(other);
@@ -169,7 +183,7 @@ public static void CheckJsonNodesEqual(
 
 {IIII}for (int i = 0; i < thatArray.Count; i++)
 {IIII}{{
-{IIIII}CheckJsonNodesEqual(thatArray[i]!, otherArray[i]!, out error);
+{IIIII}CheckJsonNodesEqual(thatArray[i], otherArray[i], out error);
 {IIIII}if (error != null)
 {IIIII}{{
 {IIIII}    error.PrependSegment(new Reporting.IndexSegment(i));
@@ -181,8 +195,8 @@ public static void CheckJsonNodesEqual(
 {III}}}
 {II}case Nodes.JsonObject thatObject:
 {III}{{
-{IIII}var thatDictionary = thatObject as IDictionary<string, Nodes.JsonNode>;
-{IIII}var otherDictionary = (other as IDictionary<string, Nodes.JsonNode>)!;
+{IIII}var thatDictionary = thatObject as IDictionary<string, Nodes.JsonNode?>;
+{IIII}var otherDictionary = (other as IDictionary<string, Nodes.JsonNode?>)!;
 
 {IIII}var thatKeys = thatDictionary.Keys.ToList();
 {IIII}thatKeys.Sort();

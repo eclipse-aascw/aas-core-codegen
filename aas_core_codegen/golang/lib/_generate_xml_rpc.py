@@ -57,8 +57,9 @@ var doubleRe = regexp.MustCompile(
             f"""\
 // Read the content of an element holding a JSON-able value.
 //
-// The content is a single discriminator element -- `<boolean>`, `<double>`,
-// `<string>`, `<array>` or `<struct>` -- which says what the value is.
+// The content is a single discriminator element -- `<nil>`, `<boolean>`,
+// `<double>`, `<string>`, `<array>` or `<struct>` -- which says what
+// the value is.
 //
 // The `current` token is expected to point to the content of the enclosing
 // element, and the resulting `next` token points to its end element.
@@ -80,6 +81,8 @@ func readValueByLocal(
 {I}local string,
 ) (value ourtypes.JsonValue, next xml.Token, err error) {{
 {I}switch local {{
+{II}case "nil":
+{III}value, next, err = readNil(decoder, current)
 {II}case "boolean":
 {III}value, next, err = readBoolean(decoder, current)
 {II}case "double":
@@ -105,7 +108,7 @@ func readValueByLocal(
 {III}// this very element which does not belong here.
 {III}err = xmlcommon.NewDeserializationError(
 {IIII}fmt.Sprintf(
-{IIIII}"Expected a discriminator element (one of boolean, double, "+
+{IIIII}"Expected a discriminator element (one of nil, boolean, double, "+
 {IIIII}"string, array or struct), but got: %s",
 {IIIII}local,
 {IIII}),
@@ -115,6 +118,34 @@ func readValueByLocal(
 
 {I}if err != nil {{
 {II}xmlcommon.MustDeserializationError(err).PrependName(local)
+{I}}}
+{I}return
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Read the content of a `<nil>` element as a JSON null.
+//
+// XML-RPC itself knows no null, so we follow the widespread extension, and
+// read a JSON null from an empty `<nil/>`.
+func readNil(
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+) (value ourtypes.JsonValue, next xml.Token, err error) {{
+{I}var text string
+{I}text, next, err = xmlcommon.ReadText(decoder, current)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}text = xmlcommon.CollapseWhitespace(text)
+{I}if text != "" {{
+{II}err = xmlcommon.NewDeserializationError(
+{III}fmt.Sprintf(
+{IIII}"Expected no text in a nil element, but got: %s",
+{IIII}text,
+{III}),
+{II})
 {I}}}
 {I}return
 }}"""
@@ -501,9 +532,16 @@ func writeValueContent(
 {I}undeclareNamespace bool,
 ) (err error) {{
 {I}if value == nil {{
-{II}err = xmlcommon.NewSerializationError(
-{III}"Expected a JSON-able value, but got a nil",
+{II}// NOTE (mristin):
+{II}// XML-RPC itself knows no null, so we follow the widespread extension,
+{II}// and write a JSON null as an empty `<nil/>`.
+{II}err = xmlcommon.WriteStartElementInNoNamespace(
+{III}encoder, "nil", undeclareNamespace,
 {II})
+{II}if err != nil {{
+{III}return
+{II}}}
+{II}err = xmlcommon.WriteEndElement(encoder, "nil", false)
 {II}return
 {I}}}
 
@@ -740,8 +778,9 @@ def generate(repo_url: Stripped) -> str:
 //
 // JSON prescribes no XML representation of its own, so a JSON-able value is
 // de/serialized over the subset of XML-RPC which covers exactly what such
-// a value can be: `<boolean>`, `<double>`, `<string>`, `<array>` and
-// `<struct>`.
+// a value can be: `<nil>`, `<boolean>`, `<double>`, `<string>`, `<array>` and
+// `<struct>`. XML-RPC itself knows no null, so we follow the widespread
+// extension, and write a JSON null as an empty `<nil/>`.
 //
 // Every function reads from or writes to the decoder or the encoder which
 // the caller passes in, and consumes or produces exactly the content of one

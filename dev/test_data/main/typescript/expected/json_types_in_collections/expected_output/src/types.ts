@@ -4,12 +4,18 @@
 /**
  * Represent a value which JSON can carry.
  *
- * This is, recursively, exactly as JSON itself is defined: a boolean,
- * a number, a string, an array of JSON-able values or an object of JSON-able
- * values with string keys -- never a `null`, and never a non-finite number,
- * which JSON can not represent at all.
+ * This is, recursively, exactly as JSON itself is defined: a `null`,
+ * a boolean, a number, a string, an array of JSON-able values or an object of
+ * JSON-able values with string keys -- never a non-finite number, which JSON
+ * can not represent at all.
+ *
+ * A `null` might appear at any depth, including the value itself. Since
+ * an absent optional property is also `null`, an optional JSON-able property
+ * which is a JSON null is indistinguishable from an absent one, and is treated
+ * as absent.
  */
 export type JsonValue =
+  | null
   | boolean
   | number
   | string

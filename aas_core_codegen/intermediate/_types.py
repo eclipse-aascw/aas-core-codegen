@@ -374,10 +374,13 @@ class JsonValueTypeAnnotation(TypeAnnotation):
     Represent a type annotation for an arbitrary, open JSON-able value.
 
     A JSON-able value is, recursively, exactly as JSON itself is defined:
-    a boolean, a number or a string, an open JSON-able array of such values
-    (see :class:`JsonArrayTypeAnnotation`), or an open, JSON-object-shaped
-    value with string-like keys and JSON-able values (see
+    a null, a boolean, a number or a string, an open JSON-able array of such
+    values (see :class:`JsonArrayTypeAnnotation`), or an open,
+    JSON-object-shaped value with string-like keys and JSON-able values (see
     :class:`JsonObjectTypeAnnotation`).
+
+    The value might be a JSON null at any depth, including the value itself.
+    An optional JSON-able value which is a JSON null is treated as absent.
     """
 
     def __str__(self) -> str:

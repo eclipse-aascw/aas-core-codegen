@@ -72,6 +72,17 @@ func (es *enhancedSomething[E]) SetOptionalMapping(
 	es.instance.SetOptionalMapping(value)
 }
 
+func (es *enhancedSomething[E]) OptionalValue(
+) ourtypes.JsonValue {
+	return es.instance.OptionalValue()
+}
+
+func (es *enhancedSomething[E]) SetOptionalValue(
+	value ourtypes.JsonValue,
+) {
+	es.instance.SetOptionalValue(value)
+}
+
 func (es *enhancedSomething[E]) getEnhancement(
 ) E {
 	return es.enhancement

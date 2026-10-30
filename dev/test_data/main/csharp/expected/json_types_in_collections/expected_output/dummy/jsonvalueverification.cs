@@ -21,7 +21,7 @@ namespace dummy
         public enum ExpectedShape
         {
             /// <summary>
-            /// The value may be any JSON-able shape (a boolean, a number,
+            /// The value may be any JSON-able shape (a null, a boolean, a number,
             /// a string, an array or an object).
             /// </summary>
             Any,
@@ -38,14 +38,14 @@ namespace dummy
         }
 
         /// <summary>
-        /// Verify that <paramref name="that" /> holds neither a <c>null</c> nor
-        /// a non-finite number anywhere, at any depth.
+        /// Verify that <paramref name="that" /> holds no non-finite number anywhere,
+        /// at any depth.
         /// </summary>
         /// <remarks>
-        /// A JSON <c>null</c> has no representation as a JSON-able value, and JSON
-        /// knows neither an infinity nor a not-a-number -- yet
+        /// JSON knows neither an infinity nor a not-a-number -- yet
         /// <see cref="Nodes.JsonValue" /> holds either happily if it was put
-        /// together programmatically.
+        /// together programmatically. A <c>null</c> is a JSON null, and hence
+        /// a JSON-able value.
         /// </remarks>
         private static IEnumerable<Reporting.Error> VerifyRecursively(
             Nodes.JsonNode that)
@@ -57,15 +57,7 @@ namespace dummy
                         int index = 0;
                         foreach (Nodes.JsonNode? item in jsonArray)
                         {
-                            if (item == null)
-                            {
-                                var error = new Reporting.Error(
-                                    "Expected a JSON-able value, but got a null");
-                                error.PrependSegment(
-                                    new Reporting.IndexSegment(index));
-                                yield return error;
-                            }
-                            else
+                            if (item != null)
                             {
                                 foreach (var error in VerifyRecursively(item))
                                 {
@@ -85,15 +77,7 @@ namespace dummy
                             KeyValuePair<string, Nodes.JsonNode?> member
                                 in jsonObject)
                         {
-                            if (member.Value == null)
-                            {
-                                var error = new Reporting.Error(
-                                    "Expected a JSON-able value, but got a null");
-                                error.PrependSegment(
-                                    new Reporting.KeySegment(member.Key));
-                                yield return error;
-                            }
-                            else
+                            if (member.Value != null)
                             {
                                 foreach (var error in VerifyRecursively(member.Value))
                                 {
@@ -129,9 +113,8 @@ namespace dummy
 
         /// <summary>
         /// Verify that <paramref name="that" /> is JSON-able (recursively
-        /// a boolean, a finite number, a string, an array or an object of
-        /// JSON-able values -- never a <c>null</c> and never a non-finite number,
-        /// at any depth) and, if
+        /// a null, a boolean, a finite number, a string, an array or an object of
+        /// JSON-able values -- never a non-finite number, at any depth) and, if
         /// <paramref name="expectedShape" /> is not
         /// <see cref="ExpectedShape.Any" />, that its top-level shape matches.
         /// </summary>
@@ -141,8 +124,13 @@ namespace dummy
         {
             if (that == null)
             {
-                yield return new Reporting.Error(
-                    "Expected a JSON-able value, but got a null");
+                // NOTE (mristin):
+                // A JSON null is a JSON-able value, but neither an array nor an object.
+                if (expectedShape != ExpectedShape.Any)
+                {
+                    yield return new Reporting.Error(
+                        $"Expected a Json{expectedShape}, but got a null");
+                }
                 yield break;
             }
 

@@ -1609,10 +1609,21 @@ Optional[
                 f"The required property {prop.xml_name!r} is missing"
             )
 
+            # NOTE (mristin):
+            # A JSON-able value might be a JSON null, which we read as ``None``,
+            # so we have to check whether the property was there at all.
+            condition = (
+                f"{python_common.string_literal(prop.xml_name)} not in values"
+                if isinstance(
+                    prop.type_annotation, intermediate.JsonValueTypeAnnotation
+                )
+                else f"{variable_by_prop_name[prop.name]} is None"
+            )
+
             blocks.append(
                 Stripped(
                     f"""\
-if {variable_by_prop_name[prop.name]} is None:
+if {condition}:
 {I}raise DeserializationException(
 {II}{cause_literal}
 {I})"""

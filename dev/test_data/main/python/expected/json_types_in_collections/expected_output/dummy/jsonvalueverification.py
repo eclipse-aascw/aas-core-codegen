@@ -2,8 +2,8 @@
 Verify that a value is JSON-able.
 
 A JSON-able value is, recursively, exactly as JSON itself is defined:
-a boolean, a finite number, a string, an array of JSON-able values or
-an object of JSON-able values with string keys. Python offers no type which
+a ``None`` (JSON null), a boolean, a finite number, a string, an array of
+JSON-able values or an object of JSON-able values with string keys. Python offers no type which
 says exactly that, so a value has to be walked to make sure of it.
 
 This module depends on no class of the meta-model. It is invoked from
@@ -49,6 +49,9 @@ def verify_json_value(
     :param value: to be verified
     :yield: errors, if any
     """
+    if value is None:
+        return
+
     # NOTE (mristin):
     # A ``bool`` is an ``int`` in Python, so it has to be checked first --
     # otherwise every boolean would be taken for a number.
@@ -114,8 +117,8 @@ def verify_json_value(
         return
 
     yield Error(
-        f"Expected a JSON-able value (a boolean, a number, a string, an array "
-        f"or an object), but got: {type(value)}"
+        f"Expected a JSON-able value (a null, a boolean, a number, a string, "
+        f"an array or an object), but got: {type(value)}"
     )
 
 

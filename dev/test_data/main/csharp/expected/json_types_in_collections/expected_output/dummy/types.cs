@@ -59,9 +59,9 @@ namespace dummy
 
     public interface ISomething : IClass
     {
-        public List<Nodes.JsonNode> Values { get; set; }
+        public List<Nodes.JsonNode?> Values { get; set; }
 
-        public (string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject) TupleWithJson { get; set; }
+        public (string, Nodes.JsonNode?, Nodes.JsonArray, Nodes.JsonObject) TupleWithJson { get; set; }
 
         public List<Nodes.JsonObject>? OptionalObjects { get; set; }
 
@@ -80,9 +80,9 @@ namespace dummy
 
     public class Something : ISomething
     {
-        public List<Nodes.JsonNode> Values { get; set; }
+        public List<Nodes.JsonNode?> Values { get; set; }
 
-        public (string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject) TupleWithJson { get; set; }
+        public (string, Nodes.JsonNode?, Nodes.JsonArray, Nodes.JsonObject) TupleWithJson { get; set; }
 
         public List<Nodes.JsonObject>? OptionalObjects { get; set; }
 
@@ -169,8 +169,8 @@ namespace dummy
         }
 
         public Something(
-            List<Nodes.JsonNode> values,
-            (string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject) tupleWithJson,
+            List<Nodes.JsonNode?> values,
+            (string, Nodes.JsonNode?, Nodes.JsonArray, Nodes.JsonObject) tupleWithJson,
             List<Nodes.JsonObject>? optionalObjects = null,
             Nodes.JsonObject? optionalObject = null)
         {

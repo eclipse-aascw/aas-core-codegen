@@ -1888,10 +1888,15 @@ def _generate_json_aliases(
             """\
 // Represent a value which JSON can carry.
 //
-// This is, recursively, exactly as JSON itself is defined: a bool, a float64,
-// a string, a [JsonArray] of JSON-able values or a [JsonObject] of JSON-able
-// values with string keys -- never a nil, and never an infinity or
+// This is, recursively, exactly as JSON itself is defined: a nil (JSON null),
+// a bool, a float64, a string, a [JsonArray] of JSON-able values or
+// a [JsonObject] of JSON-able values with string keys -- never an infinity or
 // a not-a-number, which JSON can not represent at all.
+//
+// A nil might appear at any depth, including the value itself. Since
+// an absent optional property is also nil, an optional JSON-able property
+// which is a JSON null is indistinguishable from an absent one, and is treated
+// as absent.
 //
 // Go has no sum type, so this is an `any`, and what it actually holds is
 // checked at run-time -- by the verification, and again by the de/serialization.

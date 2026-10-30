@@ -40,9 +40,17 @@ namespace dummy.Tests
             }
 
             private static bool JsonNodesEqualButDistinct(
-                Nodes.JsonNode that,
-                Nodes.JsonNode other)
+                Nodes.JsonNode? that,
+                Nodes.JsonNode? other)
             {
+                // NOTE (mristin):
+                // A JSON null is a C# null, and there is nothing to be distinct about
+                // two of them.
+                if (that == null || other == null)
+                {
+                    return that == other;
+                }
+
                 // NOTE (mristin):
                 // A JsonNode compares only by reference, so we compare the canonical
                 // JSON text.
@@ -80,8 +88,8 @@ namespace dummy.Tests
             }
 
             private bool Check_ListOf_jsonValue(
-                List<Nodes.JsonNode> that,
-                List<Nodes.JsonNode> other)
+                List<Nodes.JsonNode?> that,
+                List<Nodes.JsonNode?> other)
             {
                 if (ReferenceEquals(that, other) || that.Count != other.Count)
                 {
@@ -103,8 +111,8 @@ namespace dummy.Tests
             }
 
             private bool Check_TupleOf4_string_jsonValue_jsonArray_jsonObject(
-                (string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject) that,
-                (string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject) other)
+                (string, Nodes.JsonNode?, Nodes.JsonArray, Nodes.JsonObject) that,
+                (string, Nodes.JsonNode?, Nodes.JsonArray, Nodes.JsonObject) other)
             {
                 return (
                     that.Item1 == other.Item1

@@ -1,0 +1,19 @@
+{
+  "value": null,
+  "values": [
+    1.5,
+    null
+  ],
+  "mapping": {
+    "a": null,
+    "b": [
+      null,
+      {
+        "c": null
+      }
+    ]
+  },
+  "mappingWithConstrainedKey": {
+    "nonEmptyKey": null
+  }
+}

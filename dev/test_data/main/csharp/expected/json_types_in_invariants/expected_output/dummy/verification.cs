@@ -51,7 +51,7 @@ namespace dummy
         /// a JSON-able object or array has somewhere to be handed over to.
         /// </remarks>
         public static bool IsAcceptable(
-            Nodes.JsonNode value
+            Nodes.JsonNode? value
         )
         {
             return true;
@@ -78,8 +78,38 @@ namespace dummy
             )
             {
                 if (!(
+                    !(that.OptionalValue != null)
+                    || Verification.IsAcceptable(that.OptionalValue)))
+                {
+                    yield return new Reporting.Error(
+                        "Invariant violated:\n" +
+                        "The optional value must be acceptable");
+                }
+
+                if (!(
+                    !(that.Values.Count > 0
+                    && (that.Values[0] == null))))
+                {
+                    yield return new Reporting.Error(
+                        "Invariant violated:\n" +
+                        "The first value must not be a JSON null");
+                }
+
+                if (!(
+                    !(that.OptionalMapping != null)
+                    || (
+                        !that.OptionalMapping.ContainsKey("type")
+                        || (that.OptionalMapping["type"] != null)
+                    )))
+                {
+                    yield return new Reporting.Error(
+                        "Invariant violated:\n" +
+                        "The type of the optional mapping must not be a JSON null");
+                }
+
+                if (!(
                     !(that.Values.Count >= 1)
-                    || Verification.IsAcceptable(that.Values[^1]!)))
+                    || Verification.IsAcceptable(that.Values[^1])))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -88,7 +118,7 @@ namespace dummy
 
                 if (!(
                     !(that.Values.Count > 0)
-                    || Verification.IsAcceptable(that.Values[0]!)))
+                    || Verification.IsAcceptable(that.Values[0])))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -111,7 +141,7 @@ namespace dummy
 
                 if (!(
                     !that.Mapping.ContainsKey("type")
-                    || Verification.IsAcceptable(that.Mapping["type"]!)))
+                    || Verification.IsAcceptable(that.Mapping["type"])))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -168,6 +198,18 @@ namespace dummy
                     {
                         error.PrependSegment(
                             new Reporting.NameSegment("optionalMapping"));
+                        yield return error;
+                    }
+                }
+
+                if (that.OptionalValue != null)
+                {
+                    foreach (
+                        var error in JsonValueVerification.Verify(
+                            that.OptionalValue, JsonValueVerification.ExpectedShape.Any))
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment("optionalValue"));
                         yield return error;
                     }
                 }

@@ -31,10 +31,11 @@ def generate(namespace: csharp_common.NamespaceIdentifier) -> str:
 
     This implements a restricted subset of XML-RPC's own element vocabulary --
     ``<boolean>``, ``<double>``, ``<string>``, ``<array>``, ``<data>``,
-    ``<struct>``, ``<member>``, ``<name>`` and ``<value>`` -- to de/serialize
+    ``<struct>``, ``<member>``, ``<name>`` and ``<value>``, together with
+    the widespread ``<nil/>`` extension -- to de/serialize
     a ``System.Text.Json.Nodes.JsonNode`` which is JSON-able (*i.e.*,
-    recursively a boolean, a number, a string, an array of JSON-able values or
-    an object of JSON-able values with string keys; never JSON ``null``).
+    recursively a JSON null, a boolean, a number, a string, an array of
+    JSON-able values or an object of JSON-able values with string keys).
 
     This class does not depend on the meta-model at all, and can be used in
     two different ways:
@@ -228,7 +229,7 @@ private static string? DeserializeStringTextFrom(
 /// </summary>
 /// <remarks>
 /// <paramref name="reader" /> is expected to be positioned at the start
-/// element of the discriminator (<c>&lt;boolean&gt;</c>,
+/// element of the discriminator (<c>&lt;nil&gt;</c>, <c>&lt;boolean&gt;</c>,
 /// <c>&lt;double&gt;</c>, <c>&lt;string&gt;</c>, <c>&lt;array&gt;</c> or
 /// <c>&lt;struct&gt;</c>). On success, <paramref name="reader" /> is left
 /// positioned at the node right after the discriminator's own end
@@ -245,7 +246,7 @@ public static Nodes.JsonNode? DeserializeValueFrom(
 {I}if (reader.EOF || reader.NodeType != Xml.XmlNodeType.Element)
 {I}{{
 {II}error = new Reporting.Error(
-{III}"Expected one of the elements <boolean>, <double>, <string>, " +
+{III}"Expected one of the elements <nil>, <boolean>, <double>, <string>, " +
 {III}"<array> or <struct>, but got " +
 {III}(
 {IIII}reader.EOF
@@ -274,6 +275,13 @@ public static Nodes.JsonNode? DeserializeValueFrom(
 {I}Nodes.JsonNode? result = null;
 {I}switch (discriminator)
 {I}{{
+{II}case "nil":
+{III}// NOTE (mristin):
+{III}// A <nil> has no content, which consuming its end element below
+{III}// checks.
+{III}result = null;
+{III}break;
+
 {II}case "boolean":
 {III}if (isEmpty)
 {III}{{
@@ -365,7 +373,7 @@ public static Nodes.JsonNode? DeserializeValueFrom(
 {III}// It is this very element which does not belong here, so naming it
 {III}// in the path as well as in the message would say nothing more.
 {III}error = new Reporting.Error(
-{IIII}"Expected one of the elements <boolean>, <double>, <string>, " +
+{IIII}"Expected one of the elements <nil>, <boolean>, <double>, <string>, " +
 {IIII}$"<array> or <struct>, but got: <{{discriminator}}>");
 {III}return null;
 {I}}}
@@ -406,7 +414,7 @@ private static Nodes.JsonNode? DeserializeArrayItemFrom(
 {I}if (isEmpty)
 {I}{{
 {II}error = new Reporting.Error(
-{III}"Expected one of the elements <boolean>, <double>, <string>, " +
+{III}"Expected one of the elements <nil>, <boolean>, <double>, <string>, " +
 {III}"<array> or <struct> as the content of a <value> element, " +
 {III}"but got no content at all");
 {II}return null;
@@ -572,7 +580,7 @@ private static Nodes.JsonNode? DeserializeMemberFrom(
 {I}if (isEmptyValue)
 {I}{{
 {II}error = new Reporting.Error(
-{III}"Expected one of the elements <boolean>, <double>, <string>, " +
+{III}"Expected one of the elements <nil>, <boolean>, <double>, <string>, " +
 {III}"<array> or <struct> as the content of a <value> element, " +
 {III}"but got no content at all");
 {II}error.PrependSegment(
@@ -702,7 +710,7 @@ public static Nodes.JsonNode? DeserializeValue(
 {I}if (isEmpty)
 {I}{{
 {II}error = new Reporting.Error(
-{III}"Expected one of the elements <boolean>, <double>, <string>, " +
+{III}"Expected one of the elements <nil>, <boolean>, <double>, <string>, " +
 {III}"<array> or <struct> as the content of a <value> element, " +
 {III}"but got no content at all");
 {II}return null;
@@ -733,11 +741,11 @@ public static Nodes.JsonNode? DeserializeValue(
 /// <paramref name="writer" />.
 /// </summary>
 /// <remarks>
-/// This writes exactly one discriminator element (<c>&lt;boolean&gt;</c>,
-/// <c>&lt;double&gt;</c>, <c>&lt;string&gt;</c>, <c>&lt;array&gt;</c> or
-/// <c>&lt;struct&gt;</c>). <paramref name="that" /> must be JSON-able
-/// (recursively a boolean, a number, a string, an array or an object with
-/// string keys), and never <c>null</c>, or a
+/// This writes exactly one discriminator element (<c>&lt;nil&gt;</c>,
+/// <c>&lt;boolean&gt;</c>, <c>&lt;double&gt;</c>, <c>&lt;string&gt;</c>,
+/// <c>&lt;array&gt;</c> or <c>&lt;struct&gt;</c>). <paramref name="that" />
+/// must be JSON-able (recursively a null, a boolean, a number, a string,
+/// an array or an object with string keys), or a
 /// <see cref="SerializationFailure" /> is thrown, carrying
 /// the path to the culprit within <paramref name="that" />. The enclosing
 /// serializer converts it -- <see cref="Xmlization.Serialize.To" /> does,
@@ -752,10 +760,12 @@ public static void SerializeValueTo(
 {I}switch (that)
 {I}{{
 {II}case null:
-{III}throw new SerializationFailure(
-{IIII}new Reporting.Error(
-{IIIII}"Expected a JSON-able value (a boolean, a number, " +
-{IIIII}"a string, an array or an object), but got null"));
+{III}// NOTE (mristin):
+{III}// XML-RPC itself knows no null, so we follow the widespread extension,
+{III}// and write a JSON null as an empty <nil/>.
+{III}writer.WriteStartElement("nil", "");
+{III}writer.WriteEndElement();
+{III}break;
 
 {II}case Nodes.JsonArray jsonArray:
 {III}writer.WriteStartElement("array", "");
@@ -812,7 +822,7 @@ public static void SerializeValueTo(
 {III}{{
 {IIII}throw new SerializationFailure(
 {IIIII}new Reporting.Error(
-{IIIIII}"Expected a JSON-able value (a boolean, a number, " +
+{IIIIII}"Expected a JSON-able value (a null, a boolean, a number, " +
 {IIIIII}"a string, an array or an object), but got a value of " +
 {IIIIII}$"an unexpected underlying type: {{jsonValue}}"));
 {III}}}
@@ -821,7 +831,7 @@ public static void SerializeValueTo(
 {II}default:
 {III}throw new SerializationFailure(
 {IIII}new Reporting.Error(
-{IIIII}"Expected a JSON-able value (a boolean, a number, " +
+{IIIII}"Expected a JSON-able value (a null, a boolean, a number, " +
 {IIIII}"a string, an array or an object), but got: " +
 {IIIII}$"{{that.GetType()}}"));
 {I}}}

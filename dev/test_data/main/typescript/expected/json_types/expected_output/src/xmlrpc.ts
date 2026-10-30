@@ -5,7 +5,9 @@
  *
  * JSON prescribes no XML representation of its own, so a JSON-able value is
  * written as the subset of XML-RPC which covers exactly what such a value can
- * be: `<boolean>`, `<double>`, `<string>`, `<array>` and `<struct>`.
+ * be: `<nil>`, `<boolean>`, `<double>`, `<string>`, `<array>` and `<struct>`.
+ * XML-RPC itself knows no null, so we follow the widespread extension, and
+ * write a JSON null as an empty `<nil/>`.
  *
  * These elements reside in no namespace at all, as the XML-RPC specification
  * prescribes, and not in the namespace of the enclosing document. The
@@ -55,8 +57,9 @@ const DOUBLE_RE = new RegExp(
  * Parse the content of an element holding a JSON-able value.
  *
  * @remarks
- * The content is a single discriminator element -- `<boolean>`, `<double>`,
- * `<string>`, `<array>` or `<struct>` -- which says what the value is.
+ * The content is a single discriminator element -- `<nil>`, `<boolean>`,
+ * `<double>`, `<string>`, `<array>` or `<struct>` -- which says what
+ * the value is.
  *
  * @param cursor - to read from
  * @returns parsed JSON-able value, or an error
@@ -80,8 +83,8 @@ export function parseValueContent(
     // it is that very element which does not belong here, so naming it in
     // the path as well as in the message would say nothing more.
     return newDeserializationError<OurTypes.JsonValue>(
-      `Expected a discriminator element (one of 'boolean', 'double', ` +
-        `'string', 'array' or 'struct'), but got: '${localName}'`
+      `Expected a discriminator element (one of 'nil', 'boolean', ` +
+        `'double', 'string', 'array' or 'struct'), but got: '${localName}'`
     );
   }
 
@@ -109,6 +112,8 @@ function parserForDiscriminator(
   localName: string
 ): ContentParser<OurTypes.JsonValue> | null {
   switch (localName) {
+    case "nil":
+      return parseNilContent;
     case "boolean":
       return parseBooleanContent;
     case "double":
@@ -122,6 +127,31 @@ function parserForDiscriminator(
     default:
       return null;
   }
+}
+
+/**
+ * Parse the content of a `<nil>` element.
+ *
+ * @remarks
+ * XML-RPC itself knows no null, so we follow the widespread extension, and
+ * read a JSON null from an empty `<nil/>`.
+ *
+ * @param cursor - to read from
+ * @returns JSON null, or an error
+ */
+function parseNilContent(
+  cursor: XmlCursor
+): OurCommon.Either<OurTypes.JsonValue, DeserializationError> {
+  const text = parseTextContent(cursor);
+  if (text !== "") {
+    return newDeserializationError<OurTypes.JsonValue>(
+      `Expected no text in a 'nil' element, but got: '${text}'`
+    );
+  }
+
+  return new OurCommon.Either<OurTypes.JsonValue, DeserializationError>(
+    null, null
+  );
 }
 
 /**
@@ -434,7 +464,12 @@ function writeValue(
 ): void {
   const xmlns = undeclareNamespace ? ' xmlns=""' : "";
 
-  if (value === null || value === undefined) {
+  if (value === null) {
+    parts.push(`<nil${xmlns}/>`);
+    return;
+  }
+
+  if (value === undefined) {
     throw new SerializationError(
       `Expected a JSON-able value, but got: ${value}`
     );
@@ -476,7 +511,7 @@ function writeValue(
 
     default:
       throw new SerializationError(
-        `Expected a JSON-able value (a boolean, a number, a string, ` +
+        `Expected a JSON-able value (a null, a boolean, a number, a string, ` +
           `an array or an object), but got: ${typeof value}`
       );
   }
