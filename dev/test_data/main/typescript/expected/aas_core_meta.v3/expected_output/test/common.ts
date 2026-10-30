@@ -276,7 +276,7 @@ export function checkJsonablesEqual(
     typeof expected === "object" &&
     typeof expected[Symbol.iterator] === "function"
   ) {
-    if (typeof got !== "object") {
+    if (got === null || typeof got !== "object") {
       return new InequalityError(
         `Expected an iterable, ` + `but got ${JSON.stringify(got)}`
       );
@@ -330,6 +330,12 @@ export function checkJsonablesEqual(
       i++;
     }
   } else if (typeof expected === "object") {
+    if (got === null || typeof got !== "object") {
+      return new InequalityError(
+        `Expected an object, ` + `but got ${JSON.stringify(got)}`
+      );
+    }
+
     const expectedKeys = new Set<string>(
       Object.keys(expected).filter((key) =>
         Object.prototype.hasOwnProperty.call(expected, key)
@@ -337,7 +343,7 @@ export function checkJsonablesEqual(
     );
 
     const gotKeys = new Set<string>(
-      Object.keys(expected).filter((key) =>
+      Object.keys(got).filter((key) =>
         Object.prototype.hasOwnProperty.call(got, key)
       )
     );
