@@ -317,7 +317,7 @@ export function checkJsonablesEqual(
       }
 
       const expectedItem = expectedResult.value;
-      const gotItem = expectedResult.value;
+      const gotItem = gotResult.value;
 
       const error = checkJsonablesEqual(expectedItem, gotItem);
       if (error !== null) {

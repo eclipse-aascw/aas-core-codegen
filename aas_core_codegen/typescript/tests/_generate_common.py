@@ -399,7 +399,7 @@ export function checkJsonablesEqual(
 {III}}}
 
 {III}const expectedItem = expectedResult.value;
-{III}const gotItem = expectedResult.value;
+{III}const gotItem = gotResult.value;
 
 {III}const error = checkJsonablesEqual(expectedItem, gotItem);
 {III}if (error !== null) {{
