@@ -702,7 +702,7 @@ std::pair<
 > DeserializeJsonValue(
   const nlohmann::json& json
 ) {
-  if (json.is_null() || json.is_binary() || json.is_discarded()) {
+  if (json.is_binary() || json.is_discarded()) {
     return std::make_pair<
       common::optional<nlohmann::json>,
       common::optional<DeserializationError>
@@ -710,7 +710,7 @@ std::pair<
       common::nullopt,
       common::make_optional<DeserializationError>(
         common::Concat(
-          L"Expected a JSON-able value (a boolean, a number, a string, "
+          L"Expected a JSON-able value (a null, a boolean, a number, a string, "
           L"an array or an object), but got a value of type: ",
           common::Utf8ToWstring(json.type_name())
         )
@@ -849,7 +849,8 @@ namespace properties {
 enum class OfSomething : std::uint32_t {
   kMapping,
   kValues,
-  kOptionalMapping
+  kOptionalMapping,
+  kOptionalValue
 };  // enum class OfSomething
 
 const std::unordered_map<
@@ -867,6 +868,10 @@ const std::unordered_map<
   {
     "optionalMapping",
     OfSomething::kOptionalMapping
+  },
+  {
+    "optionalValue",
+    OfSomething::kOptionalValue
   }
 };
 
@@ -1097,6 +1102,8 @@ std::pair<
 
   common::optional<nlohmann::json> the_optional_mapping;
 
+  common::optional<nlohmann::json> the_optional_value;
+
   common::optional<DeserializationError> error(
     ParseProperties(
       json,
@@ -1122,6 +1129,16 @@ std::pair<
               the_optional_mapping,
               DeserializeJsonObject(value)
             );
+          case properties::OfSomething::kOptionalValue: {
+            common::optional<DeserializationError> parse_error = ParseInto(
+              the_optional_value,
+              DeserializeJsonValue(value)
+            );
+            if (!parse_error.has_value() && the_optional_value->is_null()) {
+              the_optional_value = common::nullopt;
+            }
+            return parse_error;
+          }
           default:
             throw UnexpectedPropertyLiteralError(
               "properties::OfSomething",
@@ -1166,7 +1183,8 @@ std::pair<
       new types::Something(
         std::move(*the_mapping),
         std::move(*the_values),
-        std::move(the_optional_mapping)
+        std::move(the_optional_mapping),
+        std::move(the_optional_value)
       )
     ),
     common::nullopt
@@ -1640,12 +1658,12 @@ std::pair<
 > SerializeJsonValue(
   const nlohmann::json& value
 ) {
-  if (value.is_null() || value.is_binary() || value.is_discarded()) {
+  if (value.is_binary() || value.is_discarded()) {
     return std::make_pair(
       common::nullopt,
       common::make_optional<SerializationError>(
         common::Concat(
-          L"Expected a JSON-able value (a boolean, a number, a string, "
+          L"Expected a JSON-able value (a null, a boolean, a number, a string, "
           L"an array or an object), but got a value of type: ",
           common::Utf8ToWstring(value.type_name())
         )
@@ -1848,6 +1866,25 @@ std::pair<
       iteration::Property::kOptionalMapping,
       SerializeJsonObject(
         *maybe_optional_mapping
+      )
+    );
+    if (error.has_value()) {
+      return NoJsonAndSerializationError(
+        std::move(*error)
+      );
+    }
+  }
+
+  const common::optional<nlohmann::json>& maybe_optional_value(
+    that.optional_value()
+  );
+  if (maybe_optional_value.has_value() && !maybe_optional_value->is_null()) {
+    error = SerializeInto(
+      result,
+      "optionalValue",
+      iteration::Property::kOptionalValue,
+      SerializeJsonValue(
+        *maybe_optional_value
       )
     );
     if (error.has_value()) {

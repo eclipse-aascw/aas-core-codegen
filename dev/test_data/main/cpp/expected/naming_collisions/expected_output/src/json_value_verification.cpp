@@ -24,10 +24,10 @@ namespace {
 common::optional<std::wstring> CheckShallowly(
   const nlohmann::json& value
 ) {
-  if (value.is_null() || value.is_binary() || value.is_discarded()) {
+  if (value.is_binary() || value.is_discarded()) {
     return common::make_optional<std::wstring>(
       common::Concat(
-        L"Expected a JSON-able value (a boolean, a number, a string, "
+        L"Expected a JSON-able value (a null, a boolean, a number, a string, "
         L"an array or an object), but got a value of type: ",
         common::Utf8ToWstring(value.type_name())
       )

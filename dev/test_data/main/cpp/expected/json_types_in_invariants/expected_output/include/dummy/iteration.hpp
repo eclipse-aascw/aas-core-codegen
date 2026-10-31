@@ -29,7 +29,8 @@ namespace iteration {
 enum class Property : std::uint32_t {
   kMapping = 0,
   kOptionalMapping = 1,
-  kValues = 2
+  kOptionalValue = 2,
+  kValues = 3
 };
 
 std::wstring PropertyToWstring(

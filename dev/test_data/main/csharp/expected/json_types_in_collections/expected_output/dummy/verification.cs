@@ -114,7 +114,7 @@ namespace dummy
         /// Verify the items of <paramref name="that" /> recursively.
         /// </summary>
         private static IEnumerable<Reporting.Error> Verify_ListOf_jsonValue(
-            List<Nodes.JsonNode> that)
+            List<Nodes.JsonNode?> that)
         {
             int index = 0;
             foreach (var item in that)
@@ -135,7 +135,7 @@ namespace dummy
         /// Verify the items of <paramref name="that" /> recursively.
         /// </summary>
         private static IEnumerable<Reporting.Error> Verify_TupleOf4_string_jsonValue_jsonArray_jsonObject(
-            (string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject) that)
+            (string, Nodes.JsonNode?, Nodes.JsonArray, Nodes.JsonObject) that)
         {
             foreach (
                 var error in JsonValueVerification.Verify(

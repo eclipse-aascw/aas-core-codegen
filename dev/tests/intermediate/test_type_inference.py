@@ -559,8 +559,38 @@ __xml_namespace__ = "https://dummy.com"
         self.expect_type_inference_to_fail(
             source=source,
             expected_joined_message=(
-                "Expected the value to be of an optional type "
+                "Expected the value to be of an optional type, or a JSONValue, "
                 "for a nullness check (``is None``), but got str"
+            ),
+        )
+
+    def test_is_none_on_unguarded_json_index_fails(self) -> None:
+        source = """\
+@invariant(
+    lambda self:
+    self.values[0] is None,
+    "Dummy invariant description"
+)
+class Some_class:
+    values: JSONArray
+
+    def __init__(self, values: JSONArray) -> None:
+        self.values = values
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_type_inference_to_fail(
+            source=source,
+            expected_joined_message=(
+                "An index into a JSON-able object or array might be missing, "
+                "or hold a JSON null, so ``is None`` over an unguarded index "
+                "conflates the two. Please first ask whether the key or "
+                "the position is there, as ``<key> in <object>`` and as "
+                "``len(<array>) > <position>``, which strips the optionality "
+                "of the index in the guarded expression. Then ``is None`` over "
+                "the guarded index asks whether it is a JSON null."
             ),
         )
 
@@ -584,7 +614,7 @@ __xml_namespace__ = "https://dummy.com"
         self.expect_type_inference_to_fail(
             source=source,
             expected_joined_message=(
-                "Expected the value to be of an optional type "
+                "Expected the value to be of an optional type, or a JSONValue, "
                 "for a non-nullness check (``is not None``), but got str"
             ),
         )

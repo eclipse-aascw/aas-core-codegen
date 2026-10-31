@@ -55,7 +55,8 @@ namespace dummy
                 return new Our.Something(
                     that.Mapping,
                     that.Values,
-                    that.OptionalMapping);
+                    that.OptionalMapping,
+                    that.OptionalValue);
             }
         }  // internal class ShallowCopier
 
@@ -85,6 +86,10 @@ namespace dummy
                             ?? throw new System.InvalidOperationException(
                                 "Expected SerializeToNode to copy a non-null value, "
                                     + "but it returned null"))
+                        : null,
+                    (that.OptionalValue != null)
+                        ? System.Text.Json.JsonSerializer.SerializeToNode(
+                            that.OptionalValue)
                         : null
                 );
             }

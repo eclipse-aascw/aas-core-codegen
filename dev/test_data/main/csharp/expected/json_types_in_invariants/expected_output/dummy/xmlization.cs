@@ -177,7 +177,7 @@ namespace dummy
             /// <summary>
             /// Read the content of an element typed as <c>Nodes.JsonNode</c>.
             /// </summary>
-            private static Nodes.JsonNode ReadJsonValueContent(
+            private static Nodes.JsonNode? ReadJsonValueContent(
                 Xml.XmlReader reader,
                 bool isEmpty,
                 out Reporting.Error? error)
@@ -185,7 +185,7 @@ namespace dummy
                 if (isEmpty)
                 {
                     error = new Reporting.Error(
-                        "Expected one of the elements <boolean>, <double>, <string>, " +
+                        "Expected one of the elements <nil>, <boolean>, <double>, <string>, " +
                         "<array> or <struct> as the content of the element, " +
                         "but the element was self-closing");
                     return default!;
@@ -198,9 +198,7 @@ namespace dummy
                     return default!;
                 }
 
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected result null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -274,6 +272,9 @@ namespace dummy
             private static readonly ContentReader<Nodes.JsonArray> Read_jsonArray = (
                 ReadJsonArrayContent);
 
+            private static readonly ContentReader<Nodes.JsonNode?> Read_jsonValue = (
+                ReadJsonValueContent);
+
             /// <summary>
             /// Deserialize an instance of class Something from a sequence of XML elements.
             /// </summary>
@@ -292,6 +293,8 @@ namespace dummy
                 Nodes.JsonObject? theMapping = null;
                 Nodes.JsonArray? theValues = null;
                 Nodes.JsonObject? theOptionalMapping = null;
+                Nodes.JsonNode? theOptionalValue = null;
+                bool seenOptionalValue = false;
 
                 if (!isEmptySequence)
                 {
@@ -337,6 +340,16 @@ namespace dummy
                                     break;
                                 }
                                 theOptionalMapping = Read_jsonObject(
+                                    reader, isEmptyProperty, out error);
+                                break;
+                            case "optionalValue":
+                                if (seenOptionalValue)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
+                                seenOptionalValue = true;
+                                theOptionalValue = Read_jsonValue(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -400,7 +413,8 @@ namespace dummy
                     theValues
                          ?? throw new System.InvalidOperationException(
                             "Unexpected null, had to be handled before"),
-                    theOptionalMapping);
+                    theOptionalMapping,
+                    theOptionalValue);
             }  // internal static Our.Something? SomethingFromSequence
         }  // internal static class DeserializeImplementation
 
@@ -603,6 +617,9 @@ namespace dummy
             private static readonly ContentWriter<Nodes.JsonArray> Write_jsonArray = (
                 XmlRpc.SerializeArrayBodyTo);
 
+            private static readonly ContentWriter<Nodes.JsonNode?> Write_jsonValue = (
+                XmlRpc.SerializeValueTo);
+
             private static void SomethingToSequence(
                 Our.ISomething that,
                 Xml.XmlWriter writer)
@@ -621,6 +638,16 @@ namespace dummy
                         that.OptionalMapping,
                         writer,
                         Write_jsonObject);
+                }
+
+                if (that.OptionalValue != null)
+                {
+                    WriteProperty(
+                        "optionalValue",
+                        "OptionalValue",
+                        that.OptionalValue,
+                        writer,
+                        Write_jsonValue);
                 }
             }  // private static void SomethingToSequence
 

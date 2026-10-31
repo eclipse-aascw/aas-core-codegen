@@ -185,10 +185,10 @@ public class Jsonization {
        * Parse {@code node} as a JSON-able value.
        *
        * <p>A JSON-able value is, recursively, exactly as JSON itself is defined:
-       * a boolean, a number, a string, an array of JSON-able values or an object
-       * of JSON-able values with string keys. A null is rejected at any depth, as
-       * the JSON null has no representation as a JSON-able value, and so are
-       * an infinity and a not-a-number, which JSON can not represent at all.
+       * a null node (JSON null), a boolean, a number, a string, an array of
+       * JSON-able values or an object of JSON-able values with string keys.
+       * An infinity and a not-a-number are rejected at any depth, as JSON can not
+       * represent them at all.
        *
        * <p>The result is a deep copy, and never {@code node} itself, so that
        * the parsed instance does not share a tree with the document it came from.
@@ -199,9 +199,13 @@ public class Jsonization {
        */
       private static Reporting.Result<JsonNode> tryJsonValueFromAt(
           JsonNode node, String path) {
-        if (node == null || node.isNull() || node.isMissingNode()) {
+        if (node == null || node.isMissingNode()) {
           return Reporting.Result.failure(new Reporting.Error(
             "Expected a JSON-able value at " + path + ", but got: " + node));
+        }
+
+        if (node.isNull()) {
+          return Reporting.Result.success(JsonNodeFactory.instance.nullNode());
         }
 
         if (node.isNumber()) {
@@ -253,7 +257,7 @@ public class Jsonization {
         }
 
         return Reporting.Result.failure(new Reporting.Error(
-          "Expected a JSON-able value (a boolean, a number, a string, " +
+          "Expected a JSON-able value (a null, a boolean, a number, a string, " +
           "an array or an object) at " + path + ", but got: " +
           node.getNodeType()));
       }
@@ -601,8 +605,9 @@ public class Jsonization {
        * Serialize {@code that} as a JSON node.
        *
        * <p>A JSON-able value is almost a JSON node as it comes, but not quite: its
-       * type rules out neither a null nor a non-finite number, neither of which
-       * JSON can represent. Each is refused here, at any depth.
+       * type rules out neither a missing node nor a non-finite number, neither of
+       * which JSON can represent. Each is refused here, at any depth. A null node
+       * is written as a JSON null.
        *
        * <p>The result is a deep copy, and never {@code that} itself, so that
        * the serialized document does not share a tree with the instance it came
@@ -612,10 +617,14 @@ public class Jsonization {
        * @return {@code that}, as a node of a JSON document
        */
       private static JsonNode jsonValueToJsonNode(JsonNode that) {
-        if (that == null || that.isNull() || that.isMissingNode()) {
+        if (that == null || that.isMissingNode()) {
           throw new _SerializeFailure(
             new Reporting.Error(
               "Expected a JSON-able value, but got: " + that));
+        }
+
+        if (that.isNull()) {
+          return JsonNodeFactory.instance.nullNode();
         }
 
         if (that.isNumber()) {
@@ -667,7 +676,7 @@ public class Jsonization {
 
         throw new _SerializeFailure(
           new Reporting.Error(
-            "Expected a JSON-able value (a boolean, a number, a string, " +
+            "Expected a JSON-able value (a null, a boolean, a number, a string, " +
             "an array or an object), but got: " + that.getNodeType()));
       }
 

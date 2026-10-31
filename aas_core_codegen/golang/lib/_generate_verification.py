@@ -1161,9 +1161,10 @@ def _generate_verify_json_value(
     Generate the functions verifying that a value is JSON-able.
 
     A JSON-able value is, recursively, exactly as JSON itself is defined, but
-    ``JsonValue`` is an ``any``, so it rules out none of the three ways of not
-    being one: a ``nil``, a non-finite number and a value of some other type
-    altogether. Each is reported here, at any depth.
+    ``JsonValue`` is an ``any``, so it rules out none of the two ways of not
+    being one: a non-finite number and a value of some other type altogether.
+    Each is reported here, at any depth. A ``nil`` is a JSON null, and hence
+    a JSON-able value.
 
     The path *within* a JSON-able value is a path of the error like any other:
     an index segment points at an item of a JSON-able array, and a key segment
@@ -1198,11 +1199,7 @@ func verifyJsonValue(
 {I}onError func(*VerificationError) bool,
 ) (abort bool) {{
 {I}if value == nil {{
-{II}return onError(
-{III}newVerificationError(
-{IIII}"Expected a JSON-able value, but got a nil",
-{III}),
-{II})
+{II}return false
 {I}}}
 
 {I}switch casted := value.(type) {{

@@ -177,7 +177,7 @@ namespace dummy
             /// <summary>
             /// Read the content of an element typed as <c>Nodes.JsonNode</c>.
             /// </summary>
-            private static Nodes.JsonNode ReadJsonValueContent(
+            private static Nodes.JsonNode? ReadJsonValueContent(
                 Xml.XmlReader reader,
                 bool isEmpty,
                 out Reporting.Error? error)
@@ -185,7 +185,7 @@ namespace dummy
                 if (isEmpty)
                 {
                     error = new Reporting.Error(
-                        "Expected one of the elements <boolean>, <double>, <string>, " +
+                        "Expected one of the elements <nil>, <boolean>, <double>, <string>, " +
                         "<array> or <struct> as the content of the element, " +
                         "but the element was self-closing");
                     return default!;
@@ -198,9 +198,7 @@ namespace dummy
                     return default!;
                 }
 
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected result null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -268,7 +266,7 @@ namespace dummy
                 AtElement<Our.Something>(
                     SomethingFromSequence, "something"));
 
-            private static readonly ContentReader<Nodes.JsonNode> Read_jsonValue = (
+            private static readonly ContentReader<Nodes.JsonNode?> Read_jsonValue = (
                 ReadJsonValueContent);
 
             private static readonly ContentReader<Nodes.JsonArray> Read_jsonArray = (
@@ -293,10 +291,12 @@ namespace dummy
                 error = null;
 
                 Nodes.JsonNode? theValue = null;
+                bool seenValue = false;
                 Nodes.JsonArray? theValues = null;
                 Nodes.JsonObject? theMapping = null;
                 Nodes.JsonObject? theMappingWithConstrainedKey = null;
                 Nodes.JsonNode? theOptionalValue = null;
+                bool seenOptionalValue = false;
                 Nodes.JsonArray? theOptionalValues = null;
                 Nodes.JsonObject? theOptionalMapping = null;
 
@@ -320,11 +320,12 @@ namespace dummy
                         switch (elementName)
                         {
                             case "value":
-                                if (theValue != null)
+                                if (seenValue)
                                 {
                                     error = DuplicatePropertyError(elementName);
                                     break;
                                 }
+                                seenValue = true;
                                 theValue = Read_jsonValue(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -356,11 +357,12 @@ namespace dummy
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "optionalValue":
-                                if (theOptionalValue != null)
+                                if (seenOptionalValue)
                                 {
                                     error = DuplicatePropertyError(elementName);
                                     break;
                                 }
+                                seenOptionalValue = true;
                                 theOptionalValue = Read_jsonValue(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -420,7 +422,7 @@ namespace dummy
                     }
                 }
 
-                if (theValue == null)
+                if (!seenValue)
                 {
                     error = new Reporting.Error(
                         "The required property Value has not been given " +
@@ -453,9 +455,7 @@ namespace dummy
                 }
 
                 return new Our.Something(
-                    theValue
-                         ?? throw new System.InvalidOperationException(
-                            "Unexpected null, had to be handled before"),
+                    theValue,
                     theValues
                          ?? throw new System.InvalidOperationException(
                             "Unexpected null, had to be handled before"),
@@ -664,7 +664,7 @@ namespace dummy
                 that.Accept(_instance, writer);
             }
 
-            private static readonly ContentWriter<Nodes.JsonNode> Write_jsonValue = (
+            private static readonly ContentWriter<Nodes.JsonNode?> Write_jsonValue = (
                 XmlRpc.SerializeValueTo);
 
             private static readonly ContentWriter<Nodes.JsonArray> Write_jsonArray = (

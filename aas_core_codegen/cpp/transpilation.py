@@ -2047,12 +2047,40 @@ common::make_optional(
 
         raise AssertionError("Should not have gotten here")
 
+    def _json_nullness_check(
+        self, node: parse_tree.Expression, value: Stripped
+    ) -> Optional[Stripped]:
+        """
+        Generate the check that the JSON-able ``value`` is neither absent nor null.
+
+        Return ``None`` if the ``node`` is not a JSON-able value.
+
+        A JSON-able value is never absent if it is not optional, *e.g.*, a guarded
+        index, but might still be a JSON null. An optional JSON-able value which is
+        a JSON null is treated as absent, as most of the SDKs can not tell the two
+        apart.
+        """
+        node_type = self.type_map[node]
+
+        if isinstance(node_type, intermediate_type_inference.JsonValueTypeAnnotation):
+            return Stripped(f"!{value}.is_null()")
+
+        if isinstance(
+            node_type, intermediate_type_inference.OptionalTypeAnnotation
+        ) and isinstance(
+            node_type.value, intermediate_type_inference.JsonValueTypeAnnotation
+        ):
+            return Stripped(f"({value}.has_value() && !{value}->is_null())")
+
+        return None
+
     def transform_is_none(
         self, node: parse_tree.IsNone
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
         value, error = self.transform(node.value)
         if error is not None:
             return None, error
+        assert value is not None
 
         no_parentheses_types = (
             parse_tree.Member,
@@ -2066,10 +2094,24 @@ common::make_optional(
             parse_tree.All,
             parse_tree.Any,
         )
-        if isinstance(node.value, no_parentheses_types):
-            return Stripped(f"!({value}.has_value())"), None
-        else:
-            return Stripped(f"!(({value}).has_value())"), None
+
+        if not isinstance(node.value, no_parentheses_types):
+            value = Stripped(f"({value})")
+
+        # NOTE (mristin):
+        # A JSON-able value might be a JSON null, which ``nlohmann::json``
+        # represents as a null value, see :py:meth:`_json_nullness_check`.
+        if isinstance(
+            self.type_map[node.value],
+            intermediate_type_inference.JsonValueTypeAnnotation,
+        ):
+            return Stripped(f"{value}.is_null()"), None
+
+        json_nullness_check = self._json_nullness_check(node=node.value, value=value)
+        if json_nullness_check is not None:
+            return Stripped(f"!{json_nullness_check}"), None
+
+        return Stripped(f"!({value}.has_value())"), None
 
     def transform_is_not_none(
         self, node: parse_tree.IsNotNone
@@ -2077,6 +2119,7 @@ common::make_optional(
         value, error = self.transform(node.value)
         if error is not None:
             return None, error
+        assert value is not None
 
         no_parentheses_types_in_this_context = (
             parse_tree.Member,
@@ -2090,10 +2133,15 @@ common::make_optional(
             parse_tree.All,
             parse_tree.Any,
         )
-        if isinstance(node.value, no_parentheses_types_in_this_context):
-            return Stripped(f"{value}.has_value()"), None
-        else:
-            return Stripped(f"({value}).has_value()"), None
+
+        if not isinstance(node.value, no_parentheses_types_in_this_context):
+            value = Stripped(f"({value})")
+
+        json_nullness_check = self._json_nullness_check(node=node.value, value=value)
+        if json_nullness_check is not None:
+            return json_nullness_check, None
+
+        return Stripped(f"{value}.has_value()"), None
 
     @abc.abstractmethod
     def transform_name(

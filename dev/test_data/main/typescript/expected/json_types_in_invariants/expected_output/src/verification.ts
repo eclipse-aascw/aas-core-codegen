@@ -233,7 +233,11 @@ export function isAcceptable(
 export function *verifyJsonValue(
   value: OurTypes.JsonValue
 ): IterableIterator<VerificationError> {
-  if (value === null || value === undefined) {
+  if (value === null) {
+    return;
+  }
+
+  if (value === undefined) {
     yield new VerificationError(
       `Expected a JSON-able value, but got: ${value}`
     );
@@ -262,7 +266,7 @@ export function *verifyJsonValue(
 
     default:
       yield new VerificationError(
-        `Expected a JSON-able value (a boolean, a number, a string, ` +
+        `Expected a JSON-able value (a null, a boolean, a number, a string, ` +
           `an array or an object), but got: ${typeof value}`
       );
       return;
@@ -340,6 +344,38 @@ class Verifier
     that: OurTypes.Something,
     context: boolean
   ): IterableIterator<VerificationError> {
+    if (!(
+      !(that.optionalValue !== null)
+      || isAcceptable(that.optionalValue)
+    )) {
+      yield new VerificationError(
+        "The optional value must be acceptable"
+      )
+    }
+
+    if (!(
+      !((
+        that.values.length > 0
+        && (OurCommon.at(that.values, 0) === null)
+      ))
+    )) {
+      yield new VerificationError(
+        "The first value must not be a JSON null"
+      )
+    }
+
+    if (!(
+      !(that.optionalMapping !== null)
+      || (
+        !(Object.prototype.hasOwnProperty.call(that.optionalMapping, "type"))
+        || (that.optionalMapping["type"] !== null)
+      )
+    )) {
+      yield new VerificationError(
+        "The type of the optional mapping must not be a JSON null"
+      )
+    }
+
     if (!(
       !(that.values.length >= 1)
       || isAcceptable(OurCommon.at(that.values, -1))
@@ -430,6 +466,18 @@ class Verifier
             new PropertySegment(
               that,
               "optionalMapping"
+            )
+          );
+          yield error;
+        }
+      }
+
+      if (that.optionalValue !== null) {
+        for (const error of verifyJsonValue(that.optionalValue)) {
+          error.path.prepend(
+            new PropertySegment(
+              that,
+              "optionalValue"
             )
           );
           yield error;

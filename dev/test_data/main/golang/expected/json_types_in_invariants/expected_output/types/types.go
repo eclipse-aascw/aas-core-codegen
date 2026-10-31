@@ -6,10 +6,15 @@ package types
 
 // Represent a value which JSON can carry.
 //
-// This is, recursively, exactly as JSON itself is defined: a bool, a float64,
-// a string, a [JsonArray] of JSON-able values or a [JsonObject] of JSON-able
-// values with string keys -- never a nil, and never an infinity or
+// This is, recursively, exactly as JSON itself is defined: a nil (JSON null),
+// a bool, a float64, a string, a [JsonArray] of JSON-able values or
+// a [JsonObject] of JSON-able values with string keys -- never an infinity or
 // a not-a-number, which JSON can not represent at all.
+//
+// A nil might appear at any depth, including the value itself. Since
+// an absent optional property is also nil, an optional JSON-able property
+// which is a JSON null is indistinguishable from an absent one, and is treated
+// as absent.
 //
 // Go has no sum type, so this is an `any`, and what it actually holds is
 // checked at run-time -- by the verification, and again by the de/serialization.
@@ -78,6 +83,12 @@ type ISomething interface {
 	SetOptionalMapping(
 		value JsonObject,
 	);
+
+	OptionalValue() JsonValue;
+
+	SetOptionalValue(
+		value JsonValue,
+	);
 }
 
 // Check whether the instance corresponds to [ourtypes.ISomething]
@@ -97,6 +108,7 @@ type Something struct {
 	mapping JsonObject
 	values JsonArray
 	optionalMapping JsonObject
+	optionalValue JsonValue
 }
 
 func (s *Something) Mapping(
@@ -130,6 +142,17 @@ func (s *Something) SetOptionalMapping(
 	value JsonObject,
 ) {
 	s.optionalMapping = value
+}
+
+func (s *Something) OptionalValue(
+) JsonValue {
+	return s.optionalValue
+}
+
+func (s *Something) SetOptionalValue(
+	value JsonValue,
+) {
+	s.optionalValue = value
 }
 
 func (s *Something) ModelType(
@@ -190,6 +213,7 @@ func NewSomething(
 		mapping: mapping,
 		values: values,
 		optionalMapping: nil,
+		optionalValue: nil,
 	}
 }
 

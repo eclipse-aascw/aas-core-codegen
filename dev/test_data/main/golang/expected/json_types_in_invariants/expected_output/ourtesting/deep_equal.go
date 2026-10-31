@@ -50,6 +50,22 @@ func deepEqualSomething(
 		}
 	}
 
+	thatOptionalValue := that.OptionalValue()
+	otherOptionalValue := other.OptionalValue()
+	if
+		(thatOptionalValue == nil && otherOptionalValue != nil) ||
+		(thatOptionalValue != nil && otherOptionalValue == nil) {
+		return false
+	}
+	if thatOptionalValue != nil {
+		if !reflect.DeepEqual(
+			thatOptionalValue,
+			otherOptionalValue,
+		) {
+			return false
+		}
+	}
+
 	return true
 }
 

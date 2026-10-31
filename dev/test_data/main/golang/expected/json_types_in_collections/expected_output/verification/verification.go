@@ -67,11 +67,7 @@ func verifyJsonValue(
 	onError func(*VerificationError) bool,
 ) (abort bool) {
 	if value == nil {
-		return onError(
-			newVerificationError(
-				"Expected a JSON-able value, but got a nil",
-			),
-		)
+		return false
 	}
 
 	switch casted := value.(type) {

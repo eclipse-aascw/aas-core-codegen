@@ -12,13 +12,16 @@ namespace types {
 Something::Something(
   nlohmann::json mapping,
   nlohmann::json values,
-  common::optional<nlohmann::json> optional_mapping
+  common::optional<nlohmann::json> optional_mapping,
+  common::optional<nlohmann::json> optional_value
 ) {
   mapping_ = std::move(mapping);
 
   values_ = std::move(values);
 
   optional_mapping_ = std::move(optional_mapping);
+
+  optional_value_ = std::move(optional_value);
 }
 
 ModelType Something::model_type() const {
@@ -65,6 +68,20 @@ void Something::set_optional_mapping(
   common::optional<nlohmann::json> value
 ) {
   optional_mapping_ = value;
+}
+
+const common::optional<nlohmann::json>& Something::optional_value() const {
+  return optional_value_;
+}
+
+common::optional<nlohmann::json>& Something::mutable_optional_value() {
+  return optional_value_;
+}
+
+void Something::set_optional_value(
+  common::optional<nlohmann::json> value
+) {
+  optional_value_ = value;
 }
 
 // endregion Something

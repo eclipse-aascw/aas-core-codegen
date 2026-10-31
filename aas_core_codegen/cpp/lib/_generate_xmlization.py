@@ -3532,6 +3532,29 @@ common::optional<
 
         var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
 
+        # NOTE (mristin):
+        # An optional JSON-able value which is a JSON null is treated as absent,
+        # as most of the SDKs can not tell the two apart.
+        if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation) and (
+            isinstance(prop.type_annotation.value, intermediate.JsonValueTypeAnnotation)
+        ):
+            case_blocks.append(
+                Stripped(
+                    f"""\
+case properties::{prop_enum_name}::{prop_literal}: {{
+{I}common::optional<DeserializationError> read_error = ReadInto(
+{II}{var_name},
+{II}{indent_but_first_line(read_expr, II)}
+{I});
+{I}if (!read_error.has_value() && {var_name}->is_null()) {{
+{II}{var_name} = common::nullopt;
+{I}}}
+{I}return read_error;
+}}"""
+                )
+            )
+            continue
+
         case_blocks.append(
             Stripped(
                 f"""\
@@ -4959,6 +4982,33 @@ def _generate_write_property_statements(prop: intermediate.Property) -> Stripped
         writer_exprs = [_xml_write_content_expr(type_anno)]
 
     writer_exprs_joined = ",\n".join(writer_exprs)
+
+    # NOTE (mristin):
+    # An optional JSON-able value which is a JSON null is treated as absent,
+    # as most of the SDKs can not tell the two apart.
+    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation) and (
+        isinstance(type_anno, intermediate.JsonValueTypeAnnotation)
+    ):
+        maybe_var = cpp_naming.variable_name(Identifier(f"maybe_{prop.name}"))
+
+        return Stripped(
+            f"""\
+const common::optional<nlohmann::json>& {maybe_var}(
+{I}that.{getter_name}()
+);
+if ({maybe_var}.has_value() && !{maybe_var}->is_null()) {{
+{I}error = {function_name}(
+{II}{xml_name_literal},
+{II}*{maybe_var},
+{II}writer,
+{II}iteration::Property::{prop_literal},
+{II}{indent_but_first_line(writer_exprs_joined, II)}
+{I});
+{I}if (error.has_value()) {{
+{II}return error;
+{I}}}
+}}"""
+        )
 
     return Stripped(
         f"""\

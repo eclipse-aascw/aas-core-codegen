@@ -48,19 +48,15 @@ namespace dummy
         /// <summary>
         /// Make a deep copy of <paramref name="that" />.
         /// </summary>
-        private static List<Nodes.JsonNode> Deep_ListOf_jsonValue(
-            List<Nodes.JsonNode> that)
+        private static List<Nodes.JsonNode?> Deep_ListOf_jsonValue(
+            List<Nodes.JsonNode?> that)
         {
-            var result = new List<Nodes.JsonNode>(that.Count);
+            var result = new List<Nodes.JsonNode?>(that.Count);
             foreach (var item in that)
             {
                 result.Add(
-                    (Nodes.JsonNode)(
-                        System.Text.Json.JsonSerializer.SerializeToNode(
-                            item)
-                        ?? throw new System.InvalidOperationException(
-                            "Expected SerializeToNode to copy a non-null value, "
-                                + "but it returned null")));
+                    System.Text.Json.JsonSerializer.SerializeToNode(
+                        item));
             }
 
             return result;
@@ -69,17 +65,13 @@ namespace dummy
         /// <summary>
         /// Make a deep copy of <paramref name="that" />.
         /// </summary>
-        private static (string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject) Deep_TupleOf4_string_jsonValue_jsonArray_jsonObject(
-            (string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject) that)
+        private static (string, Nodes.JsonNode?, Nodes.JsonArray, Nodes.JsonObject) Deep_TupleOf4_string_jsonValue_jsonArray_jsonObject(
+            (string, Nodes.JsonNode?, Nodes.JsonArray, Nodes.JsonObject) that)
         {
             return (
                 that.Item1,
-                (Nodes.JsonNode)(
-                    System.Text.Json.JsonSerializer.SerializeToNode(
-                        that.Item2)
-                    ?? throw new System.InvalidOperationException(
-                        "Expected SerializeToNode to copy a non-null value, "
-                            + "but it returned null")),
+                System.Text.Json.JsonSerializer.SerializeToNode(
+                    that.Item2),
                 (Nodes.JsonArray)(
                     System.Text.Json.JsonSerializer.SerializeToNode(
                         that.Item3)

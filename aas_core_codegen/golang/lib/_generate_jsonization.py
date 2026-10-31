@@ -1890,10 +1890,10 @@ def _generate_json_able_helpers(
 // Parse `jsonable` as a JSON-able value.
 //
 // A JSON-able value is, recursively, exactly as JSON itself is defined:
-// a bool, a float64, a string, an array of JSON-able values or an object of
-// JSON-able values with string keys. A nil is rejected at any depth, as
-// the JSON null has no representation as a JSON-able value, and so are
-// an infinity and a not-a-number, which JSON can not represent at all.
+// a nil (JSON null), a bool, a float64, a string, an array of JSON-able
+// values or an object of JSON-able values with string keys. An infinity and
+// a not-a-number are rejected at any depth, as JSON can not represent them
+// at all.
 //
 // The result is a new structure, and never `jsonable` itself, so that
 // the parsed instance does not alias the document it came from.
@@ -1904,9 +1904,6 @@ func jsonValueFromJsonable(
 {I}jsonable interface{{}},
 ) (result ourtypes.JsonValue, err error) {{
 {I}if jsonable == nil {{
-{II}err = newDeserializationError(
-{III}"Expected a JSON-able value, but got a nil",
-{II})
 {II}return
 {I}}}
 
@@ -2028,8 +2025,9 @@ func jsonObjectFromJsonable(
 // Serialize `value` as a JSON-able structure.
 //
 // A JSON-able value is almost JSON-able as it comes, but not quite: its type
-// is an `any`, which rules out neither a nil nor a non-finite number, neither
-// of which JSON can represent. Each is refused here, at any depth.
+// is an `any`, which does not rule out a non-finite number, which JSON can not
+// represent. It is refused here, at any depth. A nil is written as
+// a JSON null.
 //
 // The result is a new structure, and never `value` itself, so that
 // the serialized document does not alias the instance it came from.
@@ -2037,9 +2035,6 @@ func jsonValueToJsonable(
 {I}value ourtypes.JsonValue,
 ) (result interface{{}}, err error) {{
 {I}if value == nil {{
-{II}err = newSerializationError(
-{III}"Expected a JSON-able value, but got a nil",
-{II})
 {II}return
 {I}}}
 

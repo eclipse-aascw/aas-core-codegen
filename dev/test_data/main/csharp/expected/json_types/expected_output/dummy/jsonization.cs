@@ -245,14 +245,13 @@ namespace dummy
             /// </summary>
             /// <remarks>
             /// A JSON-able value is, recursively, exactly as JSON itself is defined:
-            /// a boolean, a finite number, a string, an array of JSON-able values or
-            /// an object of JSON-able values with string keys -- never <c>null</c> and
+            /// a <c>null</c> (JSON null), a boolean, a finite number, a string, an array
+            /// of JSON-able values or an object of JSON-able values with string keys --
             /// never an infinity or a not-a-number, at any depth.
             /// </remarks>
             /// <param name="node">JSON node to be checked</param>
             /// <param name="error">Error, if any, describing why it is not JSON-able</param>
             private static bool CheckIsJsonAble(
-                [CodeAnalysis.NotNullWhen(true)]
                 Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
@@ -260,9 +259,7 @@ namespace dummy
 
                 if (node == null)
                 {
-                    error = new Reporting.Error(
-                        "Expected a JSON-able value, but got a null");
-                    return false;
+                    return true;
                 }
 
                 switch (node)
@@ -330,13 +327,18 @@ namespace dummy
             /// </remarks>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Nodes.JsonNode JsonValueFrom(
+            internal static Nodes.JsonNode? JsonValueFrom(
                 Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 if (!CheckIsJsonAble(node, out error))
                 {
                     return default!;
+                }
+
+                if (node == null)
+                {
+                    return null;
                 }
 
                 // NOTE (mristin):
@@ -375,7 +377,7 @@ namespace dummy
                     return default!;
                 }
 
-                Nodes.JsonNode result = JsonValueFrom(node, out error);
+                Nodes.JsonNode? result = JsonValueFrom(node, out error);
                 if (error != null)
                 {
                     return default!;
@@ -402,7 +404,7 @@ namespace dummy
                     return default!;
                 }
 
-                Nodes.JsonNode result = JsonValueFrom(node, out error);
+                Nodes.JsonNode? result = JsonValueFrom(node, out error);
                 if (error != null)
                 {
                     return default!;
@@ -487,7 +489,7 @@ namespace dummy
                     }
                 }
 
-                if (theValue == null)
+                if (!obj.ContainsKey("value"))
                 {
                     error = new Reporting.Error(
                         "Required property \"value\" is missing");
@@ -516,9 +518,7 @@ namespace dummy
                 }
 
                 return new Our.Something(
-                    theValue
-                         ?? throw new System.InvalidOperationException(
-                            "Unexpected null, had to be handled before"),
+                    theValue,
                     theValues
                          ?? throw new System.InvalidOperationException(
                             "Unexpected null, had to be handled before"),
@@ -715,13 +715,14 @@ namespace dummy
             /// Check that <paramref name="that" /> is a JSON-able value, at any depth.
             /// </summary>
             /// <remarks>
-            /// Neither a <c>null</c> nor a non-finite number has a representation as
-            /// a JSON-able value, and <see cref="Nodes.JsonNode" /> rules out neither
-            /// of the two statically.
+            /// A non-finite number has no representation as a JSON-able value, and
+            /// <see cref="Nodes.JsonNode" /> does not rule it out statically. A <c>null</c>
+            /// is a JSON null, and hence a JSON-able value.
             /// </remarks>
             /// <exception name="SerializationFailure">
-            /// Thrown if either is found anywhere within <paramref name="that" />,
-            /// carrying the path to the culprit within <paramref name="that" />.
+            /// Thrown if a non-finite number is found anywhere within
+            /// <paramref name="that" />, carrying the path to the culprit within
+            /// <paramref name="that" />.
             /// </exception>
             private static void CheckIsJsonAbleForSerialization(Nodes.JsonNode that)
             {
@@ -733,13 +734,10 @@ namespace dummy
                         {
                             try
                             {
-                                if (item == null)
+                                if (item != null)
                                 {
-                                    throw new SerializationFailure(
-                                        new Reporting.Error(
-                                            "Expected a JSON-able value, but got a null"));
+                                    CheckIsJsonAbleForSerialization(item);
                                 }
-                                CheckIsJsonAbleForSerialization(item);
                             }
                             catch (SerializationFailure failure)
                             {
@@ -758,13 +756,10 @@ namespace dummy
                         {
                             try
                             {
-                                if (member.Value == null)
+                                if (member.Value != null)
                                 {
-                                    throw new SerializationFailure(
-                                        new Reporting.Error(
-                                            "Expected a JSON-able value, but got a null"));
+                                    CheckIsJsonAbleForSerialization(member.Value);
                                 }
-                                CheckIsJsonAbleForSerialization(member.Value);
                             }
                             catch (SerializationFailure failure)
                             {
@@ -805,11 +800,16 @@ namespace dummy
             /// <paramref name="that" />, never <paramref name="that" /> itself.
             /// </remarks>
             /// <exception name="SerializationFailure">
-            /// Thrown if <paramref name="that" /> contains a <c>null</c> or a non-finite
-            /// number anywhere, at any depth.
+            /// Thrown if <paramref name="that" /> contains a non-finite number anywhere,
+            /// at any depth.
             /// </exception>
-            private static Nodes.JsonNode SerializeJsonValue(Nodes.JsonNode that)
+            private static Nodes.JsonNode? SerializeJsonValue(Nodes.JsonNode? that)
             {
+                if (that == null)
+                {
+                    return null;
+                }
+
                 // NOTE (mristin):
                 // A System.Text.Json node remembers its parent, and attaching a node
                 // which already has one throws
@@ -850,7 +850,7 @@ namespace dummy
             /// </summary>
             private static Nodes.JsonArray SerializeJsonArray(Nodes.JsonArray that)
             {
-                return (Nodes.JsonArray)SerializeJsonValue(that);
+                return (Nodes.JsonArray)SerializeJsonValue(that)!;
             }
 
             /// <summary>
@@ -858,10 +858,10 @@ namespace dummy
             /// </summary>
             private static Nodes.JsonObject SerializeJsonObject(Nodes.JsonObject that)
             {
-                return (Nodes.JsonObject)SerializeJsonValue(that);
+                return (Nodes.JsonObject)SerializeJsonValue(that)!;
             }
 
-            private static readonly Serializer<Nodes.JsonNode> Serialize_JsonValue =
+            private static readonly Serializer<Nodes.JsonNode?> Serialize_JsonValue =
                 Transformer.SerializeJsonValue;
 
             private static readonly Serializer<Nodes.JsonArray> Serialize_JsonArray =

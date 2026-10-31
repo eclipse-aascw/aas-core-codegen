@@ -53,7 +53,7 @@ SET_TYPES = {
 }
 
 #: Name of the special atomic type annotation denoting an arbitrary, open
-#: JSON-able value -- a boolean, a number or a string, an open JSON-able
+#: JSON-able value -- a null, a boolean, a number or a string, an open JSON-able
 #: array of such values, or an open, JSON-able object with string-like
 #: keys and values which are themselves JSON-able, all recursively, exactly
 #: as JSON itself is defined

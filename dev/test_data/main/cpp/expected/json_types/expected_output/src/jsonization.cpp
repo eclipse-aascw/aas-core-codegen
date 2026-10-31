@@ -702,7 +702,7 @@ std::pair<
 > DeserializeJsonValue(
   const nlohmann::json& json
 ) {
-  if (json.is_null() || json.is_binary() || json.is_discarded()) {
+  if (json.is_binary() || json.is_discarded()) {
     return std::make_pair<
       common::optional<nlohmann::json>,
       common::optional<DeserializationError>
@@ -710,7 +710,7 @@ std::pair<
       common::nullopt,
       common::make_optional<DeserializationError>(
         common::Concat(
-          L"Expected a JSON-able value (a boolean, a number, a string, "
+          L"Expected a JSON-able value (a null, a boolean, a number, a string, "
           L"an array or an object), but got a value of type: ",
           common::Utf8ToWstring(json.type_name())
         )
@@ -1155,11 +1155,16 @@ std::pair<
               the_mapping_with_constrained_key,
               DeserializeJsonObject(value)
             );
-          case properties::OfSomething::kOptionalValue:
-            return ParseInto(
+          case properties::OfSomething::kOptionalValue: {
+            common::optional<DeserializationError> parse_error = ParseInto(
               the_optional_value,
               DeserializeJsonValue(value)
             );
+            if (!parse_error.has_value() && the_optional_value->is_null()) {
+              the_optional_value = common::nullopt;
+            }
+            return parse_error;
+          }
           case properties::OfSomething::kOptionalValues:
             return ParseInto(
               the_optional_values,
@@ -1708,12 +1713,12 @@ std::pair<
 > SerializeJsonValue(
   const nlohmann::json& value
 ) {
-  if (value.is_null() || value.is_binary() || value.is_discarded()) {
+  if (value.is_binary() || value.is_discarded()) {
     return std::make_pair(
       common::nullopt,
       common::make_optional<SerializationError>(
         common::Concat(
-          L"Expected a JSON-able value (a boolean, a number, a string, "
+          L"Expected a JSON-able value (a null, a boolean, a number, a string, "
           L"an array or an object), but got a value of type: ",
           common::Utf8ToWstring(value.type_name())
         )
@@ -1937,7 +1942,7 @@ std::pair<
   const common::optional<nlohmann::json>& maybe_optional_value(
     that.optional_value()
   );
-  if (maybe_optional_value.has_value()) {
+  if (maybe_optional_value.has_value() && !maybe_optional_value->is_null()) {
     error = SerializeInto(
       result,
       "optionalValue",

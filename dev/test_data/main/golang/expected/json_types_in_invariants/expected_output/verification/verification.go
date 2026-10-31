@@ -88,11 +88,7 @@ func verifyJsonValue(
 	onError func(*VerificationError) bool,
 ) (abort bool) {
 	if value == nil {
-		return onError(
-			newVerificationError(
-				"Expected a JSON-able value, but got a nil",
-			),
-		)
+		return false
 	}
 
 	switch casted := value.(type) {
@@ -215,6 +211,46 @@ func VerifySomething(
 	onError func(*VerificationError) bool,
 ) (abort bool) {
 	abort = false
+
+	if !(
+		!(that.OptionalValue() != nil) ||
+		IsAcceptable(that.OptionalValue())) {
+		abort = onError(
+			newVerificationError(
+				"The optional value must be acceptable",),
+		)
+		if abort {
+			return
+		}
+	}
+
+	if !(
+		!(len(that.Values()) > 0 &&
+		(that.Values()[0] == nil))) {
+		abort = onError(
+			newVerificationError(
+				"The first value must not be a JSON null",),
+		)
+		if abort {
+			return
+		}
+	}
+
+	if !(
+		!(that.OptionalMapping() != nil) ||
+		(!ourcommon.MapContains(
+			that.OptionalMapping(),
+			"type",
+		) ||
+		(that.OptionalMapping()["type"] != nil))) {
+		abort = onError(
+			newVerificationError(
+				"The type of the optional mapping must not be a JSON null",),
+		)
+		if abort {
+			return
+		}
+	}
 
 	if !(
 		!(len(that.Values()) >= 1) ||
@@ -353,6 +389,23 @@ func VerifySomething(
 				err.Path.PrependName(
 					&ourreporting.NameSegment{
 						Name: "OptionalMapping",
+					},
+				)
+				return onError(err)
+			},
+		)
+		if abort {
+			return
+		}
+	}
+
+	if that.OptionalValue() != nil {
+		abort = verifyJsonValue(
+			that.OptionalValue(),
+			func(err *VerificationError) bool {
+				err.Path.PrependName(
+					&ourreporting.NameSegment{
+						Name: "OptionalValue",
 					},
 				)
 				return onError(err)

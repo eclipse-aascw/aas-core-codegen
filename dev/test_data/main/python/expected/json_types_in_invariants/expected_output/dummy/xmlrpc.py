@@ -3,8 +3,10 @@ Read and write the JSON-able values as a subset of XML-RPC.
 
 JSON prescribes no XML representation of its own, so we borrow the one of
 XML-RPC for it: a value is written as a single discriminator element --
-``<boolean>``, ``<double>``, ``<string>``, ``<array>`` or ``<struct>`` --
-which says what the value is.
+``<nil>``, ``<boolean>``, ``<double>``, ``<string>``, ``<array>`` or
+``<struct>`` -- which says what the value is. XML-RPC itself knows no null,
+so we follow the widespread extension, and write a JSON null as an empty
+``<nil/>``.
 
 This module knows nothing of the meta-model beyond the JSON-able types, and
 it drives no document of its own. The caller hands over the very stream of
@@ -66,9 +68,9 @@ def read_value_content(
     """
     Read the content of :paramref:`element` as a JSON-able value.
 
-    The content is a single discriminator element -- ``<boolean>``,
-    ``<double>``, ``<string>``, ``<array>`` or ``<struct>`` -- which says what
-    the value is.
+    The content is a single discriminator element -- ``<nil>``,
+    ``<boolean>``, ``<double>``, ``<string>``, ``<array>`` or ``<struct>`` --
+    which says what the value is.
 
     The end element corresponding to :paramref:`element` will be read as well.
 
@@ -86,7 +88,7 @@ def read_value_content(
     discriminator = read_next_start_element(
         iterator,
         'a discriminator '
-        '(one of <boolean>, <double>, <string>, <array> or <struct>)'
+        '(one of <nil>, <boolean>, <double>, <string>, <array> or <struct>)'
     )
 
     result = _read_discriminator(discriminator, iterator)
@@ -117,7 +119,7 @@ def _read_discriminator(
     iterator: Iterator[Tuple[str, Element]]
 ) -> our_types.JsonValue:
     """
-    Read :paramref:`element` as one of the five XML-RPC discriminators.
+    Read :paramref:`element` as one of the six XML-RPC discriminators.
 
     The end element corresponding to :paramref:`element` will be read as well.
 
@@ -138,6 +140,19 @@ def _read_discriminator(
     # very element which does not belong here, so naming it in the path as well
     # as in the message would say nothing more.
     try:
+        if tag_wo_ns == 'nil':
+            read_end_element(element, iterator)
+
+            # NOTE (mristin):
+            # The text of an element is only complete at its end, so we can check
+            # it only now.
+            if element.text is not None and len(element.text.strip()) != 0:
+                raise DeserializationException(
+                    f"Expected no text in a <nil> element, but got: {element.text!r}"
+                )
+
+            return None
+
         if tag_wo_ns == 'boolean':
             # NOTE (mristin):
             # Real XML-RPC tooling writes and expects a strict ``1``/``0``, and not
@@ -204,7 +219,7 @@ def _read_discriminator(
 
     raise DeserializationException(
         f"Expected a discriminator element "
-        f"(one of <boolean>, <double>, <string>, <array> or <struct>), "
+        f"(one of <nil>, <boolean>, <double>, <string>, <array> or <struct>), "
         f"but got: {tag_wo_ns!r}"
     )
 
@@ -442,12 +457,16 @@ def write_discriminator(
     writer: Writer
 ) -> None:
     """
-    Write :paramref:`value` as one of the five XML-RPC discriminators.
+    Write :paramref:`value` as one of the six XML-RPC discriminators.
 
     :param value: to be serialized
     :param writer: to write to
     :raise: :py:class:`SerializationException` if the value could not be written
     """
+    if value is None:
+        writer.write_empty_element_in_no_namespace('nil')
+        return
+
     # NOTE (mristin):
     # A ``bool`` is an ``int`` in Python, so it has to be checked first --
     # otherwise every boolean would be written as a number.
@@ -524,8 +543,8 @@ def write_discriminator(
         return
 
     raise SerializationException(
-        f"Expected a JSON-able value (a boolean, a number, a string, an array "
-        f"or an object), but got: {type(value)}"
+        f"Expected a JSON-able value (a null, a boolean, a number, a string, "
+        f"an array or an object), but got: {type(value)}"
     )
 
 

@@ -60,8 +60,10 @@ test("a value round-trips through every discriminator", () => {
       "<member><name>b</name><value><boolean>1</boolean></value></member>" +
       "<member><name>f</name><value><double>1.5</double></value></member>" +
       "<member><name>s</name><value><string>x</string></value></member>" +
+      "<member><name>z</name><value><nil/></value></member>" +
       "<member><name>a</name><value><array><data>" +
         "<value><double>0</double></value>" +
+        "<value><nil></nil></value>" +
       "</data></array></value></member>" +
       "</struct></v>"
   );
@@ -73,8 +75,19 @@ test("a value round-trips through every discriminator", () => {
     b: true,
     f: 1.5,
     s: "x",
-    a: [0]
+    z: null,
+    a: [0, null]
   });
+});
+
+test("a nil with text is refused", () => {
+  const cursor = enter(`<v xmlns="${NAMESPACE}"><nil xmlns="">x</nil></v>`);
+
+  const parsed = OurXmlRpc.parseValueContent(cursor);
+
+  const error = mustError(parsed);
+  expect(error.path.toString()).toStrictEqual("nil");
+  expect(error.message).toContain("Expected no text in a 'nil' element");
 });
 
 test("the discriminator is a step of the path", () => {
@@ -206,6 +219,8 @@ test("a value is written with its discriminator", () => {
     [1, '<double xmlns="">1</double>'],
     [1.5, '<double xmlns="">1.5</double>'],
     ["a<b&c", '<string xmlns="">a&lt;b&amp;c</string>'],
+    [null, '<nil xmlns=""/>'],
+    [[null], '<array xmlns=""><data><value><nil/></value></data></array>'],
     [
       [0],
       '<array xmlns=""><data><value><double>0</double></value></data></array>'

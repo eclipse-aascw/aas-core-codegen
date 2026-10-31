@@ -764,6 +764,23 @@ class Writer:
         self._open_in_no_namespace -= 1
         self.stream.write(f'</{name}>')
 
+    def write_empty_element_in_no_namespace(
+            self,
+            name: str
+    ) -> None:
+        """
+        Write the empty element with the tag name :paramref:`name`, which resides
+        in no namespace at all.
+
+        If it is the outermost such element, it undeclares the default namespace.
+
+        :param name: of the element tag. Expected to contain no XML special characters.
+        """
+        if self._open_in_no_namespace == 0:
+            self.stream.write(f'<{name} xmlns=""/>')
+        else:
+            self.stream.write(f'<{name}/>')
+
     def _write_first_empty_element_with_namespace(
             self,
             name: str

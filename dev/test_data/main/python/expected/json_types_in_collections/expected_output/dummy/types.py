@@ -23,9 +23,14 @@ ContextT = TypeVar("ContextT")
 
 # NOTE (mristin):
 # A JSON-able value is, recursively, exactly as JSON itself is defined:
-# a boolean, a number, a string, an array of JSON-able values or an object
-# of JSON-able values with string keys -- never a ``None``, and never
+# a ``None`` (JSON null), a boolean, a number, a string, an array of JSON-able
+# values or an object of JSON-able values with string keys -- never
 # an infinity or a not-a-number, neither of which JSON can represent.
+#
+# A ``None`` might appear at any depth, including the value itself. Since
+# an absent optional property is also ``None``, an optional JSON-able property
+# which is a JSON null is indistinguishable from an absent one, and is treated
+# as absent.
 #
 # JSON knows a single numeric type. Python tells an ``int`` from a ``float``,
 # and a caller will naturally write either, so both are admitted here -- but
@@ -38,6 +43,7 @@ ContextT = TypeVar("ContextT")
 # (see https://github.com/python/mypy/issues/731), so the item and the value
 # types have to be spelled ``Any`` instead of ``JsonValue``.
 JsonValue = Union[
+    None,
     bool,
     int,
     float,

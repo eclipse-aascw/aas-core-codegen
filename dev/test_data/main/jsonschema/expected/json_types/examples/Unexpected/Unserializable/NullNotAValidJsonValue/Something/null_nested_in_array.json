@@ -1,8 +1,0 @@
-{
-  "value": true,
-  "values": [1, null, 3],
-  "mapping": {},
-  "mappingWithConstrainedKey": {
-    "a": 1
-  }
-}

@@ -28,6 +28,10 @@ public interface ISomething extends IClass {
   Optional<ObjectNode> getOptionalMapping();
 
   void setOptionalMapping(ObjectNode optionalMapping);
+
+  Optional<JsonNode> getOptionalValue();
+
+  void setOptionalValue(JsonNode optionalValue);
 }
 
 /*

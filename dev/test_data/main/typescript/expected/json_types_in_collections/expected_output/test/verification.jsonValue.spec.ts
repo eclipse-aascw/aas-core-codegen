@@ -113,8 +113,22 @@ test("a value of an unexpected type is refused", () => {
   expect(pathsAndCauses[0][1]).toContain("but got: function");
 });
 
-test("a null is refused at any depth", () => {
-  const value = { a: [null] } as unknown as OurTypes.JsonValue;
+test("a null is accepted at any depth", () => {
+  const values: Array<OurTypes.JsonValue> = [
+    null,
+    [null],
+    { a: [null, { b: null }] }
+  ];
+
+  for (const value of values) {
+    expect(
+      pathsAndMessages(OurVerification.verifyJsonValue(value))
+    ).toStrictEqual([]);
+  }
+});
+
+test("an undefined is refused at any depth", () => {
+  const value = { a: [undefined] } as unknown as OurTypes.JsonValue;
 
   const pathsAndCauses = pathsAndMessages(
     OurVerification.verifyJsonValue(value)
@@ -122,7 +136,7 @@ test("a null is refused at any depth", () => {
 
   expect(pathsAndCauses.length).toStrictEqual(1);
   expect(pathsAndCauses[0][0]).toStrictEqual('["a"][0]');
-  expect(pathsAndCauses[0][1]).toContain("but got: null");
+  expect(pathsAndCauses[0][1]).toContain("but got: undefined");
 });
 
 test("a JSON-able array has to be an array", () => {

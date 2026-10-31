@@ -1010,8 +1010,8 @@ def _generate_deserialize_json_value() -> Stripped:
     """
     Generate the function to recursively de-serialize a JSON-able value.
 
-    This rejects ``null``, a binary value and a discarded value -- none of
-    which are representable as a ``JSONValue`` -- at any depth, but does not
+    This rejects a binary value and a discarded value -- neither of which is
+    representable as a ``JSONValue`` -- at any depth, but does not
     otherwise restrict the top-level shape (unlike
     :py:func:`_generate_deserialize_json_array`/
     :py:func:`_generate_deserialize_json_object`).
@@ -1024,7 +1024,7 @@ std::pair<
 > DeserializeJsonValue(
 {I}const nlohmann::json& json
 ) {{
-{I}if (json.is_null() || json.is_binary() || json.is_discarded()) {{
+{I}if (json.is_binary() || json.is_discarded()) {{
 {II}return std::make_pair<
 {III}common::optional<nlohmann::json>,
 {III}common::optional<DeserializationError>
@@ -1032,7 +1032,7 @@ std::pair<
 {III}common::nullopt,
 {III}common::make_optional<DeserializationError>(
 {IIII}common::Concat(
-{IIIII}L"Expected a JSON-able value (a boolean, a number, a string, "
+{IIIII}L"Expected a JSON-able value (a null, a boolean, a number, a string, "
 {IIIII}L"an array or an object), but got a value of type: ",
 {IIIII}common::Utf8ToWstring(json.type_name())
 {IIII})
@@ -1186,7 +1186,7 @@ def _generate_serialize_json_value() -> Stripped:
 
     This re-validates the value even though it is already a
     ``nlohmann::json`` in memory, since ``nlohmann::json`` can represent
-    shapes (``null``, a binary value, a discarded value) which are not
+    shapes (a binary value, a discarded value) which are not
     representable as a ``JSONValue`` -- the constructor of a class instance
     does not, by itself, guard against these.
     """
@@ -1198,12 +1198,12 @@ std::pair<
 > SerializeJsonValue(
 {I}const nlohmann::json& value
 ) {{
-{I}if (value.is_null() || value.is_binary() || value.is_discarded()) {{
+{I}if (value.is_binary() || value.is_discarded()) {{
 {II}return std::make_pair(
 {III}common::nullopt,
 {III}common::make_optional<SerializationError>(
 {IIII}common::Concat(
-{IIIII}L"Expected a JSON-able value (a boolean, a number, a string, "
+{IIIII}L"Expected a JSON-able value (a null, a boolean, a number, a string, "
 {IIIII}L"an array or an object), but got a value of type: ",
 {IIIII}common::Utf8ToWstring(value.type_name())
 {IIII})
@@ -2951,6 +2951,29 @@ common::optional<
         var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
 
         parse_expr = _json_parse_expr(prop)
+
+        # NOTE (mristin):
+        # An optional JSON-able value which is a JSON null is treated as absent,
+        # as most of the SDKs can not tell the two apart.
+        if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation) and (
+            isinstance(prop.type_annotation.value, intermediate.JsonValueTypeAnnotation)
+        ):
+            case_blocks.append(
+                Stripped(
+                    f"""\
+case properties::{enum_name}::{literal_name}: {{
+{I}common::optional<DeserializationError> parse_error = ParseInto(
+{II}{var_name},
+{II}{indent_but_first_line(parse_expr, II)}
+{I});
+{I}if (!parse_error.has_value() && {var_name}->is_null()) {{
+{II}{var_name} = common::nullopt;
+{I}}}
+{I}return parse_error;
+}}"""
+                )
+            )
+            continue
 
         case_blocks.append(
             Stripped(
@@ -5016,6 +5039,15 @@ result[{json_prop_name_literal}] = {indent_but_first_line(serialize_expr, "")};"
         )
 
         # NOTE (mristin):
+        # An optional JSON-able value which is a JSON null is treated as absent,
+        # as most of the SDKs can not tell the two apart.
+        condition = (
+            f"{maybe_var}.has_value() && !{maybe_var}->is_null()"
+            if isinstance(type_anno, intermediate.JsonValueTypeAnnotation)
+            else f"{maybe_var}.has_value()"
+        )
+
+        # NOTE (mristin):
         # We test the binding rather than the getter. The getter is virtual, so
         # calling it a second time here would double its cost for every optional
         # property of every instance.
@@ -5024,7 +5056,7 @@ result[{json_prop_name_literal}] = {indent_but_first_line(serialize_expr, "")};"
 {maybe_var_type} {maybe_var}(
 {I}that.{getter}()
 );
-if ({maybe_var}.has_value()) {{
+if ({condition}) {{
 {I}{indent_but_first_line(code, I)}
 }}"""
         )

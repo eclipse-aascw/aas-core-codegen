@@ -24,8 +24,10 @@ import dummy.xmlcommon.XmlCommon;
  *
  * <p>JSON prescribes no XML representation of its own, so a JSON-able value
  * is de/serialized over the subset of XML-RPC which covers exactly what such
- * a value can be: {@code <boolean>}, {@code <double>}, {@code <string>},
- * {@code <array>} and {@code <struct>}.
+ * a value can be: {@code <nil>}, {@code <boolean>}, {@code <double>},
+ * {@code <string>}, {@code <array>} and {@code <struct>}. XML-RPC itself
+ * knows no null, so we follow the widespread extension, and write a JSON null
+ * as an empty {@code <nil/>}.
  *
  * <p>Every method reads from or writes to the reader or the writer which
  * the caller passes in, and consumes or produces exactly the content of one
@@ -52,16 +54,16 @@ public final class XmlRpc {
     /**
      * Read the content of an element holding a JSON-able value.
      *
-     * <p>The content is a single discriminator element -- {@code <boolean>},
-     * {@code <double>}, {@code <string>}, {@code <array>} or
-     * {@code <struct>} -- which says what the value is.
+     * <p>The content is a single discriminator element -- {@code <nil>},
+     * {@code <boolean>}, {@code <double>}, {@code <string>},
+     * {@code <array>} or {@code <struct>} -- which says what the value is.
      */
     public static Reporting.Result<JsonNode> readValueContent(
         XMLEventReader reader, boolean isEmpty) {
         if (isEmpty) {
             return Reporting.Result.failure(new Reporting.Error(
-                "Expected one of the elements boolean, double, string, array or " +
-                "struct as the content of the element, but the element was empty"));
+                "Expected one of the elements nil, boolean, double, string, array " +
+                "or struct as the content of the element, but the element was empty"));
         }
 
         final Reporting.Result<String> tryElementName = XmlCommon.peekElementNameInNoNamespace(reader);
@@ -100,6 +102,7 @@ public final class XmlRpc {
      */
     private static boolean isUnexpectedDiscriminator(String local) {
         switch (local) {
+            case "nil":
             case "boolean":
             case "double":
             case "string":
@@ -117,6 +120,8 @@ public final class XmlRpc {
     private static Reporting.Result<JsonNode> readXmlRpcDiscriminator(
         XMLEventReader reader, String local, boolean isEmpty) {
         switch (local) {
+            case "nil":
+                return readXmlRpcNil(reader, isEmpty);
             case "boolean":
                 return readXmlRpcBoolean(reader, isEmpty);
             case "double":
@@ -139,7 +144,7 @@ public final class XmlRpc {
             }
             default:
                 return Reporting.Result.failure(new Reporting.Error(
-                    "Expected a discriminator element (one of boolean, double, " +
+                    "Expected a discriminator element (one of nil, boolean, double, " +
                     "string, array or struct), but got: " + local));
         }
     }
@@ -247,6 +252,25 @@ public final class XmlRpc {
             return Reporting.Result.failure(new Reporting.Error(
                 exception.getMessage()));
         }
+    }
+
+    /**
+     * Read the content of a {@code <nil>} element as a JSON null.
+     *
+     * <p>XML-RPC itself knows no null, so we follow the widespread extension,
+     * and read a JSON null from an empty {@code <nil/>}.
+     */
+    private static Reporting.Result<JsonNode> readXmlRpcNil(
+        XMLEventReader reader, boolean isEmpty) {
+        if (!isEmpty) {
+            final String text = readXmlRpcCollapsedText(reader);
+            if (!text.isEmpty()) {
+                return Reporting.Result.failure(new Reporting.Error(
+                    "Expected no text in a nil element, but got: " + text));
+            }
+        }
+
+        return Reporting.Result.success(JsonNodeFactory.instance.nullNode());
     }
 
     /**
@@ -431,9 +455,19 @@ public final class XmlRpc {
 
     private static void writeValueContent(
         JsonNode that, XMLStreamWriter writer, boolean undeclareNamespace) {
-        if (that == null || that.isNull() || that.isMissingNode()) {
+        if (that == null || that.isMissingNode()) {
             throw new XmlCommon.SerializeFailure(new Reporting.Error(
                 "Expected a JSON-able value, but got: " + that));
+        }
+
+        if (that.isNull()) {
+            // NOTE (mristin):
+            // XML-RPC itself knows no null, so we follow the widespread extension,
+            // and write a JSON null as an empty <nil/>.
+            XmlCommon.writeElementInNoNamespace(
+                "nil", that, writer, undeclareNamespace,
+                (node, aWriter) -> { });
+            return;
         }
 
         if (that.isBoolean()) {
@@ -487,7 +521,7 @@ public final class XmlRpc {
         }
 
         throw new XmlCommon.SerializeFailure(new Reporting.Error(
-            "Expected a JSON-able value (a boolean, a number, a string, " +
+            "Expected a JSON-able value (a null, a boolean, a number, a string, " +
             "an array or an object), but got: " + that.getNodeType()));
     }
 

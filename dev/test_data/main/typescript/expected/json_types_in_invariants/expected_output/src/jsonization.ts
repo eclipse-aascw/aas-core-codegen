@@ -13,7 +13,13 @@ import * as OurCommon from "./common";
 import * as OurTypes from "./types";
 import * as OurStringification from "./stringification";
 
-export type JsonValue = string | number | boolean | JsonObject | JsonArray;
+export type JsonValue =
+  | null
+  | string
+  | number
+  | boolean
+  | JsonObject
+  | JsonArray;
 
 export type JsonArray = Iterable<JsonValue>;
 export type JsonObject = { [prop: string]: JsonValue };
@@ -545,6 +551,7 @@ function parsePropertiesOfSomething(
   let theMapping: OurTypes.JsonObject | null = null;
   let theValues: OurTypes.JsonArray | null = null;
   let theOptionalMapping: OurTypes.JsonObject | null = null;
+  let theOptionalValue: OurTypes.JsonValue | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
@@ -575,6 +582,15 @@ function parsePropertiesOfSomething(
         );
         propertyError = parsed.error;
         theOptionalMapping = parsed.value;
+        break;
+      }
+
+      case "optionalValue": {
+        const parsed = jsonValueFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theOptionalValue = parsed.value;
         break;
       }
 
@@ -624,7 +640,8 @@ function parsePropertiesOfSomething(
     new OurTypes.Something(
       theMapping,
       theValues,
-      theOptionalMapping
+      theOptionalMapping,
+      theOptionalValue
     ),
     null
   );
@@ -731,7 +748,13 @@ export class SerializationError extends Error {
 function jsonValueFromJsonable(
   jsonable: JsonValue
 ): OurCommon.Either<OurTypes.JsonValue, DeserializationError> {
-  if (jsonable === null || jsonable === undefined) {
+  if (jsonable === null) {
+    return new OurCommon.Either<OurTypes.JsonValue, DeserializationError>(
+      null, null
+    );
+  }
+
+  if (jsonable === undefined) {
     return newDeserializationError<OurTypes.JsonValue>(
       `Expected a JSON-able value, but got: ${jsonable}`
     );
@@ -764,7 +787,7 @@ function jsonValueFromJsonable(
 
     default:
       return newDeserializationError<OurTypes.JsonValue>(
-        `Expected a JSON-able value (a boolean, a number, a string, ` +
+        `Expected a JSON-able value (a null, a boolean, a number, a string, ` +
           `an array or an object), but got: ${typeof jsonable}`
       );
   }
@@ -878,7 +901,11 @@ function jsonValueToJsonable(that: OurTypes.JsonArray): Array<JsonValue>;
 function jsonValueToJsonable(that: OurTypes.JsonObject): JsonObject;
 function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue;
 function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue {
-  if (that === null || that === undefined) {
+  if (that === null) {
+    return null;
+  }
+
+  if (that === undefined) {
     throw new SerializationError(
       `Expected a JSON-able value, but got: ${that}`
     );
@@ -906,7 +933,7 @@ function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue {
 
     default:
       throw new SerializationError(
-        `Expected a JSON-able value (a boolean, a number, a string, ` +
+        `Expected a JSON-able value (a null, a boolean, a number, a string, ` +
           `an array or an object), but got: ${typeof that}`
       );
   }
@@ -967,6 +994,12 @@ function serializeSomething(
       prop = "optionalMapping";
       jsonable["optionalMapping"] =
         jsonValueToJsonable(that.optionalMapping);
+    }
+
+    if (that.optionalValue !== null) {
+      prop = "optionalValue";
+      jsonable["optionalValue"] =
+        jsonValueToJsonable(that.optionalValue);
     }
   } catch (error) {
     if (error instanceof SerializationError) {

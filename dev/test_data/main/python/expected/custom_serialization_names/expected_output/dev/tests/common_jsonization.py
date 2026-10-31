@@ -53,7 +53,7 @@ def check_equal(
     :param got: obtained JSON-able value
     :yield: differences
     """
-    if isinstance(expected, (bool, int, float, str, bytes)):
+    if expected is None or isinstance(expected, (bool, int, float, str, bytes)):
         if type(expected) is not type(got):
             yield Difference(f"Expected {type(expected)}, but got {type(got)}")
 

@@ -733,6 +733,24 @@ def _read_instance_from_iterparse(
         raise
 
 
+def _read_json_value_content(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> our_types.JsonValue:
+    """
+    Read the content of :paramref:`element` as a JSON-able value.
+
+    :param element: start element enclosing the discriminator
+    :param iterator:
+        Input stream of ``(event, element)`` coming from
+        :py:func:`xml.etree.ElementTree.iterparse` with the argument
+        ``events=["start", "end"]``
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return: parsed JSON-able value
+    """
+    return our_xmlrpc.read_value_content(element, iterator)
+
+
 def _read_json_array_body(
     element: Element,
     iterator: Iterator[Tuple[str, Element]]
@@ -797,6 +815,7 @@ def _read_something_as_sequence(
     the_mapping: Optional[our_types.JsonObject] = values.get('mapping')
     the_values: Optional[our_types.JsonArray] = values.get('values')
     the_optional_mapping: Optional[our_types.JsonObject] = values.get('optionalMapping')
+    the_optional_value: Optional[our_types.JsonValue] = values.get('optionalValue')
 
     if the_mapping is None:
         raise DeserializationException(
@@ -811,7 +830,8 @@ def _read_something_as_sequence(
     return our_types.Something(
         the_mapping,
         the_values,
-        the_optional_mapping
+        the_optional_mapping,
+        the_optional_value
     )
 
 
@@ -887,6 +907,7 @@ _READERS_FOR_SOMETHING: Mapping[
     'mapping': _read_json_object_body,
     'values': _read_json_array_body,
     'optionalMapping': _read_json_object_body,
+    'optionalValue': _read_json_value_content,
 }
 
 
@@ -979,6 +1000,32 @@ def _attribute_to_item(
     raise failure from exception
 
 
+def _write_json_value_as_element(
+    name: str,
+    prop_name: Optional[str],
+    value: our_types.JsonValue,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write the :paramref:`value` of a JSON-able value enclosed in
+    the :paramref:`name` element.
+
+    :param name: of the corresponding element tag
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
+    :param value: to be serialized
+    :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
+    """
+    try:
+        serializer.writer.write_start_element(name)
+        our_xmlrpc.write_discriminator(value, serializer.writer)
+        serializer.writer.write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
+
+
 def _write_json_array_as_element(
     name: str,
     prop_name: Optional[str],
@@ -1061,6 +1108,10 @@ def _write_something_as_element(
         if that.optional_mapping is not None:
             _write_json_object_as_element(
                 'optionalMapping', 'optional_mapping', that.optional_mapping, serializer
+            )
+        if that.optional_value is not None:
+            _write_json_value_as_element(
+                'optionalValue', 'optional_value', that.optional_value, serializer
             )
         serializer.writer.write_end_element(name)
     except Exception as exception:

@@ -41,16 +41,16 @@ private static final Pattern XML_RPC_DOUBLE = Pattern.compile(
 /**
  * Read the content of an element holding a JSON-able value.
  *
- * <p>The content is a single discriminator element -- {{@code <boolean>}},
- * {{@code <double>}}, {{@code <string>}}, {{@code <array>}} or
- * {{@code <struct>}} -- which says what the value is.
+ * <p>The content is a single discriminator element -- {{@code <nil>}},
+ * {{@code <boolean>}}, {{@code <double>}}, {{@code <string>}},
+ * {{@code <array>}} or {{@code <struct>}} -- which says what the value is.
  */
 public static Reporting.Result<JsonNode> readValueContent(
 {I}XMLEventReader reader, boolean isEmpty) {{
 {I}if (isEmpty) {{
 {II}return Reporting.Result.failure(new Reporting.Error(
-{III}"Expected one of the elements boolean, double, string, array or " +
-{III}"struct as the content of the element, but the element was empty"));
+{III}"Expected one of the elements nil, boolean, double, string, array " +
+{III}"or struct as the content of the element, but the element was empty"));
 {I}}}
 
 {I}final Reporting.Result<String> tryElementName = XmlCommon.peekElementNameInNoNamespace(reader);
@@ -91,6 +91,7 @@ public static Reporting.Result<JsonNode> readValueContent(
  */
 private static boolean isUnexpectedDiscriminator(String local) {{
 {I}switch (local) {{
+{II}case "nil":
 {II}case "boolean":
 {II}case "double":
 {II}case "string":
@@ -110,6 +111,8 @@ private static boolean isUnexpectedDiscriminator(String local) {{
 private static Reporting.Result<JsonNode> readXmlRpcDiscriminator(
 {I}XMLEventReader reader, String local, boolean isEmpty) {{
 {I}switch (local) {{
+{II}case "nil":
+{III}return readXmlRpcNil(reader, isEmpty);
 {II}case "boolean":
 {III}return readXmlRpcBoolean(reader, isEmpty);
 {II}case "double":
@@ -132,7 +135,7 @@ private static Reporting.Result<JsonNode> readXmlRpcDiscriminator(
 {II}}}
 {II}default:
 {III}return Reporting.Result.failure(new Reporting.Error(
-{IIII}"Expected a discriminator element (one of boolean, double, " +
+{IIII}"Expected a discriminator element (one of nil, boolean, double, " +
 {IIII}"string, array or struct), but got: " + local));
 {I}}}
 }}"""
@@ -246,6 +249,27 @@ private static Reporting.Result<JsonNode> readXmlRpcString(
 {II}return Reporting.Result.failure(new Reporting.Error(
 {III}exception.getMessage()));
 {I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Read the content of a {{@code <nil>}} element as a JSON null.
+ *
+ * <p>XML-RPC itself knows no null, so we follow the widespread extension,
+ * and read a JSON null from an empty {{@code <nil/>}}.
+ */
+private static Reporting.Result<JsonNode> readXmlRpcNil(
+{I}XMLEventReader reader, boolean isEmpty) {{
+{I}if (!isEmpty) {{
+{II}final String text = readXmlRpcCollapsedText(reader);
+{II}if (!text.isEmpty()) {{
+{III}return Reporting.Result.failure(new Reporting.Error(
+{IIII}"Expected no text in a nil element, but got: " + text));
+{II}}}
+{I}}}
+
+{I}return Reporting.Result.success(JsonNodeFactory.instance.nullNode());
 }}"""
         ),
         Stripped(
@@ -458,9 +482,19 @@ private static void writeNestedValueContent(
 
 private static void writeValueContent(
 {I}JsonNode that, XMLStreamWriter writer, boolean undeclareNamespace) {{
-{I}if (that == null || that.isNull() || that.isMissingNode()) {{
+{I}if (that == null || that.isMissingNode()) {{
 {II}throw new XmlCommon.SerializeFailure(new Reporting.Error(
 {III}"Expected a JSON-able value, but got: " + that));
+{I}}}
+
+{I}if (that.isNull()) {{
+{II}// NOTE (mristin):
+{II}// XML-RPC itself knows no null, so we follow the widespread extension,
+{II}// and write a JSON null as an empty <nil/>.
+{II}XmlCommon.writeElementInNoNamespace(
+{III}"nil", that, writer, undeclareNamespace,
+{III}(node, aWriter) -> {{ }});
+{II}return;
 {I}}}
 
 {I}if (that.isBoolean()) {{
@@ -514,7 +548,7 @@ private static void writeValueContent(
 {I}}}
 
 {I}throw new XmlCommon.SerializeFailure(new Reporting.Error(
-{II}"Expected a JSON-able value (a boolean, a number, a string, " +
+{II}"Expected a JSON-able value (a null, a boolean, a number, a string, " +
 {II}"an array or an object), but got: " + that.getNodeType()));
 }}"""
         ),
@@ -658,8 +692,10 @@ def generate(package: java_common.PackageIdentifier) -> List[java_common.JavaFil
  *
  * <p>JSON prescribes no XML representation of its own, so a JSON-able value
  * is de/serialized over the subset of XML-RPC which covers exactly what such
- * a value can be: {{@code <boolean>}}, {{@code <double>}}, {{@code <string>}},
- * {{@code <array>}} and {{@code <struct>}}.
+ * a value can be: {{@code <nil>}}, {{@code <boolean>}}, {{@code <double>}},
+ * {{@code <string>}}, {{@code <array>}} and {{@code <struct>}}. XML-RPC itself
+ * knows no null, so we follow the widespread extension, and write a JSON null
+ * as an empty {{@code <nil/>}}.
  *
  * <p>Every method reads from or writes to the reader or the writer which
  * the caller passes in, and consumes or produces exactly the content of one

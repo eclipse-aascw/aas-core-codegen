@@ -322,13 +322,13 @@ def _translate_to_simple_type(
 # NOTE (mristin):
 # We represent ``JSONValue``/``JSONArray``/``JSONObject`` with a restricted subset
 # of XML-RPC's own element vocabulary: ``<boolean>``, ``<double>``, ``<string>``,
-# ``<array>``, ``<data>``, ``<struct>``, ``<member>``, ``<name>`` and ``<value>``.
+# ``<array>``, ``<data>``, ``<struct>``, ``<member>``, ``<name>`` and ``<value>``,
+# together with the widespread ``<nil/>`` extension for a JSON null.
 # We deliberately keep XML-RPC's wrapper elements (``<value>``, ``<data>``,
 # ``<member>``, ``<name>``) instead of a flatter, wrapper-free alternative, for
 # real interoperability with existing XML-RPC tooling. We leave out the parts of
 # XML-RPC that a ``JSONValue`` has no equivalent for -- ``<int>``/``<i4>``,
-# ``<base64>``, ``<dateTime.iso8601>`` and ``<nil/>`` (there is no ``null``
-# variant of a JSON-able value).
+# ``<base64>`` and ``<dateTime.iso8601>``.
 #
 # These elements reside in no namespace at all, as the XML-RPC specification
 # prescribes, and not in the target namespace of this schema, so each of their
@@ -391,6 +391,14 @@ def _generate_json_type_definitions() -> List[ET.Element]:
     The root element is to be *extended* with the resulting list.
     """
     xs_value_choice = ET.Element("xs:choice")
+
+    # NOTE (mristin):
+    # XML-RPC itself knows no null. We follow the widespread extension, and
+    # represent a JSON null as an empty ``<nil/>``.
+    xs_nil = _xml_rpc_element({"name": "nil"})
+    ET.SubElement(xs_nil, "xs:complexType")
+    xs_value_choice.append(xs_nil)
+
     xs_value_choice.append(_xml_rpc_element({"name": "boolean", "type": "xs:boolean"}))
     xs_value_choice.append(_xml_rpc_element({"name": "double", "type": "xs:double"}))
     xs_value_choice.append(_xml_rpc_element({"name": "string", "type": "xs:string"}))

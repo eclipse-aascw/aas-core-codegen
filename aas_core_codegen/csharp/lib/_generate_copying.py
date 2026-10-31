@@ -177,10 +177,22 @@ def _json_deep_copy_expr(
     and the generated code has to build against .NET 6, where
     ``SerializeToNode`` is the spelling of the same thing. Its return type is
     nullable only because it serializes an arbitrary value, and a null one
-    gives a null node; ``source_expr`` is known not to be null here, so
-    the ``throw`` can not be reached.
+    gives a null node. An array and an object are known not to be null here, so
+    the ``throw`` can not be reached. A JSON-able value might be a JSON null,
+    which is copied as such.
     """
     item_type = csharp_common.generate_type(type_anno)
+
+    # NOTE (mristin):
+    # A JSON-able value might be a JSON null, which ``SerializeToNode`` copies
+    # as a null node, so there is nothing to throw.
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return Stripped(
+            f"""\
+System.Text.Json.JsonSerializer.SerializeToNode(
+{I}{source_expr})"""
+        )
+
     return Stripped(
         f"""\
 ({item_type})(

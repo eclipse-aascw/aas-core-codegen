@@ -44,7 +44,7 @@ namespace dummy
                 _instance = instance;
             }
 
-            public Nodes.JsonNode Value
+            public Nodes.JsonNode? Value
             {
                 get => _instance.Value;
                 set => _instance.Value = value;

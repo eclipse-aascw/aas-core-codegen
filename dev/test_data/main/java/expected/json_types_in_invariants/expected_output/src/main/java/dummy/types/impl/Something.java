@@ -32,6 +32,8 @@ public class Something implements ISomething {
 
   private ObjectNode optionalMapping;
 
+  private JsonNode optionalValue;
+
   public Something(
     ObjectNode mapping,
     ArrayNode values) {
@@ -46,7 +48,8 @@ public class Something implements ISomething {
   public Something(
     ObjectNode mapping,
     ArrayNode values,
-    ObjectNode optionalMapping) {
+    ObjectNode optionalMapping,
+    JsonNode optionalValue) {
     this.mapping = Objects.requireNonNull(
       mapping,
       "Argument \"mapping\" must be non-null.");
@@ -54,6 +57,7 @@ public class Something implements ISomething {
       values,
       "Argument \"values\" must be non-null.");
     this.optionalMapping = optionalMapping;
+    this.optionalValue = optionalValue;
   }
 
   @Override
@@ -88,6 +92,17 @@ public class Something implements ISomething {
   @Override
   public void setOptionalMapping(ObjectNode optionalMapping) {
     this.optionalMapping = optionalMapping;
+  }
+
+  @Override
+  public Optional<JsonNode> getOptionalValue() {
+    return Optional.ofNullable(optionalValue)
+      .filter(value -> !value.isNull());
+  }
+
+  @Override
+  public void setOptionalValue(JsonNode optionalValue) {
+    this.optionalValue = optionalValue;
   }
 
   /**

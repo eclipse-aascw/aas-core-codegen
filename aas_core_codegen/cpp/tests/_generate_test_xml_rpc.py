@@ -227,12 +227,37 @@ TEST_CASE("Round-trip an object") {{
         ),
         Stripped(
             f"""\
-TEST_CASE("Serialize rejects null") {{
+TEST_CASE("Round-trip a null at every depth") {{
+{I}RequireRoundTrip(nlohmann::json(nullptr));
+
+{I}RequireRoundTrip(
+{II}nlohmann::json::parse(
+{III}R"({{"a": null, "b": [null, {{"c": null}}]}})"
+{II})
+{I});
+}}"""
+        ),
+        Stripped(
+            f"""\
+TEST_CASE("Serialize a null as an empty nil") {{
 {I}std::ostringstream oss;
 {I}common::optional<xml_rpc::SerializationError> error(
 {II}xml_rpc::SerializeValue(oss, nlohmann::json(nullptr))
 {I});
-{I}REQUIRE(error.has_value());
+{I}REQUIRE(!error.has_value());
+{I}REQUIRE(oss.str().find("<nil/>") != std::string::npos);
+}}"""
+        ),
+        Stripped(
+            f"""\
+TEST_CASE("Deserialize rejects a nil with text") {{
+{I}std::istringstream iss(
+{II}"<value><nil>x</nil></value>"
+{I});
+{I}common::expected<nlohmann::json, xml_rpc::DeserializationError> result(
+{II}xml_rpc::DeserializeValue(iss)
+{I});
+{I}REQUIRE(!result.has_value());
 }}"""
         ),
         Stripped(
@@ -240,7 +265,7 @@ TEST_CASE("Serialize rejects null") {{
 TEST_CASE("Serialize reports the path to a nested invalid value") {{
 {I}nlohmann::json value = nlohmann::json::array();
 {I}value.push_back(1.0);
-{I}value.push_back(nlohmann::json(nullptr));
+{I}value.push_back(std::numeric_limits<double>::quiet_NaN());
 
 {I}std::ostringstream oss;
 {I}common::optional<xml_rpc::SerializationError> error(
@@ -255,7 +280,7 @@ TEST_CASE("Serialize reports the path to a nested invalid value") {{
 TEST_CASE("Serialize reports the key of an invalid member") {{
 {I}nlohmann::json value = nlohmann::json::object();
 {I}value["a"] = 1.0;
-{I}value["b"] = nlohmann::json(nullptr);
+{I}value["b"] = std::numeric_limits<double>::quiet_NaN();
 
 {I}std::ostringstream oss;
 {I}common::optional<xml_rpc::SerializationError> error(
@@ -281,7 +306,7 @@ TEST_CASE("Deserialize reports the XPath to a nested invalid value") {{
 {II}"<value><struct>"
 {II}"<member><name>nested</name><value><array><data>"
 {II}"<value><double>1</double></value>"
-{II}"<value><nil/></value>"
+{II}"<value><i4>1</i4></value>"
 {II}"</data></array></value></member>"
 {II}"</struct></value>"
 {I});
@@ -310,7 +335,7 @@ TEST_CASE("Deserialize reports no <array> wrapper for an array body") {{
 {I}// a property.
 {I}std::istringstream iss(
 {II}"<data>"
-{II}"<value><nil/></value>"
+{II}"<value><i4>1</i4></value>"
 {II}"</data>"
 {I});
 {I}xml_common::ReaderMergingText reader(
@@ -334,7 +359,7 @@ TEST_CASE("Deserialize reports no <struct> wrapper for a struct body") {{
 {I}// definition an object holds the <member> elements directly.
 {I}std::istringstream iss(
 {II}"<member>"
-{II}"<name>k</name><value><nil/></value>"
+{II}"<name>k</name><value><i4>1</i4></value>"
 {II}"</member>"
 {I});
 {I}xml_common::ReaderMergingText reader(
@@ -358,7 +383,7 @@ TEST_CASE("Deserialize escapes a member name in the XPath") {{
 {I}// break out of the XPath predicate which matches on it.
 {I}std::istringstream iss(
 {II}"<member>"
-{II}"<name>a&amp;b&quot;c</name><value><nil/></value>"
+{II}"<name>a&amp;b&quot;c</name><value><i4>1</i4></value>"
 {II}"</member>"
 {I});
 {I}xml_common::ReaderMergingText reader(
@@ -381,7 +406,7 @@ TEST_CASE("Deserialize escapes a member name in the XPath") {{
             f"""\
 TEST_CASE("Deserialize rejects an unexpected element") {{
 {I}std::istringstream iss(
-{II}"<value><nil/></value>"
+{II}"<value><i4>1</i4></value>"
 {I});
 {I}common::expected<nlohmann::json, xml_rpc::DeserializationError> result(
 {II}xml_rpc::DeserializeValue(iss)

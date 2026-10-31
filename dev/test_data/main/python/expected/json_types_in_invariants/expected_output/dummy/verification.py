@@ -94,6 +94,35 @@ class _Transformer(
             that: our_types.Something
     ) -> Iterator[Error]:
         if not (
+            not (that.optional_value is not None)
+            or is_acceptable(that.optional_value)
+        ):
+            yield Error(
+                'The optional value must be acceptable'
+            )
+
+        if not (
+            not ((
+                len(that.values) > 0
+                and (that.values[0] is None)
+            ))
+        ):
+            yield Error(
+                'The first value must not be a JSON null'
+            )
+
+        if not (
+            not (that.optional_mapping is not None)
+            or (
+                not ('type' in that.optional_mapping)
+                or (that.optional_mapping['type'] is not None)
+            )
+        ):
+            yield Error(
+                'The type of the optional mapping must not be a JSON null'
+            )
+
+        if not (
             not (len(that.values) >= 1)
             or is_acceptable(that.values[-1])
         ):
@@ -176,6 +205,18 @@ class _Transformer(
                     PropertySegment(
                         that,
                         'optional_mapping'
+                    )
+                )
+                yield error
+
+        if that.optional_value is not None:
+            for error in our_json_value_verification.verify_json_value(
+                    that.optional_value
+            ):
+                error.path._prepend(
+                    PropertySegment(
+                        that,
+                        'optional_value'
                     )
                 )
                 yield error

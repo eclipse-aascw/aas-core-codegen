@@ -149,6 +149,9 @@ export function *map<S, T>(
 /**
  * Represent either a result, or an error.
  *
+ * Only the error tells the two apart: the result itself might be `null`,
+ * as is, for example, a JSON null.
+ *
  * @typeParam ValueT - type of the resulting value
  * @typeParam ErrorT - type of the error
  */
@@ -164,22 +167,18 @@ export class Either<ValueT, ErrorT> {
   readonly error: ErrorT | null;
 
   /**
-   * Assert that value is set and return it.
+   * Assert that there is no error and return the value.
    *
-   * @returns {@link value}, or throw if `null`
+   * @returns {@link value}, or throw if there is an error
    */
   mustValue(): ValueT {
-    if (this.value === null) {
-      throw new Error("Expected value to be set, but it was null");
+    if (this.error !== null) {
+      throw new Error("Expected no error, but got one");
     }
-    return this.value;
+    return this.value as ValueT;
   }
 
   constructor(value: ValueT | null, error: ErrorT | null) {
-    if (value === null && error === null) {
-      throw new Error("Unexpected both value and error null in an Either");
-    }
-
     if (value !== null && error !== null) {
       throw new Error("Unexpected both value and error non-null in an Either");
     }

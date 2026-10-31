@@ -235,19 +235,41 @@ public void Test_round_trip_nested_object()
         Stripped(
             f"""\
 [Test]
-public void Test_serialize_rejects_null()
+public void Test_round_trip_null()
 {{
-{I}Our.SerializationException? caught = null;
-{I}try
-{I}{{
-{II}SerializeToString(null);
-{I}}}
-{I}catch (Our.SerializationException exception)
-{I}{{
-{II}caught = exception;
-{I}}}
+{I}string text = SerializeToString(null);
 
-{I}Assert.IsNotNull(caught);
+{I}Assert.IsTrue(text.Contains("<nil"), $"Unexpected text: {{text}}");
+
+{I}Nodes.JsonNode? roundTripped = DeserializeFromString(
+{II}text, out Our.Reporting.Error? error);
+
+{I}Assert.IsNull(error);
+{I}Assert.IsNull(roundTripped);
+}}"""
+        ),
+        Stripped(
+            f"""\
+[Test]
+public void Test_round_trip_nulls_nested()
+{{
+{I}Nodes.JsonNode original = new Nodes.JsonArray(
+{II}null,
+{II}new Nodes.JsonObject
+{II}{{
+{III}["key"] = null
+{II}}});
+
+{I}string text = SerializeToString(original);
+
+{I}Nodes.JsonNode? roundTripped = DeserializeFromString(
+{II}text, out Our.Reporting.Error? error);
+
+{I}Assert.IsNull(error);
+{I}Assert.IsNotNull(roundTripped);
+{I}Assert.AreEqual(
+{II}original.ToJsonString(),
+{II}roundTripped!.ToJsonString());
 }}"""
         ),
         Stripped(
@@ -258,7 +280,7 @@ public void Test_serialize_reports_index_on_nested_invalid_value()
 {I}Nodes.JsonNode original = new Nodes.JsonArray(
 {II}Nodes.JsonValue.Create(1.0),
 {II}Nodes.JsonValue.Create(2.0),
-{II}null);
+{II}Nodes.JsonValue.Create(double.NaN));
 
 {I}Our.SerializationException? caught = null;
 {I}try
@@ -283,7 +305,7 @@ public void Test_deserialize_reports_path_on_nested_error()
 {II}"<value>"
 {III}+ "<array><data>"
 {IIII}+ "<value><boolean>1</boolean></value>"
-{IIII}+ "<value><nil/></value>"
+{IIII}+ "<value><i4>1</i4></value>"
 {III}+ "</data></array>"
 {II}+ "</value>");
 
@@ -307,7 +329,7 @@ public void Test_deserialize_reports_path_on_nested_error()
 [Test]
 public void Test_deserialize_rejects_unexpected_element()
 {{
-{I}string text = "<value><nil/></value>";
+{I}string text = "<value><i4>1</i4></value>";
 
 {I}Nodes.JsonNode? result = DeserializeFromString(
 {II}text, out Our.Reporting.Error? error);
@@ -315,7 +337,7 @@ public void Test_deserialize_rejects_unexpected_element()
 {I}Assert.IsNull(result);
 {I}Assert.IsNotNull(error);
 {I}Assert.IsTrue(
-{II}error!.Cause.Contains("nil"),
+{II}error!.Cause.Contains("i4"),
 {II}$"Unexpected cause: {{error.Cause}}");
 }}"""
         ),

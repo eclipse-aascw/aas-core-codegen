@@ -1584,12 +1584,27 @@ private {prop_type} {prop_name};"""
         get_set_blocks: List[Stripped] = []
 
         if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+            # NOTE (mristin):
+            # An optional JSON-able property which is a JSON null is treated as
+            # absent in all the SDKs, as most of them can not tell the two apart.
+            # We normalize it here, once, so that the serialization, the copying
+            # and the verification all see it as absent.
+            getter_body = (
+                f"""\
+return Optional.ofNullable({prop_name})
+{I}.filter(value -> !value.isNull());"""
+                if isinstance(
+                    prop.type_annotation.value, intermediate.JsonValueTypeAnnotation
+                )
+                else f"return Optional.ofNullable({prop_name});"
+            )
+
             get_set_blocks.append(
                 Stripped(
                     f"""\
 @Override
 public {prop_type} {getter_name}() {{
-{I}return Optional.ofNullable({prop_name});
+{I}{indent_but_first_line(getter_body, I)}
 }}"""
                 )
             )

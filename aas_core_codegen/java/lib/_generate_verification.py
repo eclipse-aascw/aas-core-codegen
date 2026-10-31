@@ -1217,8 +1217,9 @@ def _generate_verify_json_value(
     Generate the methods verifying that a value is JSON-able.
 
     A JSON-able value is, recursively, exactly as JSON itself is defined, but
-    a Jackson node rules out neither of the two ways of not being one: a null
-    node and a non-finite number. Both are reported here, at any depth.
+    a Jackson node rules out neither of the two ways of not being one:
+    a missing node and a non-finite number. Both are reported here, at any
+    depth. A null node is a JSON null, and hence a JSON-able value.
 
     The path *within* a JSON-able value goes into the message rather than into
     the structured path of the error: a name segment points at a property of
@@ -1253,11 +1254,15 @@ private static Stream<String> streamOfFieldNames(JsonNode node) {{
  */
 private static Stream<Reporting.Error> verifyJsonValueAt(
 {II}JsonNode node, String path) {{
-{I}if (node == null || node.isNull() || node.isMissingNode()) {{
+{I}if (node == null || node.isMissingNode()) {{
 {II}return Stream.of(
 {III}new Reporting.Error(
 {IIII}"Expected a JSON-able value at " + path
 {IIIII}+ ", but got: " + node));
+{I}}}
+
+{I}if (node.isNull()) {{
+{II}return Stream.empty();
 {I}}}
 
 {I}if (node.isNumber()) {{
@@ -1296,7 +1301,7 @@ private static Stream<Reporting.Error> verifyJsonValueAt(
 
 {I}return Stream.of(
 {II}new Reporting.Error(
-{III}"Expected a JSON-able value (a boolean, a number, a string, "
+{III}"Expected a JSON-able value (a null, a boolean, a number, a string, "
 {IIII}+ "an array or an object) at " + path
 {IIII}+ ", but got: " + node.getNodeType()));
 }}"""

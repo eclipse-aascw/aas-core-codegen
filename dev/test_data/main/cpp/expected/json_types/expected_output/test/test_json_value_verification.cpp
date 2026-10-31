@@ -81,8 +81,27 @@ TEST_CASE("Report no violation for a deeply nested, valid value") {
   REQUIRE(CollectErrors(verificator).empty());
 }
 
-TEST_CASE("Reject a null value at the top level") {
-  const nlohmann::json value(nullptr);
+TEST_CASE("Accept a null value at every depth") {
+  for (
+    const char* text : {
+      "null",
+      "[null]",
+      R"({"a": [null, {"b": null}]})"
+    }
+  ) {
+    const nlohmann::json value = nlohmann::json::parse(text);
+
+    verification::JsonValueVerificator verificator(
+      value, verification::JsonValueShape::kAny
+    );
+
+    INFO(std::string("The value is: ") + text);
+    REQUIRE(CollectErrors(verificator).empty());
+  }
+}
+
+TEST_CASE("Reject a discarded value at the top level") {
+  const nlohmann::json value(nlohmann::json::value_t::discarded);
 
   verification::JsonValueVerificator verificator(
     value, verification::JsonValueShape::kAny
@@ -138,8 +157,10 @@ TEST_CASE(
   "Report every rejected value at every depth, not just the first"
 ) {
   nlohmann::json value = nlohmann::json::parse(
-    R"({"a": [1.0, null, {"b": null}]})"
+    R"({"a": [1.0, 0.0, {"b": 0.0}]})"
   );
+  value["a"][1] = std::numeric_limits<double>::quiet_NaN();
+  value["a"][2]["b"] = std::numeric_limits<double>::infinity();
 
   verification::JsonValueVerificator verificator(
     value, verification::JsonValueShape::kAny
@@ -148,8 +169,8 @@ TEST_CASE(
   const std::vector<verification::Error> errors(CollectErrors(verificator));
 
   INFO(
-    "Expected exactly two violations (one for each nested null), "
-    "but got: "
+    "Expected exactly two violations (one for each nested non-finite "
+    "number), but got: "
     + std::to_string(errors.size())
   );
   REQUIRE(errors.size() == 2);
@@ -165,8 +186,10 @@ TEST_CASE("Report the violations in the order of a depth-first walk") {
   // what distinguishes the depth-first walk from a breadth-first one --
   // the latter would report ``z`` first, as it sits one level higher.
   nlohmann::json value = nlohmann::json::parse(
-    R"({"a": {"deep": null}, "z": null})"
+    R"({"a": {"deep": 0.0}, "z": 0.0})"
   );
+  value["a"]["deep"] = std::numeric_limits<double>::quiet_NaN();
+  value["z"] = std::numeric_limits<double>::quiet_NaN();
 
   verification::JsonValueVerificator verificator(
     value, verification::JsonValueShape::kObject
@@ -187,8 +210,9 @@ TEST_CASE("Escape a key of a JSON object in the path") {
   // ``nlohmann::json`` value, so a key is escaped exactly as a JSON
   // string is.
   nlohmann::json value = nlohmann::json::parse(
-    R"({"a\"b\\c\nd": null})"
+    R"({"a\"b\\c\nd": 0.0})"
   );
+  value.begin().value() = std::numeric_limits<double>::quiet_NaN();
 
   verification::JsonValueVerificator verificator(
     value, verification::JsonValueShape::kObject

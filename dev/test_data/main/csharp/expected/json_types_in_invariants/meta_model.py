@@ -63,6 +63,29 @@ def is_acceptable(value: JSONValue) -> bool:
     or is_acceptable(self.values[-1]),
     "The last value must be acceptable",
 )
+@invariant(
+    lambda self:
+    not (self.optional_mapping is not None)
+    or (
+        not ("type" in self.optional_mapping)
+        or self.optional_mapping["type"] is not None
+    ),
+    "The type of the optional mapping must not be a JSON null",
+)
+@invariant(
+    lambda self:
+    not (
+        len(self.values) > 0
+        and self.values[0] is None
+    ),
+    "The first value must not be a JSON null",
+)
+@invariant(
+    lambda self:
+    not (self.optional_value is not None)
+    or is_acceptable(self.optional_value),
+    "The optional value must be acceptable",
+)
 class Something(DBC):
     #: Test the length of, the membership in and the indexing into a JSON-able
     #: object
@@ -74,15 +97,21 @@ class Something(DBC):
     #: Test the membership in an optional JSON-able object
     optional_mapping: Optional[JSONObject[str]]
 
+    #: Test the nullness check over an optional JSON-able value, which is
+    #: treated as absent if it is a JSON null
+    optional_value: Optional[JSONValue]
+
     def __init__(
         self,
         mapping: JSONObject[str],
         values: JSONArray,
         optional_mapping: Optional[JSONObject[str]] = None,
+        optional_value: Optional[JSONValue] = None,
     ) -> None:
         self.mapping = mapping
         self.values = values
         self.optional_mapping = optional_mapping
+        self.optional_value = optional_value
 
 
 __version__ = "dummy"

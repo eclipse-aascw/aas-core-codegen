@@ -100,13 +100,56 @@ bool Something_0(
   const types::ISomething* that = (
     static_cast<const types::ISomething*>(value)
   );
+  return !((that->optional_value().has_value() && !that->optional_value()->is_null()))
+  || verification::IsAcceptable(
+    (*(that->optional_value()))
+  );
+}
+
+bool Something_1(
+  const void* value
+) {
+  const types::ISomething* that = (
+    static_cast<const types::ISomething*>(value)
+  );
+  return !((
+    that->values().size() > 0
+    && (that->values().at(0).is_null())
+  ));
+}
+
+bool Something_2(
+  const void* value
+) {
+  const types::ISomething* that = (
+    static_cast<const types::ISomething*>(value)
+  );
+  return !(that->optional_mapping().has_value())
+  || (!(*(that->optional_mapping())).contains(
+    common::WstringToUtf8(
+      L"type"
+    )
+  )
+  || (!(*(that->optional_mapping())).at(
+    common::WstringToUtf8(
+      L"type"
+    )
+  ).is_null()));
+}
+
+bool Something_3(
+  const void* value
+) {
+  const types::ISomething* that = (
+    static_cast<const types::ISomething*>(value)
+  );
   return !(that->values().size() >= 1)
   || verification::IsAcceptable(
     that->values().back()
   );
 }
 
-bool Something_1(
+bool Something_4(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -118,7 +161,7 @@ bool Something_1(
   );
 }
 
-bool Something_2(
+bool Something_5(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -127,7 +170,7 @@ bool Something_2(
   return that->values().size() > 0;
 }
 
-bool Something_3(
+bool Something_6(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -136,7 +179,7 @@ bool Something_3(
   return that->mapping().size() > 1;
 }
 
-bool Something_4(
+bool Something_7(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -156,7 +199,7 @@ bool Something_4(
   );
 }
 
-bool Something_5(
+bool Something_8(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -167,7 +210,7 @@ bool Something_5(
   );
 }
 
-bool Something_6(
+bool Something_9(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -181,7 +224,7 @@ bool Something_6(
   );
 }
 
-bool Something_7(
+bool Something_10(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -205,35 +248,47 @@ const std::vector<Check>& ChecksOf(Shape shape) {
       static const std::vector<Check> checks = {
         {
           &Something_0,
-          L"The last value must be acceptable"
+          L"The optional value must be acceptable"
         },
         {
           &Something_1,
-          L"The first value must be acceptable"
+          L"The first value must not be a JSON null"
         },
         {
           &Something_2,
-          L"There must be at least one value"
+          L"The type of the optional mapping must not be a JSON null"
         },
         {
           &Something_3,
-          L"The mapping must specify something besides the type"
+          L"The last value must be acceptable"
         },
         {
           &Something_4,
-          L"The type of the mapping must be acceptable"
+          L"The first value must be acceptable"
         },
         {
           &Something_5,
+          L"There must be at least one value"
+        },
+        {
+          &Something_6,
+          L"The mapping must specify something besides the type"
+        },
+        {
+          &Something_7,
+          L"The type of the mapping must be acceptable"
+        },
+        {
+          &Something_8,
           L"The mapping must specify the type, checked in "
           L"a verification function"
         },
         {
-          &Something_6,
+          &Something_9,
           L"The optional mapping must specify the type"
         },
         {
-          &Something_7,
+          &Something_10,
           L"The mapping must specify the type"
         }
       };
@@ -631,6 +686,12 @@ std::unique_ptr<IIterator> Over_Something(
       iteration::Property::kOptionalMapping,
       that.optional_mapping().has_value()
         ? One(&(*that.optional_mapping()), Shape::kJSONObject)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kOptionalValue,
+      that.optional_value().has_value()
+        ? One(&(*that.optional_value()), Shape::kJSONValue)
         : Empty()
     )
   );

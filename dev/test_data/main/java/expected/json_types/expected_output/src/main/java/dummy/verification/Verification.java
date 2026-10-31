@@ -63,11 +63,15 @@ public class Verification {
    */
   private static Stream<Reporting.Error> verifyJsonValueAt(
       JsonNode node, String path) {
-    if (node == null || node.isNull() || node.isMissingNode()) {
+    if (node == null || node.isMissingNode()) {
       return Stream.of(
         new Reporting.Error(
           "Expected a JSON-able value at " + path
             + ", but got: " + node));
+    }
+
+    if (node.isNull()) {
+      return Stream.empty();
     }
 
     if (node.isNumber()) {
@@ -106,7 +110,7 @@ public class Verification {
 
     return Stream.of(
       new Reporting.Error(
-        "Expected a JSON-able value (a boolean, a number, a string, "
+        "Expected a JSON-able value (a null, a boolean, a number, a string, "
           + "an array or an object) at " + path
           + ", but got: " + node.getNodeType()));
   }

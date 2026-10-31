@@ -192,19 +192,39 @@ namespace dummy.Tests
         }
 
         [Test]
-        public void Test_serialize_rejects_null()
+        public void Test_round_trip_null()
         {
-            Our.SerializationException? caught = null;
-            try
-            {
-                SerializeToString(null);
-            }
-            catch (Our.SerializationException exception)
-            {
-                caught = exception;
-            }
+            string text = SerializeToString(null);
 
-            Assert.IsNotNull(caught);
+            Assert.IsTrue(text.Contains("<nil"), $"Unexpected text: {text}");
+
+            Nodes.JsonNode? roundTripped = DeserializeFromString(
+                text, out Our.Reporting.Error? error);
+
+            Assert.IsNull(error);
+            Assert.IsNull(roundTripped);
+        }
+
+        [Test]
+        public void Test_round_trip_nulls_nested()
+        {
+            Nodes.JsonNode original = new Nodes.JsonArray(
+                null,
+                new Nodes.JsonObject
+                {
+                    ["key"] = null
+                });
+
+            string text = SerializeToString(original);
+
+            Nodes.JsonNode? roundTripped = DeserializeFromString(
+                text, out Our.Reporting.Error? error);
+
+            Assert.IsNull(error);
+            Assert.IsNotNull(roundTripped);
+            Assert.AreEqual(
+                original.ToJsonString(),
+                roundTripped!.ToJsonString());
         }
 
         [Test]
@@ -213,7 +233,7 @@ namespace dummy.Tests
             Nodes.JsonNode original = new Nodes.JsonArray(
                 Nodes.JsonValue.Create(1.0),
                 Nodes.JsonValue.Create(2.0),
-                null);
+                Nodes.JsonValue.Create(double.NaN));
 
             Our.SerializationException? caught = null;
             try
@@ -236,7 +256,7 @@ namespace dummy.Tests
                 "<value>"
                     + "<array><data>"
                         + "<value><boolean>1</boolean></value>"
-                        + "<value><nil/></value>"
+                        + "<value><i4>1</i4></value>"
                     + "</data></array>"
                 + "</value>");
 
@@ -258,7 +278,7 @@ namespace dummy.Tests
         [Test]
         public void Test_deserialize_rejects_unexpected_element()
         {
-            string text = "<value><nil/></value>";
+            string text = "<value><i4>1</i4></value>";
 
             Nodes.JsonNode? result = DeserializeFromString(
                 text, out Our.Reporting.Error? error);
@@ -266,7 +286,7 @@ namespace dummy.Tests
             Assert.IsNull(result);
             Assert.IsNotNull(error);
             Assert.IsTrue(
-                error!.Cause.Contains("nil"),
+                error!.Cause.Contains("i4"),
                 $"Unexpected cause: {error.Cause}");
         }
 

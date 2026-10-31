@@ -50,8 +50,8 @@ enum class JsonValueShape {
  * \\brief Exhaustively verify that a ``nlohmann::json`` value is JSON-able.
  *
  * A JSON-able value is, recursively, exactly as JSON itself is defined:
- * a boolean, a number, a string, an array of JSON-able values or an object
- * of JSON-able values with string keys -- in particular, ``null``, a binary
+ * a ``null``, a boolean, a number, a string, an array of JSON-able values or
+ * an object of JSON-able values with string keys -- in particular, a binary
  * value and a discarded value are rejected, at any depth.
  *
  * We deliberately walk the value with an explicit stack instead of plain
@@ -188,10 +188,10 @@ namespace {{
 common::optional<std::wstring> CheckShallowly(
 {I}const nlohmann::json& value
 ) {{
-{I}if (value.is_null() || value.is_binary() || value.is_discarded()) {{
+{I}if (value.is_binary() || value.is_discarded()) {{
 {II}return common::make_optional<std::wstring>(
 {III}common::Concat(
-{IIII}L"Expected a JSON-able value (a boolean, a number, a string, "
+{IIII}L"Expected a JSON-able value (a null, a boolean, a number, a string, "
 {IIII}L"an array or an object), but got a value of type: ",
 {IIII}common::Utf8ToWstring(value.type_name())
 {III})

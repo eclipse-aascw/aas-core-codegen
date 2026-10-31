@@ -13,7 +13,13 @@ import * as OurCommon from "./common";
 import * as OurTypes from "./types";
 import * as OurStringification from "./stringification";
 
-export type JsonValue = string | number | boolean | JsonObject | JsonArray;
+export type JsonValue =
+  | null
+  | string
+  | number
+  | boolean
+  | JsonObject
+  | JsonArray;
 
 export type JsonArray = Iterable<JsonValue>;
 export type JsonObject = { [prop: string]: JsonValue };

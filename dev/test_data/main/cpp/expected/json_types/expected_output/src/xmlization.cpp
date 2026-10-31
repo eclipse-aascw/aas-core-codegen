@@ -1492,11 +1492,16 @@ std::pair<
               the_mapping_with_constrained_key,
               DeserializeJsonObjectFromXmlRpc(reader)
             );
-          case properties::OfSomething::kOptionalValue:
-            return ReadInto(
+          case properties::OfSomething::kOptionalValue: {
+            common::optional<DeserializationError> read_error = ReadInto(
               the_optional_value,
               DeserializeJsonValueFromXmlRpc(reader)
             );
+            if (!read_error.has_value() && the_optional_value->is_null()) {
+              the_optional_value = common::nullopt;
+            }
+            return read_error;
+          }
           case properties::OfSomething::kOptionalValues:
             return ReadInto(
               the_optional_values,
@@ -2044,15 +2049,20 @@ common::optional<xml_common::SerializationError> SerializeSomethingAsSequence(
     return error;
   }
 
-  error = WriteProperty(
-    "optionalValue",
-    that.optional_value(),
-    writer,
-    iteration::Property::kOptionalValue,
-    WriteJsonValueToXmlRpc
+  const common::optional<nlohmann::json>& maybe_optional_value(
+    that.optional_value()
   );
-  if (error.has_value()) {
-    return error;
+  if (maybe_optional_value.has_value() && !maybe_optional_value->is_null()) {
+    error = WriteProperty(
+      "optionalValue",
+      *maybe_optional_value,
+      writer,
+      iteration::Property::kOptionalValue,
+      WriteJsonValueToXmlRpc
+    );
+    if (error.has_value()) {
+      return error;
+    }
   }
 
   error = WriteProperty(

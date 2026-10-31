@@ -198,10 +198,18 @@ def generate_type(
         value = generate_type(
             type_annotation=type_annotation.value, our_type_qualifier=our_type_qualifier
         )
+
+        # NOTE (mristin):
+        # A JSON-able value is already nullable, see below.
+        if isinstance(type_annotation.value, intermediate.JsonValueTypeAnnotation):
+            return value
+
         return Stripped(f"{value}?")
 
     elif isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
-        return Stripped("Nodes.JsonNode")
+        # NOTE (mristin):
+        # A JSON null is a C# ``null`` in ``System.Text.Json.Nodes``.
+        return Stripped("Nodes.JsonNode?")
 
     elif isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
         return Stripped("Nodes.JsonArray")

@@ -480,7 +480,7 @@ namespace dummy
             /// <summary>
             /// Read the content of an element typed as <c>Nodes.JsonNode</c>.
             /// </summary>
-            private static Nodes.JsonNode ReadJsonValueContent(
+            private static Nodes.JsonNode? ReadJsonValueContent(
                 Xml.XmlReader reader,
                 bool isEmpty,
                 out Reporting.Error? error)
@@ -488,7 +488,7 @@ namespace dummy
                 if (isEmpty)
                 {
                     error = new Reporting.Error(
-                        "Expected one of the elements <boolean>, <double>, <string>, " +
+                        "Expected one of the elements <nil>, <boolean>, <double>, <string>, " +
                         "<array> or <struct> as the content of the element, " +
                         "but the element was self-closing");
                     return default!;
@@ -501,9 +501,7 @@ namespace dummy
                     return default!;
                 }
 
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected result null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -571,11 +569,11 @@ namespace dummy
                 AtElement<Our.Something>(
                     SomethingFromSequence, "something"));
 
-            private static readonly ContentReader<Nodes.JsonNode> Read_jsonValue = (
+            private static readonly ContentReader<Nodes.JsonNode?> Read_jsonValue = (
                 ReadJsonValueContent);
 
-            private static readonly ContentReader<List<Nodes.JsonNode>> Read_ListOf_jsonValue = (
-                AsList<Nodes.JsonNode>(
+            private static readonly ContentReader<List<Nodes.JsonNode?>> Read_ListOf_jsonValue = (
+                AsList<Nodes.JsonNode?>(
                     AtElement(
                         Read_jsonValue, "v")));
 
@@ -589,9 +587,9 @@ namespace dummy
                 ReadJsonObjectContent);
 
             private static readonly ContentReader<
-                (string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject)
+                (string, Nodes.JsonNode?, Nodes.JsonArray, Nodes.JsonObject)
             > Read_TupleOf4_string_jsonValue_jsonArray_jsonObject = (
-                AsTuple4<string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject>(
+                AsTuple4<string, Nodes.JsonNode?, Nodes.JsonArray, Nodes.JsonObject>(
                     AtElement(
                         Read_string, "v1"),
                     AtElement(
@@ -621,8 +619,8 @@ namespace dummy
             {
                 error = null;
 
-                List<Nodes.JsonNode>? theValues = null;
-                (string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject)? theTupleWithJson = null;
+                List<Nodes.JsonNode?>? theValues = null;
+                (string, Nodes.JsonNode?, Nodes.JsonArray, Nodes.JsonObject)? theTupleWithJson = null;
                 List<Nodes.JsonObject>? theOptionalObjects = null;
                 Nodes.JsonObject? theOptionalObject = null;
 
@@ -1062,11 +1060,11 @@ namespace dummy
                 that.Accept(_instance, writer);
             }
 
-            private static readonly ContentWriter<Nodes.JsonNode> Write_jsonValue = (
+            private static readonly ContentWriter<Nodes.JsonNode?> Write_jsonValue = (
                 XmlRpc.SerializeValueTo);
 
-            private static readonly ContentWriter<List<Nodes.JsonNode>> Write_ListOf_jsonValue = (
-                WriteList<Nodes.JsonNode>(
+            private static readonly ContentWriter<List<Nodes.JsonNode?>> Write_ListOf_jsonValue = (
+                WriteList<Nodes.JsonNode?>(
                     WrapInElement(
                         Write_jsonValue, "v")));
 
@@ -1080,9 +1078,9 @@ namespace dummy
                 XmlRpc.SerializeStructBodyTo);
 
             private static readonly ContentWriter<
-                (string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject)
+                (string, Nodes.JsonNode?, Nodes.JsonArray, Nodes.JsonObject)
             > Write_TupleOf4_string_jsonValue_jsonArray_jsonObject = (
-                WriteTuple4<string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject>(
+                WriteTuple4<string, Nodes.JsonNode?, Nodes.JsonArray, Nodes.JsonObject>(
                     WrapInElement(
                         Write_string, "v1"),
                     WrapInElement(

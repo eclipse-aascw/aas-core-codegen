@@ -873,9 +873,9 @@ def _define_json_type_definitions() -> MutableMapping[str, Any]:
     (see :func:`_define_type`), the same way a ``List`` and a ``Tuple``
     already are.
 
-    The five shapes are spelled out as an ``anyOf`` whitelist, and not as
-    a permissive ``{}`` or a ``{"not": {"type": "null"}}``, so that a JSON
-    ``null`` is excluded at every depth rather than only at the top.
+    The six shapes, including a JSON ``null``, are spelled out as an ``anyOf``
+    whitelist, and not as a permissive ``{}``, so that the definition states
+    exactly what a JSON-able value is.
 
     The definitions are to be *extended* with the resulting mapping.
     """
@@ -888,6 +888,7 @@ def _define_json_type_definitions() -> MutableMapping[str, Any]:
                         (
                             "anyOf",
                             [
+                                {"type": "null"},
                                 {"type": "boolean"},
                                 {"type": "number"},
                                 {"type": "string"},

@@ -12,6 +12,9 @@
     "JSONValue": {
       "anyOf": [
         {
+          "type": "null"
+        },
+        {
           "type": "boolean"
         },
         {

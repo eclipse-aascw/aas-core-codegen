@@ -61,7 +61,8 @@ public class Copying
             return new Something(
                 that.getMapping(),
                 that.getValues(),
-                that.getOptionalMapping().orElse(null));
+                that.getOptionalMapping().orElse(null),
+                that.getOptionalValue().orElse(null));
         }
     }
 
@@ -76,6 +77,9 @@ public class Copying
                 that.getValues().deepCopy(),
                 that.getOptionalMapping().isPresent()
                     ? that.getOptionalMapping().get().deepCopy()
+                    : null,
+                that.getOptionalValue().isPresent()
+                    ? that.getOptionalValue().get().deepCopy()
                     : null
             );
         }

@@ -96,8 +96,10 @@ test("a value round-trips through every discriminator", () => {{
 {III}"<member><name>b</name><value><boolean>1</boolean></value></member>" +
 {III}"<member><name>f</name><value><double>1.5</double></value></member>" +
 {III}"<member><name>s</name><value><string>x</string></value></member>" +
+{III}"<member><name>z</name><value><nil/></value></member>" +
 {III}"<member><name>a</name><value><array><data>" +
 {IIII}"<value><double>0</double></value>" +
+{IIII}"<value><nil></nil></value>" +
 {III}"</data></array></value></member>" +
 {III}"</struct></v>"
 {I});
@@ -109,8 +111,21 @@ test("a value round-trips through every discriminator", () => {{
 {II}b: true,
 {II}f: 1.5,
 {II}s: "x",
-{II}a: [0]
+{II}z: null,
+{II}a: [0, null]
 {I}}});
+}});"""
+        ),
+        Stripped(
+            f"""\
+test("a nil with text is refused", () => {{
+{I}const cursor = enter(`<v xmlns="${{NAMESPACE}}"><nil xmlns="">x</nil></v>`);
+
+{I}const parsed = OurXmlRpc.parseValueContent(cursor);
+
+{I}const error = mustError(parsed);
+{I}expect(error.path.toString()).toStrictEqual("nil");
+{I}expect(error.message).toContain("Expected no text in a 'nil' element");
 }});"""
         ),
         Stripped(
@@ -260,6 +275,8 @@ test("a value is written with its discriminator", () => {{
 {II}[1, '<double xmlns="">1</double>'],
 {II}[1.5, '<double xmlns="">1.5</double>'],
 {II}["a<b&c", '<string xmlns="">a&lt;b&amp;c</string>'],
+{II}[null, '<nil xmlns=""/>'],
+{II}[[null], '<array xmlns=""><data><value><nil/></value></data></array>'],
 {II}[
 {III}[0],
 {III}'<array xmlns=""><data><value><double>0</double></value></data></array>'

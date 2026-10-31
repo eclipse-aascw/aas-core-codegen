@@ -298,8 +298,9 @@ func namingElement[T any](
 
 // Read the content of an element holding a JSON-able value.
 //
-// The content is a single discriminator element -- `<boolean>`, `<double>`,
-// `<string>`, `<array>` or `<struct>` -- which says what the value is.
+// The content is a single discriminator element -- `<nil>`, `<boolean>`,
+// `<double>`, `<string>`, `<array>` or `<struct>` -- which says what
+// the value is.
 //
 // The `current` token is expected to point to the content of the enclosing
 // element, and the resulting `next` token points to its end element.
@@ -347,10 +348,12 @@ func readSomethingAsSequence(
 	var theMapping ourtypes.JsonObject
 	var theValues ourtypes.JsonArray
 	var theOptionalMapping ourtypes.JsonObject
+	var theOptionalValue ourtypes.JsonValue
 
 	foundMapping := false
 	foundValues := false
 	foundOptionalMapping := false
+	foundOptionalValue := false
 
 	for {
 		var local string
@@ -392,6 +395,15 @@ func readSomethingAsSequence(
 				decoder, current,
 			)
 			foundOptionalMapping = true
+		case "optionalValue":
+			if foundOptionalValue {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
+			theOptionalValue, current, valueErr = readJsonValue(
+				decoder, current,
+			)
+			foundOptionalValue = true
 		default:
 			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
@@ -421,6 +433,7 @@ func readSomethingAsSequence(
 		theValues,
 	)
 	instance.SetOptionalMapping(theOptionalMapping)
+	instance.SetOptionalValue(theOptionalValue)
 	return
 }
 
@@ -766,6 +779,16 @@ func writeSomethingAsSequence(
 			"optionalMapping",
 			that.OptionalMapping(),
 			xmlrpc.WriteObjectContent,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"OptionalValue()",
+		writeOptionalJsonValue(
+			encoder, "optionalValue", that.OptionalValue(), xmlrpc.WriteValueContent,
 		),
 	)
 	if err != nil {

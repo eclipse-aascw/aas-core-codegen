@@ -668,6 +668,24 @@ function parseTuple{arity}<{type_params_joined}>(
     )
 
 
+def _unset_literal(type_annotation: intermediate.TypeAnnotationUnion) -> str:
+    """
+    Give the literal which marks a property that we have not read yet.
+
+    A JSON-able value might be a JSON null, so we mark it with ``undefined``
+    instead of ``null``. Otherwise, we could tell neither a missing required
+    property nor a duplicate one.
+    """
+    return (
+        "undefined"
+        if isinstance(
+            intermediate.beneath_optional(type_annotation),
+            intermediate.JsonValueTypeAnnotation,
+        )
+        else "null"
+    )
+
+
 @require(lambda cls, prop: intermediate.runtime_id(prop) in cls.property_id_set)
 def _generate_parse_case_for_property(
     cls: intermediate.ConcreteClass,
@@ -682,6 +700,8 @@ def _generate_parse_case_for_property(
     del cls  # only used for the pre-condition
 
     xml_name_literal = typescript_common.string_literal(prop.xml_name)
+
+    unset = _unset_literal(prop.type_annotation)
 
     # NOTE (mristin):
     # A case sits two levels below the ``switch``, which the class's parser indents by
@@ -712,7 +732,7 @@ parseElementContent(
     return Stripped(
         f"""\
 case {xml_name_literal}: {{
-{I}if ({var_name} !== null) {{
+{I}if ({var_name} !== {unset}) {{
 {II}propertyError = duplicatePropertyError(propertyLocalName);
 {II}break;
 {I}}}
@@ -744,10 +764,16 @@ def _generate_parse_concrete_class(cls: intermediate.ConcreteClass) -> Stripped:
             prop.type_annotation,
             types_module=Identifier("OurTypes"),
         )
-        if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-            var_type = Stripped(f"{var_type} | null")
 
-        var_declarations.append(Stripped(f"let {var_name}: {var_type} = null;"))
+        unset = _unset_literal(prop.type_annotation)
+
+        if (
+            not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
+            or unset == "undefined"
+        ):
+            var_type = Stripped(f"{var_type} | {unset}")
+
+        var_declarations.append(Stripped(f"let {var_name}: {var_type} = {unset};"))
 
         if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
             message_literal = typescript_common.string_literal(
@@ -756,7 +782,7 @@ def _generate_parse_concrete_class(cls: intermediate.ConcreteClass) -> Stripped:
             required_checks.append(
                 Stripped(
                     f"""\
-if ({var_name} === null) {{
+if ({var_name} === {unset}) {{
 {I}return newDeserializationError<OurTypes.{cls_name}>(
 {II}{message_literal}
 {I});
@@ -796,7 +822,17 @@ return new OurCommon.Either<OurTypes.{cls_name}, DeserializationError>(
         writer.write(f"const instance = new OurTypes.{cls_name}(\n")
         for i, arg in enumerate(cls.constructor.arguments):
             var_name = var_name_by_property[arg.name]
-            writer.write(f"{I}{var_name}")
+
+            # NOTE (mristin):
+            # An optional JSON-able property which we did not read is
+            # ``undefined``, see :py:func:`_unset_literal`.
+            if (
+                isinstance(arg.type_annotation, intermediate.OptionalTypeAnnotation)
+                and _unset_literal(arg.type_annotation) == "undefined"
+            ):
+                writer.write(f"{I}{var_name} ?? null")
+            else:
+                writer.write(f"{I}{var_name}")
             if i < len(cls.constructor.arguments) - 1:
                 writer.write(",\n")
             else:

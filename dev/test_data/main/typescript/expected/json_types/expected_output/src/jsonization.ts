@@ -13,7 +13,13 @@ import * as OurCommon from "./common";
 import * as OurTypes from "./types";
 import * as OurStringification from "./stringification";
 
-export type JsonValue = string | number | boolean | JsonObject | JsonArray;
+export type JsonValue =
+  | null
+  | string
+  | number
+  | boolean
+  | JsonObject
+  | JsonArray;
 
 export type JsonArray = Iterable<JsonValue>;
 export type JsonObject = { [prop: string]: JsonValue };
@@ -542,7 +548,7 @@ function parsePropertiesOfSomething(
   OurTypes.Something,
   DeserializationError
 > {
-  let theValue: OurTypes.JsonValue | null = null;
+  let theValue: OurTypes.JsonValue | undefined = undefined;
   let theValues: OurTypes.JsonArray | null = null;
   let theMapping: OurTypes.JsonObject | null = null;
   let theMappingWithConstrainedKey: OurTypes.JsonObject | null = null;
@@ -641,7 +647,7 @@ function parsePropertiesOfSomething(
     }
   }
 
-  if (theValue === null) {
+  if (theValue === undefined) {
     return newDeserializationError<
       OurTypes.Something
     >(
@@ -791,7 +797,13 @@ export class SerializationError extends Error {
 function jsonValueFromJsonable(
   jsonable: JsonValue
 ): OurCommon.Either<OurTypes.JsonValue, DeserializationError> {
-  if (jsonable === null || jsonable === undefined) {
+  if (jsonable === null) {
+    return new OurCommon.Either<OurTypes.JsonValue, DeserializationError>(
+      null, null
+    );
+  }
+
+  if (jsonable === undefined) {
     return newDeserializationError<OurTypes.JsonValue>(
       `Expected a JSON-able value, but got: ${jsonable}`
     );
@@ -824,7 +836,7 @@ function jsonValueFromJsonable(
 
     default:
       return newDeserializationError<OurTypes.JsonValue>(
-        `Expected a JSON-able value (a boolean, a number, a string, ` +
+        `Expected a JSON-able value (a null, a boolean, a number, a string, ` +
           `an array or an object), but got: ${typeof jsonable}`
       );
   }
@@ -938,7 +950,11 @@ function jsonValueToJsonable(that: OurTypes.JsonArray): Array<JsonValue>;
 function jsonValueToJsonable(that: OurTypes.JsonObject): JsonObject;
 function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue;
 function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue {
-  if (that === null || that === undefined) {
+  if (that === null) {
+    return null;
+  }
+
+  if (that === undefined) {
     throw new SerializationError(
       `Expected a JSON-able value, but got: ${that}`
     );
@@ -966,7 +982,7 @@ function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue {
 
     default:
       throw new SerializationError(
-        `Expected a JSON-able value (a boolean, a number, a string, ` +
+        `Expected a JSON-able value (a null, a boolean, a number, a string, ` +
           `an array or an object), but got: ${typeof that}`
       );
   }

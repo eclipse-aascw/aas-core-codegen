@@ -134,7 +134,8 @@ public class Something implements ISomething {
 
   @Override
   public Optional<JsonNode> getOptionalValue() {
-    return Optional.ofNullable(optionalValue);
+    return Optional.ofNullable(optionalValue)
+      .filter(value -> !value.isNull());
   }
 
   @Override
