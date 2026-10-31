@@ -38,6 +38,12 @@ def forwards_text(text: Optional[str]) -> bool:
 
 
 @verification
+def text_is_given(text: Optional[str]) -> bool:
+    """Check the negated nullness check of the optional argument."""
+    return not (text is None)
+
+
+@verification
 def number_is_small(number: Optional[int]) -> bool:
     """Check the optional integer argument."""
     return number is None or number < 10

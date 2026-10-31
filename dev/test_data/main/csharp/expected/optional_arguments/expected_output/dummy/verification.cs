@@ -64,6 +64,16 @@ namespace dummy
         }  // public static bool ForwardsText
 
         /// <summary>
+        /// Check the negated nullness check of the optional argument.
+        /// </summary>
+        public static bool TextIsGiven(
+            string? text
+        )
+        {
+            return !(text == null);
+        }  // public static bool TextIsGiven
+
+        /// <summary>
         /// Check the optional integer argument.
         /// </summary>
         public static bool NumberIsSmall(

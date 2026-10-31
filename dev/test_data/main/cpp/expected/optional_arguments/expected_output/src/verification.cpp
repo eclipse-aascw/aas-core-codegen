@@ -71,6 +71,12 @@ bool ForwardsText(
   );
 }
 
+bool TextIsGiven(
+  const common::optional<std::wstring>& text
+) {
+  return !(!(text.has_value()));
+}
+
 bool NumberIsSmall(
   const common::optional<int64_t>& number
 ) {

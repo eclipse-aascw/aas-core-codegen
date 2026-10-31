@@ -58,6 +58,14 @@ public class Verification {
   }
 
   /**
+   * Check the negated nullness check of the optional argument.
+   */
+  public static Boolean textIsGiven(
+    Optional<String> text) {
+    return !(!text.isPresent());
+  }
+
+  /**
    * Check the optional integer argument.
    */
   public static Boolean numberIsSmall(
