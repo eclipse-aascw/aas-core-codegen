@@ -519,6 +519,46 @@ UnverifiedSymbolTable(
       node=...,
       arguments_by_name=...),
     UnderstoodMethod(
+      name='text_is_given',
+      verification=True,
+      visibility='PUBLIC',
+      arguments=[
+        Argument(
+          name='text',
+          type_annotation=SubscriptedTypeAnnotation(
+            identifier='Optional',
+            subscripts=[
+              AtomicTypeAnnotation(
+                identifier='str',
+                node=...)],
+            node=...),
+          default=None,
+          node=...)],
+      returns=AtomicTypeAnnotation(
+        identifier='bool',
+        node=...),
+      description=Description(
+        document=...,
+        node=...),
+      contracts=Contracts(
+        preconditions=[],
+        snapshots=[],
+        postconditions=[]),
+      non_mutating=False,
+      body=[
+        textwrap.dedent("""\
+          Return(
+            value=Not(
+              operand=IsNone(
+                value=Name(
+                  identifier='text',
+                  original_node=...),
+                original_node=...),
+              original_node=...),
+            original_node=...)""")],
+      node=...,
+      arguments_by_name=...),
+    UnderstoodMethod(
       name='number_is_small',
       verification=True,
       visibility='PUBLIC',

@@ -223,6 +223,15 @@ export function forwardsText(
 }
 
 /**
+ * Check the negated nullness check of the optional argument.
+ */
+export function textIsGiven(
+  text: string | null
+): boolean {
+  return !(text === null);
+}
+
+/**
  * Check the optional integer argument.
  */
 export function numberIsSmall(

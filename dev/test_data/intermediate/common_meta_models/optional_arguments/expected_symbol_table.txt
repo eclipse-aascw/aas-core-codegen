@@ -569,6 +569,35 @@ SymbolTable(
       parsed=...,
       arguments_by_name=...),
     TranspilableVerification(
+      name='text_is_given',
+      visibility='PUBLIC',
+      arguments=[
+        Argument(
+          name='text',
+          type_annotation=OptionalTypeAnnotation(
+            value=PrimitiveTypeAnnotation(
+              a_type='STR',
+              parsed=...),
+            parsed=...),
+          default=None,
+          mutable=False,
+          parsed=...)],
+      returns=PrimitiveTypeAnnotation(
+        a_type='BOOL',
+        parsed=...),
+      description=DescriptionOfSignature(
+        summary='<paragraph>Check the negated nullness check of the optional argument.</paragraph>',
+        remarks=[],
+        arguments_by_name=[],
+        returns=None,
+        parsed=...),
+      contracts=Contracts(
+        preconditions=[],
+        snapshots=[],
+        postconditions=[]),
+      parsed=...,
+      arguments_by_name=...),
+    TranspilableVerification(
       name='number_is_small',
       visibility='PUBLIC',
       arguments=[

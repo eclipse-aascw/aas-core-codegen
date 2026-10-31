@@ -68,6 +68,13 @@ func ForwardsText(
 	return TextIsNotBanned(text)
 }
 
+// Check the negated nullness check of the optional argument.
+func TextIsGiven(
+	text *string,
+) bool {
+	return !(text == nil)
+}
+
 // Check the optional integer argument.
 func NumberIsSmall(
 	number *int64,

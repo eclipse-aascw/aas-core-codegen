@@ -229,6 +229,11 @@ bool ForwardsText(
   const common::optional<std::wstring>& text
 );
 
+/// \brief Check the negated nullness check of the optional argument.
+bool TextIsGiven(
+  const common::optional<std::wstring>& text
+);
+
 /// \brief Check the optional integer argument.
 bool NumberIsSmall(
   const common::optional<int64_t>& number

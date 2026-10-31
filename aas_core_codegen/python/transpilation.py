@@ -965,6 +965,16 @@ not (
     def transform_not(
         self, node: parse_tree.Not
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        # NOTE (mristin):
+        # We rewrite the negated nullness check into ``is not``, as linters such as
+        # ruff (E714) complain about it.
+        if isinstance(node.operand, parse_tree.IsNone):
+            return self.transform_is_not_none(
+                parse_tree.IsNotNone(
+                    value=node.operand.value, original_node=node.original_node
+                )
+            )
+
         operand, error = self.transform(node.operand)
         if error is not None:
             return None, error

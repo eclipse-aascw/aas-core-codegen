@@ -93,6 +93,13 @@ def forwards_text(
     return text_is_not_banned(text)
 
 
+def text_is_given(
+    text: Optional[str]
+) -> bool:
+    """Check the negated nullness check of the optional argument."""
+    return text is not None
+
+
 def number_is_small(
     number: Optional[int]
 ) -> bool:
