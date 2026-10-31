@@ -3,6 +3,11 @@
     Please keep this file at 72 line width so that we can copy-paste
     the release logs directly into commit messages.
 
+0.0.27rc5 (2026-10-31)
+======================
+We pre-release with JSON null in JSON-able values and negated None
+checks rewritten as ``x is not None`` in Python.
+
 0.0.27rc4 (2026-10-28)
 ======================
 We pre-release for the Python SDK of V3.2 of the AAS meta-model, which
