@@ -373,6 +373,22 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
         ]
 
     # NOTE (mristin):
+    # We test the safe integer range whenever the SDK checks it, see
+    # :py:func:`intermediate_uses.safe_integer_checks`.
+    if intermediate_uses.safe_integer_checks(context.symbol_table):
+        rel_paths_generators = list(rel_paths_generators) + [
+            (
+                tests_rel_path / "TestSafeIntegers.cs",
+                lambda: (
+                    csharp_tests.generate_test_safe_integers(
+                        namespace=namespace, symbol_table=context.symbol_table
+                    ),
+                    None,
+                ),
+            ),
+        ]
+
+    # NOTE (mristin):
     # We test the arithmetic operations only if the meta-model uses them, as we
     # generate the helper functions only in that case.
     if intermediate_uses.modulo(context.symbol_table) or intermediate_uses.abs_call(

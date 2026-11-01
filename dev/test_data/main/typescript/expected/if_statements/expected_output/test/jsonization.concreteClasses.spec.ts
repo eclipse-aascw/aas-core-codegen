@@ -11,6 +11,7 @@ import * as path from "path";
 import * as OurJsonization from "../src/jsonization";
 import * as OurTypes from "../src/types";
 import * as OurVerification from "../src/verification";
+import * as OurXmlization from "../src/xmlization";
 
 import * as TestCommon from "./common";
 
@@ -874,9 +875,38 @@ function loadTheFirstExpected(modelType: string): OurJsonization.JsonValue {
   return TestCommon.readJsonFromFileSync(pths[0]);
 }
 
+/**
+ * Verify `instance` and render the errors as `path: message`.
+ */
+function verificationErrorsOf(instance: OurTypes.Class): Array<string> {
+  return Array.from(OurVerification.verify(instance)).map(
+    (error) => `${error.path}: ${error.message}`
+  );
+}
+
+/**
+ * Run `serialize` and render its serialization error as `path: message`.
+ *
+ * @returns the rendered error, or `null` if `serialize` succeeded
+ */
+function serializationErrorOf(serialize: () => unknown): string | null {
+  try {
+    serialize();
+  } catch (error) {
+    if (
+      error instanceof OurJsonization.SerializationError
+      || error instanceof OurXmlization.SerializationError
+    ) {
+      return `${error.path}: ${error.message}`;
+    }
+    throw error;
+  }
+  return null;
+}
+
 test(
-  "Child_a serialization fails on an integer outside the range representable in JSON "
-  + "at .aOnly",
+  "Child_a refuses an integer outside the safe integer range "
+  + "at .aOnly in verification and serialization",
   () => {
     for (const value of [9007199254740992, -9007199254740992]) {
       const instance = OurJsonization.childAFromJsonable(
@@ -885,27 +915,52 @@ test(
 
       instance.aOnly = value;
 
-      let caught: unknown = null;
-      try {
-        OurJsonization.toJsonable(instance);
-      } catch (error) {
-        caught = error;
-      }
+      const expected =
+        `.aOnly: Expected an integer, but got ${value}, ` +
+        "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]";
 
-      if (!(caught instanceof OurJsonization.SerializationError)) {
-        throw new Error(
-          `Expected a SerializationError, but got: ${caught}`
-        );
-      }
-
-      expect(caught.path).toStrictEqual(".aOnly");
+      expect(verificationErrorsOf(instance)).toContain(expected);
+      expect(
+        serializationErrorOf(() => OurJsonization.toJsonable(instance))
+      ).toStrictEqual(expected);
+      expect(
+        serializationErrorOf(() => OurXmlization.toXmlString(instance))
+      ).toStrictEqual(expected);
     }
   }
 );
 
 test(
-  "Child_b serialization fails on an integer outside the range representable in JSON "
-  + "at .bOnly",
+  "Child_a accepts the bounds of the safe integer range "
+  + "at .aOnly in verification and serialization",
+  () => {
+    for (const value of [9007199254740991, -9007199254740991]) {
+      const instance = OurJsonization.childAFromJsonable(
+        loadTheFirstExpected("ChildA")
+      ).mustValue();
+
+      instance.aOnly = value;
+
+      // NOTE (mristin):
+      // The invariants might still refuse the value, but not the range check.
+      expect(
+        verificationErrorsOf(instance).filter(
+          (error) => error.includes("safe integer range")
+        )
+      ).toStrictEqual([]);
+      expect(
+        serializationErrorOf(() => OurJsonization.toJsonable(instance))
+      ).toBeNull();
+      expect(
+        serializationErrorOf(() => OurXmlization.toXmlString(instance))
+      ).toBeNull();
+    }
+  }
+);
+
+test(
+  "Child_b refuses an integer outside the safe integer range "
+  + "at .bOnly in verification and serialization",
   () => {
     for (const value of [9007199254740992, -9007199254740992]) {
       const instance = OurJsonization.childBFromJsonable(
@@ -914,27 +969,52 @@ test(
 
       instance.bOnly = value;
 
-      let caught: unknown = null;
-      try {
-        OurJsonization.toJsonable(instance);
-      } catch (error) {
-        caught = error;
-      }
+      const expected =
+        `.bOnly: Expected an integer, but got ${value}, ` +
+        "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]";
 
-      if (!(caught instanceof OurJsonization.SerializationError)) {
-        throw new Error(
-          `Expected a SerializationError, but got: ${caught}`
-        );
-      }
-
-      expect(caught.path).toStrictEqual(".bOnly");
+      expect(verificationErrorsOf(instance)).toContain(expected);
+      expect(
+        serializationErrorOf(() => OurJsonization.toJsonable(instance))
+      ).toStrictEqual(expected);
+      expect(
+        serializationErrorOf(() => OurXmlization.toXmlString(instance))
+      ).toStrictEqual(expected);
     }
   }
 );
 
 test(
-  "Something serialization fails on an integer outside the range representable in JSON "
-  + "at .number",
+  "Child_b accepts the bounds of the safe integer range "
+  + "at .bOnly in verification and serialization",
+  () => {
+    for (const value of [9007199254740991, -9007199254740991]) {
+      const instance = OurJsonization.childBFromJsonable(
+        loadTheFirstExpected("ChildB")
+      ).mustValue();
+
+      instance.bOnly = value;
+
+      // NOTE (mristin):
+      // The invariants might still refuse the value, but not the range check.
+      expect(
+        verificationErrorsOf(instance).filter(
+          (error) => error.includes("safe integer range")
+        )
+      ).toStrictEqual([]);
+      expect(
+        serializationErrorOf(() => OurJsonization.toJsonable(instance))
+      ).toBeNull();
+      expect(
+        serializationErrorOf(() => OurXmlization.toXmlString(instance))
+      ).toBeNull();
+    }
+  }
+);
+
+test(
+  "Something refuses an integer outside the safe integer range "
+  + "at .number in verification and serialization",
   () => {
     for (const value of [9007199254740992, -9007199254740992]) {
       const instance = OurJsonization.somethingFromJsonable(
@@ -943,20 +1023,45 @@ test(
 
       instance.number = value;
 
-      let caught: unknown = null;
-      try {
-        OurJsonization.toJsonable(instance);
-      } catch (error) {
-        caught = error;
-      }
+      const expected =
+        `.number: Expected an integer, but got ${value}, ` +
+        "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]";
 
-      if (!(caught instanceof OurJsonization.SerializationError)) {
-        throw new Error(
-          `Expected a SerializationError, but got: ${caught}`
-        );
-      }
+      expect(verificationErrorsOf(instance)).toContain(expected);
+      expect(
+        serializationErrorOf(() => OurJsonization.toJsonable(instance))
+      ).toStrictEqual(expected);
+      expect(
+        serializationErrorOf(() => OurXmlization.toXmlString(instance))
+      ).toStrictEqual(expected);
+    }
+  }
+);
 
-      expect(caught.path).toStrictEqual(".number");
+test(
+  "Something accepts the bounds of the safe integer range "
+  + "at .number in verification and serialization",
+  () => {
+    for (const value of [9007199254740991, -9007199254740991]) {
+      const instance = OurJsonization.somethingFromJsonable(
+        loadTheFirstExpected("Something")
+      ).mustValue();
+
+      instance.number = value;
+
+      // NOTE (mristin):
+      // The invariants might still refuse the value, but not the range check.
+      expect(
+        verificationErrorsOf(instance).filter(
+          (error) => error.includes("safe integer range")
+        )
+      ).toStrictEqual([]);
+      expect(
+        serializationErrorOf(() => OurJsonization.toJsonable(instance))
+      ).toBeNull();
+      expect(
+        serializationErrorOf(() => OurXmlization.toXmlString(instance))
+      ).toBeNull();
     }
   }
 );

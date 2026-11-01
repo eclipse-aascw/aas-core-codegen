@@ -225,6 +225,13 @@ def _written_leaf_moniker(type_anno: intermediate.AtomicTypeAnnotation) -> str:
     if primitive_type is intermediate.PrimitiveType.FLOAT:
         return java_common.PRIMITIVE_TYPE_TO_MONIKER[intermediate.PrimitiveType.FLOAT]
 
+    # NOTE (mristin):
+    # An integer is written by ``writeLongContent``, which checks the safe
+    # integer range, so it can not share the moniker of the stringified leaves
+    # either.
+    if primitive_type is intermediate.PrimitiveType.INT:
+        return java_common.PRIMITIVE_TYPE_TO_MONIKER[intermediate.PrimitiveType.INT]
+
     if primitive_type is not None:
         return "stringified"
 
@@ -337,6 +344,9 @@ def _written_value_type(
     if primitive_type is intermediate.PrimitiveType.FLOAT:
         return Stripped("Double")
 
+    if primitive_type is intermediate.PrimitiveType.INT:
+        return Stripped("Long")
+
     if primitive_type is not None:
         return Stripped("Object")
 
@@ -395,6 +405,12 @@ def _content_writer_name(type_anno: intermediate.TypeAnnotationUnion) -> Identif
     # ``Infinity``, which is not a valid ``xs:double``.
     if primitive_type is intermediate.PrimitiveType.FLOAT:
         return Identifier("writeDoubleContent")
+
+    # NOTE (mristin):
+    # An integer has to lie in the safe integer range, so that the instance
+    # can be written to JSON as well.
+    if primitive_type is intermediate.PrimitiveType.INT:
+        return Identifier("writeLongContent")
 
     if primitive_type is not None:
         return Identifier("writeStringifiedContent")
@@ -1487,11 +1503,31 @@ return readTuple{len(type_anno.items)}(
                 arguments.append(Stripped(empty_value))
 
             joined_arguments = ",\n".join(arguments)
-            body = Stripped(
-                f"""\
+
+            if primitive_type is intermediate.PrimitiveType.INT:
+                # NOTE (mristin):
+                # The text is parsed by the lexical rules of ``xs:long``, but
+                # the integer has to lie in the safe integer range as well, so
+                # that the instance can be written to JSON. We report it with
+                # the very message of the JSON de-serialization.
+                body = Stripped(
+                    f"""\
+final Reporting.Result<Long> result = readText(
+{I}{indent_but_first_line(joined_arguments, I)});
+
+if (result.isError() || Verification.isSafeInteger(result.getResult())) {{
+{I}return result;
+}}
+
+return Reporting.Result.failure(new Reporting.Error(
+{I}Verification.integerOutsideSafeRangeMessage(result.getResult())));"""
+                )
+            else:
+                body = Stripped(
+                    f"""\
 return readText(
 {I}{indent_but_first_line(joined_arguments, I)});"""
-            )
+                )
         else:
             assert isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
                 type_anno.our_type, intermediate.Enumeration
@@ -2547,6 +2583,32 @@ private static void writeByteArrayContent(
     )
 
 
+def _generate_write_long_content() -> Stripped:
+    """Generate the writer refusing an integer outside the safe integer range."""
+    return Stripped(
+        f"""\
+/**
+ * Write {{@code that}} as XML content, provided that it is a safe integer.
+ *
+ * <p>This is the {{@link ContentWriter}} of every {{@code long}}-typed
+ * value, be it a property, a list item or a tuple item. An integer outside
+ * the safe integer range [-2^53 + 1, 2^53 - 1] is refused, exactly as in
+ * the JSON serialization, so that what XML holds JSON can hold as well.
+ */
+private static void writeLongContent(
+{I}Long that,
+{I}XMLStreamWriter writer) throws XMLStreamException {{
+{I}final long primitiveThat = that.longValue();
+{I}if (!Verification.isSafeInteger(primitiveThat)) {{
+{II}throw new XmlCommon.SerializeFailure(
+{III}new Reporting.Error(
+{IIII}Verification.integerOutsideSafeRangeMessage(primitiveThat)));
+{I}}}
+{I}writer.writeCharacters(Long.toString(primitiveThat));
+}}"""
+    )
+
+
 # endregion
 
 # region Writers of a single type
@@ -2862,6 +2924,9 @@ def _generate_visitor(
     if Identifier("writeByteArrayContent") in needed.called_content_writers:
         blocks.append(_generate_write_byte_array_content())
 
+    if Identifier("writeLongContent") in needed.called_content_writers:
+        blocks.append(_generate_write_long_content())
+
     if Identifier("writeEnum") in needed.called_content_writers:
         blocks.append(_generate_write_enum())
 
@@ -3055,6 +3120,12 @@ def generate(
                 Stripped("import java.util.Set;"),
             ]
         )
+
+    # NOTE (mristin):
+    # An integer is checked against the safe integer range by the predicate of
+    # the verification, so that XML, JSON and the verification agree.
+    if intermediate_uses.integers(symbol_table):
+        imports.append(Stripped(f"import {package}.verification.Verification;"))
 
     # NOTE (mristin):
     # A JSON-able value is a Jackson node, and only the models which use one

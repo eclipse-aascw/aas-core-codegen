@@ -93,36 +93,6 @@ namespace dummy
             }
 
             /// <summary>
-            /// Convert <paramref name="node" /> to a 64-bit long integer.
-            /// </summary>
-            /// <param name="node">JSON node to be parsed</param>
-            /// <param name="error">Error, if any, during the deserialization</param>
-            internal static long LongFrom(
-                Nodes.JsonNode? node,
-                out Reporting.Error? error)
-            {
-                error = null;
-
-                Nodes.JsonValue? value = node as Nodes.JsonValue;
-                if (value == null)
-                {
-                    error = new Reporting.Error(
-                        $"Expected a 64-bit long integer, but got {Describe(node)}");
-                    return default!;
-                }
-
-                bool ok = value.TryGetValue<long>(out long result);
-                if (!ok)
-                {
-                    error = new Reporting.Error(
-                        "Expected a 64-bit long integer, but the conversion failed " +
-                        $"from {value.ToJsonString()}");
-                    return default!;
-                }
-                return result;
-            }
-
-            /// <summary>
             /// Convert <paramref name="node" /> to a 64-bit double-precision float.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
@@ -675,28 +645,6 @@ namespace dummy
             internal static Nodes.JsonObject TransformIClass(Our.IClass that)
             {
                 return _instance.Transform(that);
-            }
-
-            /// <summary>
-            /// Convert <paramref name="that" /> 64-bit long integer to a JSON value.
-            /// </summary>
-            /// <param name="that">value to be converted</param>
-            /// <exception name="SerializationFailure">
-            /// Thrown if <paramref name="that" /> lies outside the range where it can be
-            /// exactly represented as a 64-bit floating-point number, which is what
-            /// the JSON de-serializers of the other languages read a number into.
-            /// </exception>
-            [CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
-            private static Nodes.JsonValue ToJsonValue(long that)
-            {
-                if (that < -9007199254740991L || that > 9007199254740991L)
-                {
-                    throw new SerializationFailure(
-                        new Reporting.Error(
-                            "The integer can not be serialized to JSON as it is outside " +
-                            $"the range [-2^53 + 1, 2^53 - 1]: {that}"));
-                }
-                return Nodes.JsonValue.Create(that);
             }
 
             /// <summary>

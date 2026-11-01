@@ -220,6 +220,63 @@ common::expected<
   bool additional_properties = false
 );
 
+/**
+ * \brief Deserialize \p json as a JSON-able value.
+ *
+ * A JSON-able value is, recursively, exactly as JSON itself is defined:
+ * a null, a boolean, a number, a string, an array of JSON-able values or
+ * an object of JSON-able values with string keys. An infinity,
+ * a not-a-number and an integer outside the safe integer range
+ * [-2^53 + 1, 2^53 - 1] are rejected at any depth.
+ *
+ * \param json value to be de-serialized
+ * \return a copy of \p json, or a de-serialization error, if any.
+ */
+common::expected<
+  nlohmann::json,
+  DeserializationError
+> JsonValueFrom(
+  const nlohmann::json& json
+);
+
+/**
+ * \brief Deserialize \p json as a JSON-able array.
+ *
+ * A JSON-able value is, recursively, exactly as JSON itself is defined:
+ * a null, a boolean, a number, a string, an array of JSON-able values or
+ * an object of JSON-able values with string keys. An infinity,
+ * a not-a-number and an integer outside the safe integer range
+ * [-2^53 + 1, 2^53 - 1] are rejected at any depth.
+ *
+ * \param json value to be de-serialized
+ * \return a copy of \p json, or a de-serialization error, if any.
+ */
+common::expected<
+  nlohmann::json,
+  DeserializationError
+> JsonArrayFrom(
+  const nlohmann::json& json
+);
+
+/**
+ * \brief Deserialize \p json as a JSON-able object.
+ *
+ * A JSON-able value is, recursively, exactly as JSON itself is defined:
+ * a null, a boolean, a number, a string, an array of JSON-able values or
+ * an object of JSON-able values with string keys. An infinity,
+ * a not-a-number and an integer outside the safe integer range
+ * [-2^53 + 1, 2^53 - 1] are rejected at any depth.
+ *
+ * \param json value to be de-serialized
+ * \return a copy of \p json, or a de-serialization error, if any.
+ */
+common::expected<
+  nlohmann::json,
+  DeserializationError
+> JsonObjectFrom(
+  const nlohmann::json& json
+);
+
 // endregion Deserialization
 
 // region Serialization
@@ -257,6 +314,19 @@ class SerializationException : public std::exception {
  */
 nlohmann::json Serialize(
   const types::IClass& that
+);
+
+/**
+ * \brief Serialize the JSON-able value \p value to a JSON value.
+ *
+ * \param value JSON-able value to be serialized
+ * \return a copy of \p value
+ * \throw \ref SerializationException if \p value contains, at any depth,
+ * a binary or a discarded value, an infinity, a not-a-number or an integer
+ * outside the safe integer range [-2^53 + 1, 2^53 - 1]
+ */
+nlohmann::json SerializeJsonValue(
+  const nlohmann::json& value
 );
 
 // endregion Serialization

@@ -106,7 +106,11 @@ public static String rstrip(String text, String chars) {{
 }}"""
 )
 
-#: Parse a text as a safe integer; this is how we transpile the built-in ``int``
+#: Parse a text as a safe integer; this is how we transpile the built-in ``int``.
+#:
+#: We limit ourselves to the safe integers, though a ``long`` could hold larger
+#: ones, as TypeScript represents the integers as ``number``, and the invariants
+#: must behave the same in all the SDKs.
 _PARSE_SAFE_INT = Stripped(
     f"""\
 /**
@@ -116,8 +120,12 @@ _PARSE_SAFE_INT = Stripped(
  * transpilation. We accept only an optional sign followed by the ASCII digits,
  * and only the safe integers, <i>i.e.</i>, the integers within
  * {{@code -(2^53 - 1)}} and {{@code 2^53 - 1}}, which a double-precision
- * floating-point number represents exactly. This way, all the SDKs behave
- * the same.
+ * floating-point number represents exactly.
+ *
+ * <p>We check the safe range even though a {{@code long}} could hold larger
+ * integers. TypeScript represents the integers as {{@code number}}, which holds
+ * them exactly only within the safe range, and all the SDKs check the same
+ * range so that the invariants which parse a text behave the same everywhere.
  *
  * <p>We do not use {{@link Long#parseLong(String)}} as it accepts the digits
  * of any script, and the range of all the 64-bit integers.
@@ -127,9 +135,6 @@ _PARSE_SAFE_INT = Stripped(
  * @throws IllegalArgumentException if {{@code text}} is not a safe integer
  */
 public static long parseSafeInt(String text) {{
-{I}// This is 2^53 - 1.
-{I}final long maxSafeInteger = 9007199254740991L;
-
 {I}final int length = text.length();
 
 {I}int offset = 0;
@@ -155,9 +160,10 @@ public static long parseSafeInt(String text) {{
 {II}}}
 
 {II}// NOTE (mristin):
-{II}// The value can not overflow as we check the range after each digit.
+{II}// The value is at most 2^53 - 1 before this step, so it can not
+{II}// overflow a long.
 {II}value = value * 10 + (character - '0');
-{II}if (value > maxSafeInteger) {{
+{II}if (!Verification.isSafeInteger(value)) {{
 {III}throw new IllegalArgumentException(
 {IIII}"Expected a safe integer, but got a text out of its range: " + text);
 {II}}}
@@ -428,9 +434,15 @@ public final class StringHelpers {{
     blocks: List[Stripped] = [
         java_common.WARNING,
         Stripped(f"package {package}.common;"),
-        code,
-        java_common.WARNING,
     ]
+
+    if intermediate_uses.int_call(symbol_table):
+        # NOTE (mristin):
+        # The parsing checks the range with the same predicate as
+        # the de/serialization and the verification.
+        blocks.append(Stripped(f"import {package}.verification.Verification;"))
+
+    blocks.extend([code, java_common.WARNING])
 
     return Stripped("\n\n".join(blocks))
 

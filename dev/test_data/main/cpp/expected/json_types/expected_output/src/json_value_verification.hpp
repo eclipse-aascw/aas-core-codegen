@@ -19,6 +19,24 @@ namespace dummy {
 namespace verification {
 
 /**
+ * \brief Check that the number \p json is a number of a JSON-able value.
+ *
+ * JSON knows a single numeric type, which all the other SDKs read into
+ * a 64-bit floating-point number. Hence a JSON-able number has to be finite,
+ * and an integer has to lie in the safe integer range [-2^53 + 1, 2^53 - 1],
+ * as for the integer properties of the model.
+ *
+ * The verification, the de-serialization and the serialization of a JSON-able
+ * value all use this check, so that they agree on what a JSON-able number is.
+ *
+ * \param json number to be checked
+ * \return the cause why \p json is not JSON-able, if it is not
+ */
+common::optional<std::wstring> CheckJsonAbleNumber(
+  const nlohmann::json& json
+);
+
+/**
  * Specify the shape that the top-level JSON value itself is expected to
  * have, ``kAny`` if unconstrained.
  */

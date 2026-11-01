@@ -47,6 +47,7 @@ else:
     from typing_extensions import Final
 
 from dummy import (
+    common as our_common,
     constants as our_constants,
     reporting as our_reporting,
     types as our_types,
@@ -384,24 +385,28 @@ class _Transformer(
             self,
             that: our_types.ChildA
     ) -> Iterator[Error]:
-        # No verification has been defined for ChildA.
-        return
-        # For this uncommon return-yield construction, see:
-        # https://stackoverflow.com/questions/13243766/how-to-define-an-empty-generator-function
-        # noinspection PyUnreachableCode
-        yield
+        for error in _verify_int(that.a_only):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'a_only'
+                )
+            )
+            yield error
 
     # noinspection PyMethodMayBeStatic
     def transform_child_b(
             self,
             that: our_types.ChildB
     ) -> Iterator[Error]:
-        # No verification has been defined for ChildB.
-        return
-        # For this uncommon return-yield construction, see:
-        # https://stackoverflow.com/questions/13243766/how-to-define-an-empty-generator-function
-        # noinspection PyUnreachableCode
-        yield
+        for error in _verify_int(that.b_only):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'b_only'
+                )
+            )
+            yield error
 
     # noinspection PyMethodMayBeStatic
     def transform_container(
@@ -538,6 +543,15 @@ class _Transformer(
                 'Optional parent as Child_a must have a small a_only'
             )
 
+        for error in _verify_int(that.number):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'number'
+                )
+            )
+            yield error
+
         for error in verify(that.item):
             error.path._prepend(
                 PropertySegment(
@@ -581,6 +595,14 @@ def verify(
     :yield: constraint violations
     """
     yield from _TRANSFORMER.transform(that)
+
+
+def _verify_int(
+        that: int
+) -> Iterator[Error]:
+    """Verify that :paramref:`that` lies in the safe integer range."""
+    if not our_common.is_safe_integer(that):
+        yield Error(our_common.unsafe_integer_message(that))
 
 
 def _verify_list_of__class(

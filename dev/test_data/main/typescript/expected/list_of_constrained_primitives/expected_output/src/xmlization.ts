@@ -85,38 +85,6 @@ function parse_bool(
   );
 }
 
-function parse_int(
-  cursor: XmlCursor
-): OurCommon.Either<number, DeserializationError> {
-  const text = collapseWhitespace(parseTextContent(cursor));
-
-  if (!/^[+-]?\d+$/.test(text)) {
-    return newDeserializationError<number>(
-      `Expected integer text, but got: ${text}`
-    );
-  }
-
-  const value = Number(text);
-
-  // NOTE (mristin):
-  // An integer is a ``number`` in TypeScript, and a ``number`` holds only
-  // the integers up to 2^53 - 1 exactly. Beyond that ``Number`` rounds
-  // silently -- 9007199254740993 comes back as 9007199254740992, and
-  // 9223372036854775807 as 9223372036854776000, which is a perfectly
-  // well-formed but *different* xs:long. We refuse instead of corrupting.
-  //
-  // ``Number.isSafeInteger`` covers ``Number.isInteger`` as well, so
-  // a non-integer is refused here too.
-  if (!Number.isSafeInteger(value)) {
-    return newDeserializationError<number>(
-      `Expected an integer within the safe range of a number, `
-        + `but got: ${text}`
-    );
-  }
-
-  return new OurCommon.Either<number, DeserializationError>(value, null);
-}
-
 function parse_float(
   cursor: XmlCursor
 ): OurCommon.Either<number, DeserializationError> {
@@ -487,25 +455,6 @@ function write_bool(
   value: boolean
 ): void {
   parts.push(value ? "true" : "false");
-}
-
-function write_int(
-  parts: Array<string>,
-  value: number
-): void {
-  // NOTE (mristin):
-  // Beyond 2^53 - 1 a ``number`` no longer holds every integer, so the value
-  // we were handed has already lost its identity -- writing it out would
-  // record a different xs:long without a word. ``Number.isSafeInteger``
-  // covers ``Number.isInteger`` as well.
-  if (!Number.isSafeInteger(value)) {
-    throw new SerializationError(
-      `Expected an integer within the safe range of a number, `
-        + `but got: ${value}`
-    );
-  }
-
-  parts.push(`${value}`);
 }
 
 function write_float(

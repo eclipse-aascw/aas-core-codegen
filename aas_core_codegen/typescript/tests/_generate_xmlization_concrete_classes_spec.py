@@ -64,7 +64,13 @@ _LEXICAL_CASES_BY_PRIMITIVE: Mapping[
 
 
 def _generate_lexical_tests(symbol_table: intermediate.SymbolTable) -> List[Stripped]:
-    """Generate the tests over the lexical forms which no example can hold."""
+    """
+    Generate the tests over the lexical forms which no example can hold.
+
+    The integers at and just beyond the bounds of the safe integer range can not
+    be recorded in an example either, as the example would have to hold every
+    one of them, so we test them here, too.
+    """
     cls = intermediate.first_class_of_only_required_primitives(symbol_table)
     if cls is None:
         return []
@@ -84,7 +90,9 @@ def _generate_lexical_tests(symbol_table: intermediate.SymbolTable) -> List[Stri
         if a_type in prop_by_a_type
     ]
 
-    if len(relevant) == 0:
+    int_prop = prop_by_a_type.get(intermediate.PrimitiveType.INT)
+
+    if len(relevant) == 0 and int_prop is None:
         return []
 
     cls_name_typescript = typescript_naming.class_name(cls.name)
@@ -98,7 +106,10 @@ def _generate_lexical_tests(symbol_table: intermediate.SymbolTable) -> List[Stri
  * Read the first recorded example of {cls_name_typescript} with the content
  * of the element `xmlName` replaced by `text`.
  */
-function readWith(xmlName: string, text: string): OurTypes.{cls_name_typescript} {{
+function readEitherWith(
+{I}xmlName: string,
+{I}text: string
+): ReturnType<typeof OurXmlization.fromXmlString> {{
 {I}const pths = Array.from(
 {II}TestCommon.findFilesBySuffixRecursively(
 {III}path.join(
@@ -121,7 +132,17 @@ function readWith(xmlName: string, text: string): OurTypes.{cls_name_typescript}
 
 {I}const patched = original.slice(0, start) + text + original.slice(end);
 
-{I}const instanceOrError = OurXmlization.fromXmlString(patched);
+{I}return OurXmlization.fromXmlString(patched);
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Read the first recorded example of {cls_name_typescript} with the content
+ * of the element `xmlName` replaced by `text`, and expect no error.
+ */
+function readWith(xmlName: string, text: string): OurTypes.{cls_name_typescript} {{
+{I}const instanceOrError = readEitherWith(xmlName, text);
 {I}expect(instanceOrError.error).toBeNull();
 
 {I}const casted = OurTypes.{as_function}(instanceOrError.mustValue());
@@ -131,7 +152,7 @@ function readWith(xmlName: string, text: string): OurTypes.{cls_name_typescript}
 
 {I}return casted;
 }}"""
-        )
+        ),
     ]
 
     for a_type, prop in relevant:
@@ -158,6 +179,38 @@ test({typescript_common.string_literal(f"{prop_xml_name} read from {a_text!r}")}
 }});"""
                 )
             )
+
+    if int_prop is not None:
+        prop_xml_name = naming.xml_property(int_prop.name)
+        prop_xml_name_literal = typescript_common.string_literal(prop_xml_name)
+        prop_name = typescript_naming.property_name(int_prop.name)
+
+        result.append(
+            Stripped(
+                f"""\
+test({typescript_common.string_literal(f"{prop_xml_name} read at the bounds of the safe integer range")}, () => {{
+{I}for (const text of ["9007199254740991", "-9007199254740991"]) {{
+{II}const instance = readWith({prop_xml_name_literal}, text);
+{II}expect(instance.{prop_name}).toBe(Number(text));
+{I}}}
+}});"""
+            )
+        )
+
+        result.append(
+            Stripped(
+                f"""\
+test({typescript_common.string_literal(f"{prop_xml_name} refused outside the safe integer range")}, () => {{
+{I}for (const text of ["9007199254740992", "-9007199254740992"]) {{
+{II}const instanceOrError = readEitherWith({prop_xml_name_literal}, text);
+{II}expect(instanceOrError.error?.message).toStrictEqual(
+{III}`Expected an integer, but got ${{text}}, ` +
+{IIII}"which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+{II});
+{I}}}
+}});"""
+            )
+        )
 
     return result
 

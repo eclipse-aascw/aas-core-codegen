@@ -430,18 +430,31 @@ function integerFromJsonable(
 ): OurCommon.Either<number, DeserializationError> {
   if (jsonable === null) {
     return newDeserializationError<number>(
-      "Expected an integer number, but got null"
+      "Expected an integer, but got: null"
     );
   }
   if (typeof jsonable !== "number") {
     return newDeserializationError<number>(
-      `Expected an integer number, but got: ${typeof jsonable}`
+      `Expected an integer, but got: ${typeof jsonable}`
     );
   }
 
+  // NOTE (mristin):
+  // ``Number.isInteger`` refuses an infinity and a not-a-number as well, and
+  // accepts a whole-valued literal such as ``1e2``.
   if (!Number.isInteger(jsonable)) {
     return newDeserializationError<number>(
-      `Expected an integer number, but got: ${jsonable}`
+      OurCommon.notWholeIntegerMessage(jsonable)
+    );
+  }
+
+  // NOTE (mristin):
+  // ``JSON.parse`` rounds a big integer literal to the nearest double, but
+  // the rounded value is still outside the safe integer range, so the check
+  // catches it.
+  if (!Number.isSafeInteger(jsonable)) {
+    return newDeserializationError<number>(
+      OurCommon.unsafeIntegerMessage(jsonable)
     );
   }
 
@@ -744,21 +757,22 @@ export class SerializationError extends Error {
 /**
  * Serialize `that` integer to a JSON-able value.
  *
- * Only the integers in the range [-2^53 + 1, 2^53 - 1] are serialized. Outside
- * of it, an integer can not be exactly represented as a 64-bit floating-point
- * number, which is what the JSON de-serializers of the other languages read
- * a number into.
+ * Only the integers in the safe integer range [-2^53 + 1, 2^53 - 1] are
+ * serialized. Outside of it, an integer can not be exactly represented as
+ * a 64-bit floating-point number, which is what the JSON de-serializers of
+ * the other languages read a number into. As a TypeScript `number` holds
+ * a fraction, an infinity and a not-a-number as well, we refuse them, too.
  *
  * @param that - integer to be serialized
  * @returns `that`, unchanged
- * @throws {@link SerializationError} if outside the range
+ * @throws {@link SerializationError} if not a safe integer
  */
 function integerToJsonable(that: number): number {
-  if (!Number.isFinite(that) || that < -9007199254740991 || that > 9007199254740991) {
-    throw new SerializationError(
-      `The integer can not be serialized to JSON as it is outside ` +
-        `the range [-2^53 + 1, 2^53 - 1]: ${that}`
-    );
+  if (!Number.isInteger(that)) {
+    throw new SerializationError(OurCommon.notWholeIntegerMessage(that));
+  }
+  if (!Number.isSafeInteger(that)) {
+    throw new SerializationError(OurCommon.unsafeIntegerMessage(that));
   }
   return that;
 }

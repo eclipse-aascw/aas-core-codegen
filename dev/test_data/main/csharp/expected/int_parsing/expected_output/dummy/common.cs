@@ -212,6 +212,58 @@ namespace dummy
         }  // public static class StringHelpers
 
         /// <summary>
+        /// Check whether <paramref name="value" /> is a safe integer, <em>i.e.</em>,
+        /// whether it lies in the range [-2^53 + 1, 2^53 - 1].
+        /// </summary>
+        /// <remarks>
+        /// JSON knows a single numeric type, which the SDKs in other languages read
+        /// into a 64-bit floating-point number, so an integer outside this range might
+        /// be read as a different number. The verification, the de/serialization and
+        /// <see cref="ParseSafeInt" /> all use this check, so that an instance which
+        /// passes the verification can always be serialized.
+        /// </remarks>
+        /// <param name="value">integer to be checked</param>
+        /// <returns>true if <paramref name="value" /> is a safe integer</returns>
+        public static bool IsSafeInteger(long value)
+        {
+            return -9007199254740991L <= value && value <= 9007199254740991L;
+        }
+
+        /// <summary>
+        /// Check whether <paramref name="value" /> is a safe integer.
+        /// </summary>
+        /// <remarks>
+        /// See <see cref="IsSafeInteger(long)" /> for what a safe integer is.
+        /// </remarks>
+        /// <param name="value">integer to be checked</param>
+        /// <returns>true if <paramref name="value" /> is a safe integer</returns>
+        public static bool IsSafeInteger(ulong value)
+        {
+            return value <= long.MaxValue && IsSafeInteger((long)value);
+        }
+
+        /// <summary>
+        /// Check whether the whole number <paramref name="value" /> lies in the safe
+        /// integer range.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// See <see cref="IsSafeInteger(long)" /> for what a safe integer is.
+        /// </para>
+        /// <para>
+        /// We check only the range, so the caller has to check first that
+        /// <paramref name="value" /> is a whole number. A not-a-number lies outside
+        /// the range.
+        /// </para>
+        /// </remarks>
+        /// <param name="value">whole number to be checked</param>
+        /// <returns>true if <paramref name="value" /> is a safe integer</returns>
+        public static bool IsSafeInteger(double value)
+        {
+            return -9007199254740991.0 <= value && value <= 9007199254740991.0;
+        }
+
+        /// <summary>
         /// Parse <paramref name="text" /> as a safe integer.
         /// </summary>
         /// <remarks>
@@ -222,7 +274,13 @@ namespace dummy
         /// We accept only an optional sign followed by the ASCII digits, and only
         /// the safe integers, <em>i.e.</em>, the integers within <c>-(2^53 - 1)</c>
         /// and <c>2^53 - 1</c>, which a double-precision floating-point number
-        /// represents exactly. This way, all the SDKs behave the same.
+        /// represents exactly.
+        /// </para>
+        /// <para>
+        /// We check the safe range even though a <c>long</c> could hold larger
+        /// integers. TypeScript represents the integers as <c>number</c>, which holds
+        /// them exactly only within the safe range, and all the SDKs check the same
+        /// range so that the invariants which parse a text behave the same everywhere.
         /// </para>
         /// </remarks>
         /// <param name="text">to be parsed</param>
@@ -262,8 +320,7 @@ namespace dummy
                 // overflow a long.
                 value = value * 10 + (character - '0');
 
-                // NOTE: This is 2^53 - 1.
-                if (value > 9007199254740991L)
+                if (!IsSafeInteger(value))
                 {
                     throw new System.ArgumentException(
                         $"Expected a safe integer, but got a text out of its range: {text}");

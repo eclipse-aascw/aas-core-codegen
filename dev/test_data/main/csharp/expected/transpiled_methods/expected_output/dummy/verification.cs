@@ -100,6 +100,13 @@ namespace dummy
                         "Parity is either zero or one.");
                 }
 
+                foreach (var error in Verification.Verify_long(that.Count))
+                {
+                    error.PrependSegment(
+                        new Reporting.NameSegment("count"));
+                    yield return error;
+                }
+
                 if (that.Kind.HasValue)
                 {
                     foreach (var error in Verification.VerifyKind(that.Kind.Value))
@@ -151,6 +158,13 @@ namespace dummy
                         "Prefix is at most three long.");
                 }
 
+                foreach (var error in Verification.Verify_long(that.Count))
+                {
+                    error.PrependSegment(
+                        new Reporting.NameSegment("count"));
+                    yield return error;
+                }
+
                 if (that.Kind.HasValue)
                 {
                     foreach (var error in Verification.VerifyKind(that.Kind.Value))
@@ -188,6 +202,36 @@ namespace dummy
             {
                 yield return new Reporting.Error(
                     $"Invalid Kind: {that}");
+            }
+        }
+
+        /// <summary>
+        /// Report that the integer <paramref name="value" /> is not a safe integer.
+        /// </summary>
+        /// <remarks>
+        /// See <see cref="Common.IsSafeInteger(long)" /> for what a safe integer is.
+        /// </remarks>
+        /// <param name="value">integer outside the safe integer range</param>
+        /// <returns>the cause of the error</returns>
+        internal static string UnsafeIntegerMessage(System.IFormattable value)
+        {
+            return $"Expected an integer, but got {value}, " +
+                "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]";
+        }
+
+        /// <summary>
+        /// Verify that <paramref name="that" /> lies in the safe integer range.
+        /// </summary>
+        /// <remarks>
+        /// See <see cref="Common.IsSafeInteger(long)" /> for what a safe integer is.
+        /// </remarks>
+        private static IEnumerable<Reporting.Error> Verify_long(
+            long that)
+        {
+            if (!Common.IsSafeInteger(that))
+            {
+                yield return new Reporting.Error(
+                    UnsafeIntegerMessage(that));
             }
         }
     }  // public static class Verification

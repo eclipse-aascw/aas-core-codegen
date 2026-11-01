@@ -15,6 +15,8 @@ import dummy.visitation.AbstractTransformer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import dummy.verification.Verification;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashSet;
@@ -78,15 +80,54 @@ public class Jsonization {
       }
 
       /** Convert {@code value} to a long 64-bit integer.
+       *
+       * <p>A whole number such as {@code 5.0} or {@code 1e2} is accepted as
+       * an integer, since JSON has a single number type. The integer has to lie in
+       * the safe integer range [-2^53 + 1, 2^53 - 1].
+       *
        * @param node JSON node to be parsed
        */
       private static Reporting.Result<Long> tryLongFrom(JsonNode value) {
-        if (!value.isIntegralNumber()) {
+        if (!value.isNumber()) {
           final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonValue of Long, but got " + value.getNodeType());
+            "Expected an integer, but got: " + value.getNodeType());
           return Reporting.Result.failure(error);
         }
-        return Reporting.Result.success(value.asLong());
+
+        switch (value.numberType()) {
+          case INT:
+          case LONG: {
+            final long integer = value.longValue();
+            if (Verification.isSafeInteger(integer)) {
+              return Reporting.Result.success(integer);
+            }
+            break;
+          }
+
+          case BIG_INTEGER: {
+            final BigInteger integer = value.bigIntegerValue();
+            if (Verification.isSafeInteger(integer)) {
+              return Reporting.Result.success(integer.longValue());
+            }
+            break;
+          }
+
+          default: {
+            final double number = value.doubleValue();
+            if (!Double.isFinite(number) || Math.rint(number) != number) {
+              return Reporting.Result.failure(new Reporting.Error(
+                "Expected an integer, but got " + number +
+                  ", which is not a whole number"));
+            }
+            if (Verification.isSafeInteger(number)) {
+              return Reporting.Result.success((long) number);
+            }
+            break;
+          }
+        }
+
+        return Reporting.Result.failure(new Reporting.Error(
+          Verification.integerOutsideSafeRangeMessage(value)));
       }
 
       /** Convert {@code value} to a double-precision 64-bit float.
@@ -487,18 +528,13 @@ public class Jsonization {
        * @param that value to be converted
        */
       private static JsonNode longToJsonNode(Long that) {
-        // NOTE (mristin):
-        // Outside this range an integer can not be exactly represented as a 64-bit
-        // floating-point number, which is what the JSON de-serializers of the other
-        // languages read a number into.
         final long primitiveThat = that.longValue();
-        if (primitiveThat < -9007199254740991L || primitiveThat > 9007199254740991L) {
+        if (!Verification.isSafeInteger(primitiveThat)) {
           throw new _SerializeFailure(
             new Reporting.Error(
-              "The integer can not be serialized to JSON as it is outside "
-                + "the range [-2^53 + 1, 2^53 - 1]: " + that));
+              Verification.integerOutsideSafeRangeMessage(primitiveThat)));
         }
-        return JsonNodeFactory.instance.numberNode(that);
+        return JsonNodeFactory.instance.numberNode(primitiveThat);
       }
 
       /**

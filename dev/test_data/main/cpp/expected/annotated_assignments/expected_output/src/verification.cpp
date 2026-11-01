@@ -37,6 +37,16 @@ Error::Error(
 
 // endregion struct Error
 
+namespace impl {
+std::wstring DescribeIntegerOutsideSafeRange(const std::wstring& integer) {
+  return common::Concat(
+    L"Expected an integer, but got ",
+    integer,
+    L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+  );
+}
+}  // namespace impl
+
 // region Verification functions
 
 bool TextIsAllowedUnlessLong(
@@ -424,7 +434,8 @@ namespace {
  */
 enum class Shape : std::uint32_t {
   kCode = 0,
-  kSomething = 1
+  kSomething = 1,
+  kINT64 = 2
 };  // enum class Shape
 
 /**
@@ -684,6 +695,8 @@ bool Something_19(
  * Give out the checks of the values of the \p shape.
  */
 const std::vector<Check>& ChecksOf(Shape shape) {
+  static const std::vector<Check> kNoChecks;
+
   switch (shape) {
     case Shape::kCode: {
       static const std::vector<Check> checks = {
@@ -784,6 +797,10 @@ const std::vector<Check>& ChecksOf(Shape shape) {
       };
       return checks;
     }
+    case Shape::kINT64:
+      // NOTE (mristin):
+      // These values are verified by the nested verification.
+      return kNoChecks;
     default:
       throw std::logic_error(
         common::Concat(
@@ -797,18 +814,79 @@ const std::vector<Check>& ChecksOf(Shape shape) {
 // endregion Checks
 
 /**
+ * \brief Report a single error whose cause depends on the value.
+ *
+ * The path of the error is empty, as \ref ErrorIterator prefixes it with
+ * the path to the value.
+ */
+class SingleErrorVerificator : public impl::IVerificator {
+ public:
+  explicit SingleErrorVerificator(
+    std::wstring cause
+  ) :
+    cause_(std::move(cause)) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    // NOTE (mristin):
+    // We copy the cause as the caller might take over the data members of
+    // the error, and we still need to be able to start again.
+    error_ = Error(cause_);
+  }
+
+  void Next() override {
+    error_ = common::nullopt;
+  }
+
+  bool Done() const override {
+    return !error_.has_value();
+  }
+
+  const Error& Get() const override {
+    return *error_;
+  }
+
+  Error& GetMutable() override {
+    return *error_;
+  }
+
+  long Index() const override {
+    return error_.has_value() ? 0 : -1;
+  }
+
+  std::unique_ptr<impl::IVerificator> Clone() const override {
+    return common::make_unique<SingleErrorVerificator>(*this);
+  }
+
+ private:
+  std::wstring cause_;
+  common::optional<Error> error_;
+};  // class SingleErrorVerificator
+
+/**
  * \brief Create the nested verification of the \p value, if its \p shape has one.
  *
  * \return nullptr if the shape has no nested verification
  */
 std::unique_ptr<impl::IVerificator> NewNestedVerificator(
-  Shape,
-  const void*
+  Shape shape,
+  const void* value
 ) {
-  // NOTE (mristin):
-  // The meta-model uses no JSON-able values, so no value needs a nested
-  // verification.
-  return nullptr;
+  switch (shape) {
+    case Shape::kINT64: {
+      const int64_t integer = *static_cast<const int64_t*>(value);
+      if (common::IsSafeInteger(integer)) {
+        return nullptr;
+      }
+
+      return common::make_unique<SingleErrorVerificator>(
+        impl::DescribeIntegerOutsideSafeRange(std::to_wstring(integer))
+      );
+    }
+    default:
+      return nullptr;
+  }
 }
 
 // region Iteration over the values
@@ -965,6 +1043,67 @@ std::unique_ptr<IIterator> One(
   Shape shape
 ) {
   return common::make_unique<OneIterator>(value, shape);
+}
+
+/**
+ * \brief Iterate over a single value which we keep a copy of.
+ *
+ * The getters of booleans, integers and floating-point numbers return by value,
+ * so these values have no address in the model which we could point to.
+ */
+template<typename T>
+class OneByValueIterator : public IIterator {
+ public:
+  OneByValueIterator(
+    T value,
+    Shape shape
+  ) :
+    value_(value),
+    shape_(shape),
+    done_(true) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    done_ = false;
+  }
+
+  void Next() override {
+    done_ = true;
+  }
+
+  bool Done() const override {
+    return done_;
+  }
+
+  const void* Value() const override {
+    return &value_;
+  }
+
+  Shape ShapeOf() const override {
+    return shape_;
+  }
+
+  void AppendToPath(iteration::Path&) const override {
+    // Intentionally empty, as the value itself is the end of the path.
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<OneByValueIterator<T> >(*this);
+  }
+
+ private:
+  T value_;
+  Shape shape_;
+  bool done_;
+};  // class OneByValueIterator
+
+template<typename T>
+std::unique_ptr<IIterator> OneByValue(
+  T value,
+  Shape shape
+) {
+  return common::make_unique<OneByValueIterator<T> >(value, shape);
 }
 
 /**
@@ -1137,15 +1276,288 @@ std::unique_ptr<IIterator> InProperty(
   return common::make_unique<InPropertyIterator>(property, std::move(child));
 }
 
+/**
+ * \brief Iterate over the values of every item of a list, one item after another.
+ *
+ * The iterator over an item is built only once the iteration reaches the item.
+ */
+template<typename T>
+class EachIterator : public IIterator {
+ public:
+  /**
+   * Build the iterator over the values of an item
+   */
+  typedef std::unique_ptr<IIterator> (*OverItem)(const T& item, bool recursive);
+
+  EachIterator(
+    const std::vector<T>* items,
+    OverItem over_item,
+    bool recursive
+  ) :
+    items_(items),
+    over_item_(over_item),
+    recursive_(recursive),
+    index_(0) {
+    // Intentionally empty.
+  }
+
+  EachIterator(const EachIterator<T>& other) :
+    items_(other.items_),
+    over_item_(other.over_item_),
+    recursive_(other.recursive_),
+    index_(other.index_),
+    item_(other.item_ == nullptr ? nullptr : other.item_->Clone()) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    index_ = 0;
+    item_ = nullptr;
+    SkipDoneItems();
+  }
+
+  void Next() override {
+    item_->Next();
+    SkipDoneItems();
+  }
+
+  bool Done() const override {
+    return index_ >= items_->size();
+  }
+
+  const void* Value() const override {
+    return item_->Value();
+  }
+
+  Shape ShapeOf() const override {
+    return item_->ShapeOf();
+  }
+
+  void AppendToPath(iteration::Path& path) const override {
+    path.segments.emplace_back(
+      common::make_unique<iteration::IndexSegment>(index_)
+    );
+    item_->AppendToPath(path);
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<EachIterator<T> >(*this);
+  }
+
+ private:
+  const std::vector<T>* items_;
+  OverItem over_item_;
+  bool recursive_;
+
+  /**
+   * Index of the item we currently iterate over
+   */
+  std::size_t index_;
+
+  /**
+   * Iterator over the current item, built once we reached the item
+   */
+  std::unique_ptr<IIterator> item_;
+
+  /**
+   * Move on to the next items, and build their iterators, until one is not done.
+   */
+  void SkipDoneItems() {
+    while (index_ < items_->size()) {
+      if (item_ == nullptr) {
+        item_ = over_item_((*items_)[index_], recursive_);
+        item_->Start();
+      }
+
+      if (!item_->Done()) {
+        return;
+      }
+
+      item_ = nullptr;
+      ++index_;
+    }
+  }
+};  // class EachIterator
+
+template<typename T>
+std::unique_ptr<IIterator> Each(
+  const std::vector<T>& items,
+  std::unique_ptr<IIterator> (*over_item)(const T& item, bool recursive),
+  bool recursive
+) {
+  return common::make_unique<EachIterator<T> >(&items, over_item, recursive);
+}
+
+/**
+ * \brief Iterate over the values of an instance, dispatched on its runtime type.
+ *
+ * Defined below, once all the classes have been covered.
+ */
+std::unique_ptr<IIterator> DispatchOnModelType(
+  const types::IClass& instance,
+  bool recursive
+);
+
+/**
+ * \brief Iterate recursively over the values of an instance referenced from
+ * another instance.
+ *
+ * We dispatch on the runtime type of the instance only in \ref Start so that
+ * we descend into the instance only once the iteration reaches it.
+ */
+class DispatchingIterator : public IIterator {
+ public:
+  explicit DispatchingIterator(
+    const types::IClass* instance
+  ) :
+    instance_(instance) {
+    // Intentionally empty.
+  }
+
+  DispatchingIterator(const DispatchingIterator& other) :
+    instance_(other.instance_),
+    child_(other.child_ == nullptr ? nullptr : other.child_->Clone()) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    child_ = DispatchOnModelType(*instance_, true);
+    child_->Start();
+  }
+
+  void Next() override {
+    child_->Next();
+  }
+
+  bool Done() const override {
+    return child_->Done();
+  }
+
+  const void* Value() const override {
+    return child_->Value();
+  }
+
+  Shape ShapeOf() const override {
+    return child_->ShapeOf();
+  }
+
+  void AppendToPath(iteration::Path& path) const override {
+    child_->AppendToPath(path);
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<DispatchingIterator>(*this);
+  }
+
+ private:
+  const types::IClass* instance_;
+  std::unique_ptr<IIterator> child_;
+};  // class DispatchingIterator
+
+std::unique_ptr<IIterator> Over(
+  const types::IClass& instance,
+  bool recursive
+) {
+  if (!recursive) {
+    // NOTE (mristin):
+    // In the non-recursive mode, we verify only the instance itself, but not
+    // the instances that it references.
+    return Empty();
+  }
+
+  return common::make_unique<DispatchingIterator>(&instance);
+}
+
+template<typename T>
+std::unique_ptr<IIterator> ThroughPointer(
+  const std::shared_ptr<T>& instance,
+  bool recursive
+) {
+  return Over(*instance, recursive);
+}
+
+using listOf_Parent = std::vector<
+  std::shared_ptr<types::IParent>
+>;
+
+std::unique_ptr<IIterator> Over_listOf_Parent(
+  const listOf_Parent& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(value, &ThroughPointer<types::IParent>, recursive);
+}
+
+std::unique_ptr<IIterator> Over_ParentOrItem(
+  const types::ParentOrItem& value,
+  bool recursive
+) {
+  switch (value.index()) {
+    case 0:
+      return Over(*common::get<0>(value), recursive);
+    case 1:
+      return Over(*common::get<1>(value), recursive);
+    default:
+      throw std::logic_error("Invalid variant index");
+  }
+}
+
+std::unique_ptr<IIterator> Over_ChildA(
+  const types::IChildA& that,
+  bool
+) {
+  return InProperty(
+    iteration::Property::kAOnly,
+    OneByValue(that.a_only(), Shape::kINT64)
+  );
+}
+
+std::unique_ptr<IIterator> Over_ChildB(
+  const types::IChildB& that,
+  bool
+) {
+  return InProperty(
+    iteration::Property::kBOnly,
+    OneByValue(that.b_only(), Shape::kINT64)
+  );
+}
+
 std::unique_ptr<IIterator> Over_Something(
   const types::ISomething& that,
-  bool
+  bool recursive
 ) {
   return Chain(
     One(&that, Shape::kSomething),
     InProperty(
+      iteration::Property::kNumber,
+      OneByValue(that.number(), Shape::kINT64)
+    ),
+    InProperty(
       iteration::Property::kCode,
       One(&that.code(), Shape::kCode)
+    ),
+    InProperty(
+      iteration::Property::kParent,
+      Over(*that.parent(), recursive)
+    ),
+    InProperty(
+      iteration::Property::kParents,
+      Over_listOf_Parent(that.parents(), recursive)
+    ),
+    InProperty(
+      iteration::Property::kOptionalParent,
+      that.optional_parent().has_value()
+        ? Over(*(*that.optional_parent()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kOptionalMember,
+      that.optional_member().has_value()
+        ? Over_ParentOrItem((*that.optional_member()), recursive)
+        : Empty()
     )
   );
 }
@@ -1158,6 +1570,16 @@ std::unique_ptr<IIterator> DispatchOnModelType(
   bool recursive
 ) {
   switch (instance.model_type()) {
+    case types::ModelType::kChildA:
+      return Over_ChildA(
+        dynamic_cast<const types::IChildA&>(instance),
+        recursive
+      );
+    case types::ModelType::kChildB:
+      return Over_ChildB(
+        dynamic_cast<const types::IChildB&>(instance),
+        recursive
+      );
     case types::ModelType::kSomething:
       return Over_Something(
         dynamic_cast<const types::ISomething&>(instance),

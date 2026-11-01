@@ -10,6 +10,7 @@ import javax.xml.stream.XMLEventReader;
 import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
+import java.math.BigInteger;
 import java.util.Iterator;
 import java.util.regex.Pattern;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -17,6 +18,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import dummy.reporting.Reporting;
+import dummy.verification.Verification;
 import dummy.xmlcommon.XmlCommon;
 
 /**
@@ -214,17 +216,20 @@ public final class XmlRpc {
         // does a JSON document, so reading every double element as a double
         // node would silently turn the 1 of a document into a 1.0 on the way
         // through XML, and back again.
+        //
+        // Such an integer has to be a safe integer, exactly as in JSON. We read
+        // it as a big integer first, so that a numeral beyond a long is refused
+        // rather than truncated.
         if (text.indexOf('.') < 0
             && text.indexOf('e') < 0
             && text.indexOf('E') < 0) {
-            try {
-                return Reporting.Result.success(
-                    JsonNodeFactory.instance.numberNode(Long.parseLong(text)));
-            } catch (NumberFormatException exception) {
-                // NOTE (mristin):
-                // The numeral does not fit a long, so it stays a double -- which
-                // is what a JSON parser would give for it as well.
+            final BigInteger integer = new BigInteger(text);
+            if (!Verification.isSafeInteger(integer)) {
+                return Reporting.Result.failure(new Reporting.Error(
+                    Verification.jsonAbleIntegerOutsideSafeRangeMessage(integer)));
             }
+            return Reporting.Result.success(
+                JsonNodeFactory.instance.numberNode(integer.longValue()));
         }
 
         return Reporting.Result.success(
@@ -481,15 +486,13 @@ public final class XmlRpc {
         }
 
         if (that.isNumber()) {
-            final double value = that.doubleValue();
-
             // NOTE (mristin):
-            // JSON knows neither an infinity nor a not-a-number, so neither is
-            // a JSON-able value, and readXmlRpcDouble refuses to read either back.
-            if (Double.isInfinite(value) || Double.isNaN(value)) {
-                throw new XmlCommon.SerializeFailure(new Reporting.Error(
-                    "Expected a JSON-able value, but got the number " + value +
-                    ", which is neither finite nor representable in JSON"));
+            // We check the number exactly as the verification and the JSON
+            // de/serialization do, and readXmlRpcDouble refuses to read back
+            // what we refuse here.
+            final String cause = Verification.checkJsonAbleNumber(that);
+            if (cause != null) {
+                throw new XmlCommon.SerializeFailure(new Reporting.Error(cause));
             }
 
             XmlCommon.writeElementInNoNamespace(

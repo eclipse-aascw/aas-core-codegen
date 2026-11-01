@@ -126,66 +126,6 @@ func boolFromJsonable(
 	return
 }
 
-// Parse `jsonable` as a 64-bit integer, or return an error.
-func int64FromJsonable(
-	jsonable interface{},
-) (result int64, err error) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected an integer number, but got null",
-		)
-		return
-	}
-
-	f, ok := jsonable.(float64)
-	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected an integer number, but got %T",
-				jsonable,
-			),
-		)
-		return
-	}
-
-	if math.IsNaN(f) {
-		err = newDeserializationError(
-			"Expected an integer number, but got a NaN",
-		)
-		return
-	}
-
-	if math.IsInf(f, 0) {
-		err = newDeserializationError(
-			"Expected an integer number, but got an infinity",
-		)
-		return
-	}
-
-	if f != math.Trunc(f) {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected an integer number, but got a non-integer: %v",
-				f,
-			),
-		)
-		return
-	}
-
-	result = int64(f)
-	if f != float64(result) {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected an integer number fitting into int64, but got: %v",
-				jsonable,
-			),
-		)
-		return
-	}
-
-	return
-}
-
 // Parse `jsonable` as a 64-bit float, or return an error.
 func float64FromJsonable(
 	jsonable interface{},
@@ -523,30 +463,6 @@ func mustSerializationError(err error) *SerializationError {
 		)
 	}
 	return seriaErr
-}
-
-// Try to cast `that` to a float64 and box it as a JSON-able value, or
-// return an error.
-//
-// The result is returned as `interface{}`, not the more specific
-// `float64`, so that this function itself can be passed on as a bare
-// reference wherever a `func(int64) (interface{}, error)` is expected,
-// e.g. as an item (de)serializer in a list or a tuple.
-func int64ToJsonable(
-	that int64,
-) (result interface{}, err error) {
-	if that > 9007199254740991 || that < -9007199254740991 {
-		err = newSerializationError(
-			fmt.Sprintf(
-				"64-bit integer can not be represented as 64-bit float in JSON: %v",
-				that,
-			),
-		)
-		return
-	}
-
-	result = float64(that);
-	return
 }
 
 // Box `that` as a JSON-able value, or return an error.

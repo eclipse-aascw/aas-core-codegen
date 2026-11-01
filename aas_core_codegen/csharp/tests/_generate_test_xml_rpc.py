@@ -441,6 +441,48 @@ public void Test_serialize_rejects_non_finite_number()
         Stripped(
             f"""\
 [Test]
+public void Test_serialize_rejects_an_integer_outside_the_safe_range()
+{{
+{I}foreach (long value in new[] {{ 9007199254740992L, -9007199254740992L }})
+{I}{{
+{II}var exception = Assert.Throws<Our.SerializationException>(
+{III}() => SerializeToString(
+{IIII}new Nodes.JsonArray(Nodes.JsonValue.Create(value))));
+{II}Assert.AreEqual(
+{III}$"Expected a JSON-able value, but got the integer {{value}}, " +
+{III}"which is outside the safe integer range [-2^53 + 1, 2^53 - 1]",
+{III}exception!.Cause);
+{II}Assert.AreEqual("[0]", exception!.Path);
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+[Test]
+public void Test_round_trip_an_integer_at_the_bounds_of_the_safe_range()
+{{
+{I}foreach (long value in new[] {{ 9007199254740991L, -9007199254740991L }})
+{I}{{
+{II}string text = SerializeToString(Nodes.JsonValue.Create(value));
+
+{II}Nodes.JsonNode? roundTripped = DeserializeFromString(
+{III}text, out Our.Reporting.Error? error);
+
+{II}Assert.IsNull(error);
+{II}Assert.IsNotNull(roundTripped);
+
+{II}// NOTE (mristin):
+{II}// XML-RPC carries every JSON number in a <double>, which represents
+{II}// a safe integer exactly.
+{II}bool ok = roundTripped!.AsValue().TryGetValue(out double gotValue);
+{II}Assert.IsTrue(ok);
+{II}Assert.AreEqual((double)value, gotValue);
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+[Test]
 public void Test_deserialize_rejects_non_finite_number()
 {{
 {I}// NOTE (mristin):

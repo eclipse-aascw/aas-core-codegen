@@ -16,6 +16,59 @@ from aas_core_codegen.csharp.common import (
 )
 
 
+def generate_numeric_place_mutation(
+    numeric_place: intermediate.NumericPlace,
+) -> Stripped:
+    """
+    Generate the statement putting ``value`` at the ``numeric_place`` of ``instance``.
+
+    The generated tests of the safe integers put their values at the very same
+    places, so they share this.
+    """
+    prop_name = csharp_naming.property_name(numeric_place.prop.name)
+
+    if numeric_place.index is None:
+        return Stripped(f"instance.{prop_name} = value;")
+
+    if numeric_place.in_list:
+        if numeric_place.a_type is intermediate.PrimitiveType.FLOAT:
+            value_type = "double"
+            zero_literal = "0.0"
+        else:
+            value_type = "long"
+            zero_literal = "0L"
+
+        # NOTE (mristin):
+        # The value goes to the position indicated by the numeric place so
+        # that a serializer which always reports the index 0 does not pass.
+        items_joined = ", ".join(
+            "value" if i == numeric_place.index else zero_literal
+            for i in range(numeric_place.index + 1)
+        )
+
+        return Stripped(
+            f"instance.{prop_name} = new List<{value_type}>() {{ {items_joined} }};"
+        )
+
+    tuple_type_anno = numeric_place.prop.type_annotation
+    assert isinstance(tuple_type_anno, intermediate.TupleTypeAnnotation), (
+        f"Expected a tuple at the numeric place of "
+        f"{numeric_place.cls.name}.{numeric_place.prop.name}, "
+        f"but got: {tuple_type_anno}"
+    )
+
+    items_joined = ",\n".join(
+        "value" if i == numeric_place.index else f"instance.{prop_name}.Item{i + 1}"
+        for i in range(len(tuple_type_anno.items))
+    )
+
+    return Stripped(
+        f"""\
+instance.{prop_name} = (
+{I}{indent_but_first_line(items_joined, I)});"""
+    )
+
+
 def _generate_serialization_failure_tests(
     symbol_table: intermediate.SymbolTable,
 ) -> List[Stripped]:
@@ -25,7 +78,6 @@ def _generate_serialization_failure_tests(
     for numeric_place in intermediate.numeric_places(symbol_table):
         if numeric_place.a_type is intermediate.PrimitiveType.FLOAT:
             value_type = "double"
-            zero_literal = "0.0"
             what = "non_finite"
             values_literal = (
                 "{ System.Double.PositiveInfinity, "
@@ -33,50 +85,17 @@ def _generate_serialization_failure_tests(
             )
         else:
             value_type = "long"
-            zero_literal = "0L"
             what = "out_of_range"
             values_literal = "{ 9007199254740992L, -9007199254740992L }"
 
         prop_name = csharp_naming.property_name(numeric_place.prop.name)
 
-        if numeric_place.index is None:
-            mutation = Stripped(f"instance.{prop_name} = value;")
-            expected_path = f"{prop_name}"
-        elif numeric_place.in_list:
-            # NOTE (mristin):
-            # The value goes to the position indicated by the numeric place so
-            # that a serializer which always reports the index 0 does not pass.
-            items_joined = ", ".join(
-                "value" if i == numeric_place.index else zero_literal
-                for i in range(numeric_place.index + 1)
-            )
-
-            mutation = Stripped(
-                f"instance.{prop_name} = "
-                f"new List<{value_type}>() {{ {items_joined} }};"
-            )
-            expected_path = f"{prop_name}[{numeric_place.index}]"
-        else:
-            tuple_type_anno = numeric_place.prop.type_annotation
-            assert isinstance(tuple_type_anno, intermediate.TupleTypeAnnotation), (
-                f"Expected a tuple at the numeric place of "
-                f"{numeric_place.cls.name}.{numeric_place.prop.name}, "
-                f"but got: {tuple_type_anno}"
-            )
-
-            items_joined = ",\n".join(
-                "value"
-                if i == numeric_place.index
-                else f"instance.{prop_name}.Item{i + 1}"
-                for i in range(len(tuple_type_anno.items))
-            )
-
-            mutation = Stripped(
-                f"""\
-instance.{prop_name} = (
-{I}{indent_but_first_line(items_joined, I)});"""
-            )
-            expected_path = f"{prop_name}[{numeric_place.index}]"
+        mutation = generate_numeric_place_mutation(numeric_place)
+        expected_path = (
+            prop_name
+            if numeric_place.index is None
+            else f"{prop_name}[{numeric_place.index}]"
+        )
 
         cls_name_json = naming.json_model_type(numeric_place.cls.name)
 

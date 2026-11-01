@@ -544,6 +544,72 @@ public class TestXmlizationOfConcreteClasses {
           + " is given twice, but got none");
     }
   } // public void testDuplicatePropertyFails
+
+  /**
+   * Read the first recorded example of ChildA with the content of
+   * the element {@code xmlName} replaced by {@code text}.
+   */
+  private static ChildA readWith(String xmlName, String text)
+    throws IOException, XMLStreamException {
+    final Path searchPath =
+      Paths.get(Common.TEST_DATA_DIR, "Xml", "Expected", "childA");
+    final List<Path> paths = Common.findPaths(searchPath, ".xml");
+
+    if (paths.isEmpty()) {
+      fail(
+        "Expected at least one recorded example of childA, but got none");
+    }
+
+    final String original =
+      new String(Files.readAllBytes(paths.get(0)), StandardCharsets.UTF_8);
+
+    final int start = original.indexOf("<" + xmlName + ">") + xmlName.length() + 2;
+    final int end = original.indexOf("</" + xmlName + ">");
+
+    final String patched =
+      original.substring(0, start) + text + original.substring(end);
+
+    final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
+    final XMLEventReader xmlReader =
+      xmlInputFactory.createXMLEventReader(new StringReader(patched));
+
+    return Xmlization.Deserialize.deserializeChildA(xmlReader);
+  }
+
+  @Test
+  public void testNumberReadFrom9007199254740991() throws IOException, XMLStreamException {
+    final ChildA instance =
+      readWith("number", "9007199254740991");
+
+    assertEquals(
+      Long.valueOf(9007199254740991L),
+      instance.getNumber());
+  } // public void testNumberReadFrom9007199254740991
+
+  @Test
+  public void testNumberReadFromMinus9007199254740991() throws IOException, XMLStreamException {
+    final ChildA instance =
+      readWith("number", "-9007199254740991");
+
+    assertEquals(
+      Long.valueOf(-9007199254740991L),
+      instance.getNumber());
+  } // public void testNumberReadFromMinus9007199254740991
+
+  @Test
+  public void testNumberReadOutsideTheSafeIntegerRange() throws IOException, XMLStreamException {
+    for (String text : new String[] {"9007199254740992", "-9007199254740992"}) {
+      try {
+        readWith("number", text);
+        fail("Expected the de-serialization of " + text + " to fail, but it succeeded");
+      } catch (XmlCommon.DeserializeException exception) {
+        assertEquals(
+          "Expected an integer, but got " + text
+            + ", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]",
+          exception.getReason().orElse(null));
+      }
+    }
+  } // public void testNumberReadOutsideTheSafeIntegerRange
 } // class TestXmlizationOfConcreteClasses
 
 // package dummy.tests

@@ -2,7 +2,8 @@
 
 # NOTE (mristin):
 # This module is private (it is emitted to ``src/``, never installed alongside
-# the public headers in ``include/``), included only by ``verification.cpp``.
+# the public headers in ``include/``), included by ``verification.cpp``, and by
+# ``jsonization.cpp`` for the shared ``CheckJsonAbleNumber``.
 # It provides ``JsonValueVerificator``, a hand-written ``impl::IVerificator``
 # (see ``verification.hpp``) which exhaustively walks a ``nlohmann::json``
 # value with an explicit, runtime stack -- unlike every other verificator in
@@ -27,6 +28,115 @@ from aas_core_codegen.cpp.common import (
     INDENT4 as IIII,
     INDENT5 as IIIII,
 )
+
+
+def _generate_check_json_able_number_declaration() -> Stripped:
+    """Generate the declaration of the check of a number in a JSON-able value."""
+    return Stripped(
+        """\
+/**
+ * \\brief Check that the number \\p json is a number of a JSON-able value.
+ *
+ * JSON knows a single numeric type, which all the other SDKs read into
+ * a 64-bit floating-point number. Hence a JSON-able number has to be finite,
+ * and an integer has to lie in the safe integer range [-2^53 + 1, 2^53 - 1],
+ * as for the integer properties of the model.
+ *
+ * The verification, the de-serialization and the serialization of a JSON-able
+ * value all use this check, so that they agree on what a JSON-able number is.
+ *
+ * \\param json number to be checked
+ * \\return the cause why \\p json is not JSON-able, if it is not
+ */
+common::optional<std::wstring> CheckJsonAbleNumber(
+  const nlohmann::json& json
+);"""
+    )
+
+
+def _generate_check_json_able_number_implementation() -> Stripped:
+    """
+    Generate the check of a number in a JSON-able value.
+
+    The verification, the de-serialization and the serialization of a JSON-able
+    value all use it, so that they agree on what a JSON-able number is.
+    """
+    return Stripped(
+        f"""\
+namespace {{
+/**
+ * \\brief Describe that the \\p integer of a JSON-able value lies outside
+ * the safe integer range.
+ *
+ * \\param integer textual representation of the integer
+ * \\return the cause of the error
+ */
+std::wstring DescribeJsonAbleIntegerOutsideSafeRange(
+{I}const std::wstring& integer
+) {{
+{I}return common::Concat(
+{II}L"Expected a JSON-able value, but got the integer ",
+{II}integer,
+{II}L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+{I});
+}}
+}}  // namespace
+
+/**
+ * \\brief Check that the number \\p json is a number of a JSON-able value.
+ *
+ * JSON knows a single numeric type, which all the other SDKs read into
+ * a 64-bit floating-point number. Hence a JSON-able number has to be finite,
+ * and an integer has to lie in the safe integer range [-2^53 + 1, 2^53 - 1],
+ * as for the integer properties of the model -- otherwise a reader might
+ * quietly get a different number than the one which was given.
+ *
+ * \\param json number to be checked
+ * \\return the cause why \\p json is not JSON-able, if it is not
+ */
+common::optional<std::wstring> CheckJsonAbleNumber(
+{I}const nlohmann::json& json
+) {{
+{I}switch (json.type()) {{
+{II}case nlohmann::json::value_t::number_integer: {{
+{III}const int64_t integer = json.get<int64_t>();
+{III}if (!common::IsSafeInteger(integer)) {{
+{IIII}return DescribeJsonAbleIntegerOutsideSafeRange(std::to_wstring(integer));
+{III}}}
+{III}return common::nullopt;
+{II}}}
+
+{II}case nlohmann::json::value_t::number_unsigned: {{
+{III}const uint64_t integer = json.get<uint64_t>();
+{III}if (!common::IsSafeInteger(integer)) {{
+{IIII}return DescribeJsonAbleIntegerOutsideSafeRange(std::to_wstring(integer));
+{III}}}
+{III}return common::nullopt;
+{II}}}
+
+{II}case nlohmann::json::value_t::number_float: {{
+{III}// NOTE (mristin):
+{III}// JSON knows neither an infinity nor a not-a-number, so we refuse both
+{III}// instead of silently writing them out as ``null``. The caller gives us
+{III}// an ``nlohmann::json`` which may well have been constructed
+{III}// programmatically, so a non-finite number can reach us even though no
+{III}// conformant parser would ever produce one.
+{III}const double number = json.get<double>();
+{III}if (!std::isfinite(number)) {{
+{IIII}return common::Concat(
+{IIIII}L"Expected a JSON-able value, but got the number ",
+{IIIII}std::to_wstring(number),
+{IIIII}L", which is neither finite nor representable in JSON"
+{IIII});
+{III}}}
+{III}return common::nullopt;
+{II}}}
+
+{II}default:
+{III}return common::nullopt;
+{I}}}
+}}"""
+    )
 
 
 def _generate_json_value_verificator_declaration() -> List[Stripped]:
@@ -175,6 +285,7 @@ class JsonValueVerificator : public impl::IVerificator {{
 def _generate_json_value_verificator_implementation() -> List[Stripped]:
     """Generate the implementation of ``JsonValueVerificator``."""
     return [
+        _generate_check_json_able_number_implementation(),
         Stripped(
             f"""\
 namespace {{
@@ -198,19 +309,8 @@ common::optional<std::wstring> CheckShallowly(
 {II});
 {I}}}
 
-{I}// NOTE (mristin):
-{I}// JSON knows neither an infinity nor a not-a-number, so neither is
-{I}// a JSON-able value, even though ``nlohmann::json`` will happily hold
-{I}// one if it was constructed programmatically. This mirrors what the
-{I}// jsonization refuses to serialize.
-{I}if (value.is_number_float() && !std::isfinite(value.get<double>())) {{
-{II}return common::make_optional<std::wstring>(
-{III}common::Concat(
-{IIII}L"Expected a JSON-able value, but got the number ",
-{IIII}std::to_wstring(value.get<double>()),
-{IIII}L", which is neither finite nor representable in JSON"
-{III})
-{II});
+{I}if (value.is_number()) {{
+{II}return CheckJsonAbleNumber(value);
 {I}}}
 
 {I}return common::nullopt;
@@ -491,6 +591,7 @@ def generate_header(library_namespace: Stripped) -> str:
         ),
         cpp_common.generate_namespace_opening(library_namespace),
         Stripped(f"namespace {cpp_common.VERIFICATION_NAMESPACE} {{"),
+        _generate_check_json_able_number_declaration(),
         *_generate_json_value_verificator_declaration(),
         Stripped(f"}}  // namespace {cpp_common.VERIFICATION_NAMESPACE}"),
         cpp_common.generate_namespace_closing(library_namespace),

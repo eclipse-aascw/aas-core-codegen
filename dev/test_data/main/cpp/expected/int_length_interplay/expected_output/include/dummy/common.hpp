@@ -10125,6 +10125,43 @@ size_t LenTuple(const std::tuple<T...>&) {
  */
 int64_t FloorMod(int64_t dividend, int64_t divisor);
 
+/**
+ * \brief Check that the integer \p value lies in the safe integer range
+ * [-2^53 + 1, 2^53 - 1].
+ *
+ * JSON knows a single numeric type, which many readers parse into a 64-bit
+ * floating-point number. Outside the safe integer range, such a reader might
+ * quietly get a different integer than the one which was written.
+ *
+ * The verification, the JSON and XML de/serialization and ParseSafeInt all
+ * use this check, so that an instance which passes the verification can be
+ * serialized to JSON.
+ *
+ * \param value to be checked
+ * \return true if \p value lies in the range
+ */
+bool IsSafeInteger(int64_t value);
+
+/**
+ * \brief Check that the unsigned integer \p value lies in the safe integer range
+ * [-2^53 + 1, 2^53 - 1].
+ *
+ * \param value to be checked
+ * \return true if \p value lies in the range
+ */
+bool IsSafeInteger(uint64_t value);
+
+/**
+ * \brief Check that the whole number \p value lies in the safe integer range
+ * [-2^53 + 1, 2^53 - 1].
+ *
+ * We check only the range. The caller has to check that \p value is whole.
+ *
+ * \param value to be checked
+ * \return true if \p value lies in the range, false for a not-a-number
+ */
+bool IsSafeInteger(double value);
+
 }  // namespace common
 /**@}*/
 

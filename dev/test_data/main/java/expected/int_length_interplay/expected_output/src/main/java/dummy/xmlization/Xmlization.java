@@ -24,6 +24,7 @@ import dummy.types.impl.*;
 import dummy.types.model.*;
 import dummy.visitation.*;
 import dummy.xmlcommon.XmlCommon;
+import dummy.verification.Verification;
 
 /**
  * Provide de/serialization of meta-model classes to/from XML.
@@ -212,11 +213,18 @@ public class Xmlization {
 
     private static Reporting.Result<Long> readTextAs_long(
       XMLEventReader reader, boolean isEmpty) {
-      return readText(
+      final Reporting.Result<Long> result = readText(
         reader,
         isEmpty,
         _DeserializeImplementation::readContentAsLong,
         "Long");
+
+      if (result.isError() || Verification.isSafeInteger(result.getResult())) {
+        return result;
+      }
+
+      return Reporting.Result.failure(new Reporting.Error(
+        Verification.integerOutsideSafeRangeMessage(result.getResult())));
     }
 
     private static Reporting.Result<List<Long>> readListOf_long(
@@ -535,6 +543,42 @@ public class Xmlization {
       }
     }
 
+    /**
+     * Write {@code that} as XML content, provided that it is a safe integer.
+     *
+     * <p>This is the {@link ContentWriter} of every {@code long}-typed
+     * value, be it a property, a list item or a tuple item. An integer outside
+     * the safe integer range [-2^53 + 1, 2^53 - 1] is refused, exactly as in
+     * the JSON serialization, so that what XML holds JSON can hold as well.
+     */
+    private static void writeLongContent(
+      Long that,
+      XMLStreamWriter writer) throws XMLStreamException {
+      final long primitiveThat = that.longValue();
+      if (!Verification.isSafeInteger(primitiveThat)) {
+        throw new XmlCommon.SerializeFailure(
+          new Reporting.Error(
+            Verification.integerOutsideSafeRangeMessage(primitiveThat)));
+      }
+      writer.writeCharacters(Long.toString(primitiveThat));
+    }
+
+    private static void writeListOf_long(
+      List<? extends Long> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (Long item : that) {
+          writeAtV_long(item, writer);
+          index++;
+        }
+      } catch (XmlCommon.SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
     private static void writeListOf_stringified(
       List<?> that,
       XMLStreamWriter writer) {
@@ -549,6 +593,16 @@ public class Xmlization {
           new Reporting.IndexSegment(index));
         throw failure;
       }
+    }
+
+    private static void writeAtV_long(
+      Long that,
+      XMLStreamWriter writer) {
+      XmlCommon.writeElement(
+        "v",
+        that,
+        writer,
+        _VisitorWithWriter::writeLongContent);
     }
 
     private static void writeAtV_stringified(
@@ -569,7 +623,7 @@ public class Xmlization {
         "getNumbers()",
         that.getNumbers(),
         writer,
-        _VisitorWithWriter::writeListOf_stringified);
+        _VisitorWithWriter::writeListOf_long);
 
       writeProperty(
         "texts",
@@ -583,14 +637,14 @@ public class Xmlization {
         "getCount()",
         that.getCount(),
         writer,
-        XmlCommon::writeStringifiedContent);
+        _VisitorWithWriter::writeLongContent);
 
       writeOptionalProperty(
         "maybeCount",
         "getMaybeCount()",
         that.getMaybeCount(),
         writer,
-        XmlCommon::writeStringifiedContent);
+        _VisitorWithWriter::writeLongContent);
     }
 
     @Override

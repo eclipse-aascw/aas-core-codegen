@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	ourcommon "github.com/dummy-works/dummy/common"
 	xmlcommon "github.com/dummy-works/dummy/internal/xmlcommon"
 	ourtypes "github.com/dummy-works/dummy/types"
 )
@@ -499,6 +500,13 @@ func writeValueContent(
 		return
 	}
 
+	// NOTE (mristin):
+	// An int is widened to an int64 first, so that a single case below
+	// handles both, as in the JSON de/serialization and the verification.
+	if integer, ok := value.(int); ok {
+		value = int64(integer)
+	}
+
 	switch casted := value.(type) {
 		case bool:
 			// NOTE (mristin):
@@ -515,6 +523,23 @@ func writeValueContent(
 				func(anEncoder *xml.Encoder, aValue string) error {
 					return xmlcommon.WriteText(anEncoder, aValue)
 				},
+			)
+			return
+
+		case int64:
+			// NOTE (mristin):
+			// An integer is written as a `<double>`, just as JSON knows a single
+			// numeric type, and hence has to lie in the safe integer range.
+			if !ourcommon.IsSafeInteger(casted) {
+				err = xmlcommon.NewSerializationError(
+					ourcommon.NotJsonAbleIntegerMessage(casted),
+				)
+				return
+			}
+			err = xmlcommon.WriteElementInNoNamespace(
+				encoder, "double", undeclareNamespace,
+				float64(casted),
+				xmlcommon.WriteAsText_double,
 			)
 			return
 
@@ -567,8 +592,8 @@ func writeValueContent(
 		default:
 			err = xmlcommon.NewSerializationError(
 				fmt.Sprintf(
-					"Expected a JSON-able value (a bool, a float64, a string, "+
-					"a JsonArray or a JsonObject), but got: %T",
+					"Expected a JSON-able value (a bool, a float64, an int, an int64, "+
+					"a string, a JsonArray or a JsonObject), but got: %T",
 					value,
 				),
 			)

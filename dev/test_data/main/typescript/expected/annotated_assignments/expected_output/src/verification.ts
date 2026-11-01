@@ -577,6 +577,22 @@ export function noneIsShortAndTextIsShort(
 }
 
 /**
+ * Verify that `that` is a safe integer so that it can be serialized to JSON.
+ *
+ * @param that - to be verified
+ * @returns errors, if any
+ */
+export function *verifyInteger(
+  that: number
+): IterableIterator<VerificationError> {
+  if (!Number.isInteger(that)) {
+    yield new VerificationError(OurCommon.notWholeIntegerMessage(that));
+  } else if (!Number.isSafeInteger(that)) {
+    yield new VerificationError(OurCommon.unsafeIntegerMessage(that));
+  }
+}
+
+/**
  * Verify the items of `that` recursively.
  */
 function *verify_ListOf_class(
@@ -612,21 +628,35 @@ class Verifier
   }
 
   *transformChildAWithContext(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     that: OurTypes.ChildA,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    // No verification has been defined for ChildA.
+    for (const error of verifyInteger(that.aOnly)) {
+      error.path.prepend(
+        new PropertySegment(
+          that,
+          "aOnly"
+        )
+      );
+      yield error;
+    }
   }
 
   *transformChildBWithContext(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     that: OurTypes.ChildB,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    // No verification has been defined for ChildB.
+    for (const error of verifyInteger(that.bOnly)) {
+      error.path.prepend(
+        new PropertySegment(
+          that,
+          "bOnly"
+        )
+      );
+      yield error;
+    }
   }
 
   *transformSomethingWithContext(
@@ -781,6 +811,16 @@ class Verifier
       yield new VerificationError(
         "The first parent as Child_a must have a small a_only"
       )
+    }
+
+    for (const error of verifyInteger(that.number)) {
+      error.path.prepend(
+        new PropertySegment(
+          that,
+          "number"
+        )
+      );
+      yield error;
     }
 
     for (const error of verifyCode(that.code)) {

@@ -646,7 +646,12 @@ SymbolTable(
         parsed=...),
       description=DescriptionOfSignature(
         summary='<paragraph>Check the ranges over the integers with a length as a bound.</paragraph>',
-        remarks=[],
+        remarks=[
+          textwrap.dedent("""\
+            <paragraph>The <literal>start</literal> is checked against the bounds before it is used as an index,
+            so that the invariant holds up even against integers as large as
+            <literal>2 ** 53</literal>. A negative <literal>start</literal> is refused, while a <literal>start</literal> beyond
+            the numbers leaves nothing to check.</paragraph>""")],
         arguments_by_name=[],
         returns=None,
         parsed=...),

@@ -5,6 +5,8 @@
 
 package dummy.common;
 
+import dummy.verification.Verification;
+
 /**
  * Provide string operations which follow the Python implementation, since
  * Python is the language of the meta-model specifications.
@@ -149,8 +151,12 @@ public final class StringHelpers {
    * transpilation. We accept only an optional sign followed by the ASCII digits,
    * and only the safe integers, <i>i.e.</i>, the integers within
    * {@code -(2^53 - 1)} and {@code 2^53 - 1}, which a double-precision
-   * floating-point number represents exactly. This way, all the SDKs behave
-   * the same.
+   * floating-point number represents exactly.
+   *
+   * <p>We check the safe range even though a {@code long} could hold larger
+   * integers. TypeScript represents the integers as {@code number}, which holds
+   * them exactly only within the safe range, and all the SDKs check the same
+   * range so that the invariants which parse a text behave the same everywhere.
    *
    * <p>We do not use {@link Long#parseLong(String)} as it accepts the digits
    * of any script, and the range of all the 64-bit integers.
@@ -160,9 +166,6 @@ public final class StringHelpers {
    * @throws IllegalArgumentException if {@code text} is not a safe integer
    */
   public static long parseSafeInt(String text) {
-    // This is 2^53 - 1.
-    final long maxSafeInteger = 9007199254740991L;
-
     final int length = text.length();
 
     int offset = 0;
@@ -188,9 +191,10 @@ public final class StringHelpers {
       }
 
       // NOTE (mristin):
-      // The value can not overflow as we check the range after each digit.
+      // The value is at most 2^53 - 1 before this step, so it can not
+      // overflow a long.
       value = value * 10 + (character - '0');
-      if (value > maxSafeInteger) {
+      if (!Verification.isSafeInteger(value)) {
         throw new IllegalArgumentException(
           "Expected a safe integer, but got a text out of its range: " + text);
       }

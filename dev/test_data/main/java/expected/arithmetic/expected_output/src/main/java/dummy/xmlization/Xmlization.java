@@ -24,6 +24,7 @@ import dummy.types.impl.*;
 import dummy.types.model.*;
 import dummy.visitation.*;
 import dummy.xmlcommon.XmlCommon;
+import dummy.verification.Verification;
 
 /**
  * Provide de/serialization of meta-model classes to/from XML.
@@ -224,11 +225,18 @@ public class Xmlization {
 
     private static Reporting.Result<Long> readTextAs_long(
       XMLEventReader reader, boolean isEmpty) {
-      return readText(
+      final Reporting.Result<Long> result = readText(
         reader,
         isEmpty,
         _DeserializeImplementation::readContentAsLong,
         "Long");
+
+      if (result.isError() || Verification.isSafeInteger(result.getResult())) {
+        return result;
+      }
+
+      return Reporting.Result.failure(new Reporting.Error(
+        Verification.integerOutsideSafeRangeMessage(result.getResult())));
     }
 
     private static Reporting.Result<String> readTextAs_string(
@@ -671,6 +679,26 @@ public class Xmlization {
       }
     }
 
+    /**
+     * Write {@code that} as XML content, provided that it is a safe integer.
+     *
+     * <p>This is the {@link ContentWriter} of every {@code long}-typed
+     * value, be it a property, a list item or a tuple item. An integer outside
+     * the safe integer range [-2^53 + 1, 2^53 - 1] is refused, exactly as in
+     * the JSON serialization, so that what XML holds JSON can hold as well.
+     */
+    private static void writeLongContent(
+      Long that,
+      XMLStreamWriter writer) throws XMLStreamException {
+      final long primitiveThat = that.longValue();
+      if (!Verification.isSafeInteger(primitiveThat)) {
+        throw new XmlCommon.SerializeFailure(
+          new Reporting.Error(
+            Verification.integerOutsideSafeRangeMessage(primitiveThat)));
+      }
+      writer.writeCharacters(Long.toString(primitiveThat));
+    }
+
     private static void writeSomethingAsSequence(
       ISomething that,
       XMLStreamWriter writer) {
@@ -679,28 +707,28 @@ public class Xmlization {
         "getEven()",
         that.getEven(),
         writer,
-        XmlCommon::writeStringifiedContent);
+        _VisitorWithWriter::writeLongContent);
 
       writeProperty(
         "offset",
         "getOffset()",
         that.getOffset(),
         writer,
-        XmlCommon::writeStringifiedContent);
+        _VisitorWithWriter::writeLongContent);
 
       writeProperty(
         "small",
         "getSmall()",
         that.getSmall(),
         writer,
-        XmlCommon::writeStringifiedContent);
+        _VisitorWithWriter::writeLongContent);
 
       writeProperty(
         "byNegative",
         "getByNegative()",
         that.getByNegative(),
         writer,
-        XmlCommon::writeStringifiedContent);
+        _VisitorWithWriter::writeLongContent);
 
       writeProperty(
         "text",
@@ -714,14 +742,14 @@ public class Xmlization {
         "getNegative()",
         that.getNegative(),
         writer,
-        XmlCommon::writeStringifiedContent);
+        _VisitorWithWriter::writeLongContent);
 
       writeProperty(
         "deviation",
         "getDeviation()",
         that.getDeviation(),
         writer,
-        XmlCommon::writeStringifiedContent);
+        _VisitorWithWriter::writeLongContent);
 
       writeProperty(
         "ratio",
@@ -735,14 +763,14 @@ public class Xmlization {
         "getAlignment()",
         that.getAlignment(),
         writer,
-        XmlCommon::writeStringifiedContent);
+        _VisitorWithWriter::writeLongContent);
 
       writeOptionalProperty(
         "optionalNumber",
         "getOptionalNumber()",
         that.getOptionalNumber(),
         writer,
-        XmlCommon::writeStringifiedContent);
+        _VisitorWithWriter::writeLongContent);
 
       writeOptionalProperty(
         "optionalRatio",

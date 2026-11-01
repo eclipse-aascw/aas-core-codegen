@@ -16,6 +16,74 @@ namespace dummy
     public static class JsonValueVerification
     {
         /// <summary>
+        /// Report that the integer <paramref name="value" /> of a JSON-able value is
+        /// not a safe integer.
+        /// </summary>
+        /// <remarks>
+        /// See <see cref="Common.IsSafeInteger(long)" /> for what a safe
+        /// integer is.
+        /// </remarks>
+        /// <param name="value">integer outside the safe integer range</param>
+        /// <returns>the cause of the error</returns>
+        private static string UnsafeIntegerMessage(System.IFormattable value)
+        {
+            return $"Expected a JSON-able value, but got the integer {value}, " +
+                "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]";
+        }
+
+        /// <summary>
+        /// Check that <paramref name="jsonValue" />, if it is a number at all, is
+        /// a number of a JSON-able value.
+        /// </summary>
+        /// <remarks>
+        /// JSON knows a single numeric type, which all the other SDKs read into
+        /// a 64-bit floating-point number. Hence a JSON-able number has to be finite,
+        /// and an integer has to lie in the safe integer range [-2^53 + 1, 2^53 - 1],
+        /// as for the integer properties of the model -- otherwise a reader might
+        /// quietly get a different number than the one which was given.
+        /// </remarks>
+        /// <param name="jsonValue">JSON value to be checked</param>
+        /// <returns>
+        /// Cause why <paramref name="jsonValue" /> is not JSON-able, or <c>null</c>
+        /// if it is
+        /// </returns>
+        internal static string? CheckJsonAbleNumber(Nodes.JsonValue jsonValue)
+        {
+            // NOTE (mristin):
+            // We can not switch on the kind of the number, since
+            // ``Nodes.JsonValue.GetValueKind`` arrived only in .NET 8, and the generated
+            // code has to build against .NET 6.
+            if (jsonValue.TryGetValue<long>(out long integer))
+            {
+                if (!Common.IsSafeInteger(integer))
+                {
+                    return UnsafeIntegerMessage(integer);
+                }
+            }
+            else if (jsonValue.TryGetValue<ulong>(out ulong unsignedInteger))
+            {
+                if (!Common.IsSafeInteger(unsignedInteger))
+                {
+                    return UnsafeIntegerMessage(unsignedInteger);
+                }
+            }
+            else if (jsonValue.TryGetValue<double>(out double number))
+            {
+                // NOTE (mristin):
+                // JSON knows neither an infinity nor a not-a-number. A conformant parser
+                // never gives us one, but the node may have been constructed
+                // programmatically.
+                if (!System.Double.IsFinite(number))
+                {
+                    return $"Expected a JSON-able value, but got the number {number}, " +
+                        "which is neither finite nor representable in JSON";
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// Represent the expected top-level shape of a JSON-able value.
         /// </summary>
         public enum ExpectedShape
@@ -38,14 +106,12 @@ namespace dummy
         }
 
         /// <summary>
-        /// Verify that <paramref name="that" /> holds no non-finite number anywhere,
-        /// at any depth.
+        /// Verify that <paramref name="that" /> holds no number anywhere, at any depth,
+        /// which is not a number of a JSON-able value.
         /// </summary>
         /// <remarks>
-        /// JSON knows neither an infinity nor a not-a-number -- yet
-        /// <see cref="Nodes.JsonValue" /> holds either happily if it was put
-        /// together programmatically. A <c>null</c> is a JSON null, and hence
-        /// a JSON-able value.
+        /// See <see cref="CheckJsonAbleNumber" /> for what a JSON-able number is.
+        /// A <c>null</c> is a JSON null, and hence a JSON-able value.
         /// </remarks>
         private static IEnumerable<Reporting.Error> VerifyRecursively(
             Nodes.JsonNode that)
@@ -91,17 +157,12 @@ namespace dummy
                     break;
 
                 case Nodes.JsonValue jsonValue:
-                    // NOTE (mristin):
-                    // JSON knows neither an infinity nor a not-a-number, so neither is
-                    // a JSON-able value, even though Nodes.JsonValue holds one happily
-                    // if it was constructed programmatically.
-                    if (
-                        jsonValue.TryGetValue<double>(out double number)
-                            && !System.Double.IsFinite(number))
                     {
-                        yield return new Reporting.Error(
-                            $"Expected a JSON-able value, but got the number {number}, " +
-                            "which is neither finite nor representable in JSON");
+                        string? cause = CheckJsonAbleNumber(jsonValue);
+                        if (cause != null)
+                        {
+                            yield return new Reporting.Error(cause);
+                        }
                     }
                     break;
 
@@ -113,8 +174,9 @@ namespace dummy
 
         /// <summary>
         /// Verify that <paramref name="that" /> is JSON-able (recursively
-        /// a null, a boolean, a finite number, a string, an array or an object of
-        /// JSON-able values -- never a non-finite number, at any depth) and, if
+        /// a null, a boolean, a number, a string, an array or an object of
+        /// JSON-able values -- never an infinity, a not-a-number or an integer outside
+        /// the safe integer range [-2^53 + 1, 2^53 - 1], at any depth) and, if
         /// <paramref name="expectedShape" /> is not
         /// <see cref="ExpectedShape.Any" />, that its top-level shape matches.
         /// </summary>

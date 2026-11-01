@@ -44,6 +44,7 @@ from aas_core_codegen.java.common import (
     INDENT4 as IIII,
     INDENT5 as IIIII,
     INDENT6 as IIIIII,
+    INDENT7 as IIIIIII,
 )
 from aas_core_codegen.parse import tree as parse_tree, retree as parse_retree
 
@@ -822,8 +823,9 @@ def _needs_verification(type_annotation: intermediate.TypeAnnotationUnion) -> bo
     """
     Check whether a value of ``type_annotation`` has anything to verify at any depth.
 
-    In Java, we verify all our types, including the enumerations, and all
-    the JSON-able values.
+    In Java, we verify all our types, including the enumerations, all
+    the JSON-able values, and all the integers, which have to lie in the safe
+    integer range to be serializable to JSON.
     """
     return any(
         isinstance(
@@ -834,6 +836,10 @@ def _needs_verification(type_annotation: intermediate.TypeAnnotationUnion) -> bo
                 intermediate.JsonArrayTypeAnnotation,
                 intermediate.JsonObjectTypeAnnotation,
             ),
+        )
+        or (
+            isinstance(type_anno, intermediate.PrimitiveTypeAnnotation)
+            and type_anno.a_type is intermediate.PrimitiveType.INT
         )
         for type_anno in intermediate.over_type_annotation_and_nested_type_annotations(
             type_annotation
@@ -899,12 +905,16 @@ def _verify_method(type_anno: intermediate.TypeAnnotationUnion) -> Identifier:
     """
     Name the method of ``Verification`` verifying a value of ``type_anno``.
 
-    The names of the methods generated for the containers and for the JSON
-    objects with constrained keys contain an underscore, so they never collide
-    with the methods of the enumerations and of the constrained primitives,
-    which are named by ``capitalized_camel_case``.
+    The names of the methods generated for the containers, for the JSON
+    objects with constrained keys and for the integers contain an underscore,
+    so they never collide with the methods of the enumerations and of
+    the constrained primitives, which are named by ``capitalized_camel_case``.
     """
-    if isinstance(type_anno, intermediate.OurTypeAnnotation):
+    if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
+        if type_anno.a_type is intermediate.PrimitiveType.INT:
+            return Identifier("verify_long")
+
+    elif isinstance(type_anno, intermediate.OurTypeAnnotation):
         our_type = type_anno.our_type
 
         if isinstance(our_type, intermediate.Enumeration):
@@ -1066,14 +1076,10 @@ private static Stream<Reporting.Error> {_verify_method(type_anno)}(
 {II}Verification.streamOfFieldNames(that)
 {III}.flatMap(key ->
 {IIII}Verification.{key_verify_method}(key)
-{IIIII}.map(error ->
-{IIIIII}// NOTE (mristin):
-{IIIIII}// A member of an open JSON object is no property of one of
-{IIIIII}// our classes, so it gets no segment of its own -- the key
-{IIIIII}// goes into the message instead, as it does in
-{IIIIII}// ``verifyJsonValue``.
-{IIIIII}new Reporting.Error(
-{IIIIII}{I}"In the member \\"" + key + "\\": " + error.getCause()))));
+{IIIII}.map(error -> {{
+{IIIIII}error.prependSegment(new Reporting.KeySegment(key));
+{IIIIII}return error;
+{IIIII}}})));
 }}"""
     )
 
@@ -1210,6 +1216,182 @@ public Stream<Reporting.Error> {transform_name}(
     return Stripped(writer.getvalue()), None
 
 
+def _generate_is_safe_integer() -> List[Stripped]:
+    """
+    Generate the predicates whether a number lies in the safe integer range.
+
+    The predicates are pure logic, and carry no message, so that every range
+    check -- of the integer properties and of the JSON-able numbers alike --
+    goes through them, while each caller words its own error.
+    """
+    return [
+        Stripped(
+            f"""\
+/**
+ * Check whether the integer {{@code value}} lies in the safe integer range
+ * [-2^53 + 1, 2^53 - 1].
+ *
+ * <p>JSON knows a single numeric type, which all the other SDKs read into
+ * a {{@code double}}. Outside this range, an integer can not be exactly
+ * represented as a {{@code double}}, so a reader might quietly get
+ * a different number than the one which was written.
+ *
+ * @param value integer to be checked
+ * @return true if {{@code value}} is a safe integer
+ */
+public static boolean isSafeInteger(long value) {{
+{I}return -9007199254740991L <= value && value <= 9007199254740991L;
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Check whether the whole number {{@code value}} lies in the safe integer
+ * range [-2^53 + 1, 2^53 - 1].
+ *
+ * <p>Only the range is checked here; the caller has to make sure that
+ * {{@code value}} is a whole number in the first place.
+ *
+ * @param value whole number to be checked
+ * @return true if {{@code value}} is a safe integer
+ */
+public static boolean isSafeInteger(double value) {{
+{I}return -9007199254740991.0 <= value && value <= 9007199254740991.0;
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Check whether the big integer {{@code value}} lies in the safe integer
+ * range [-2^53 + 1, 2^53 - 1].
+ *
+ * @param value integer to be checked
+ * @return true if {{@code value}} is a safe integer
+ */
+public static boolean isSafeInteger(BigInteger value) {{
+{I}// NOTE (mristin):
+{I}// A bit length below 64 means that the value fits a long, so we can
+{I}// narrow it without truncating it silently.
+{I}return value.bitLength() < 64 && isSafeInteger(value.longValue());
+}}"""
+        ),
+    ]
+
+
+def _generate_safe_integer_verification() -> List[Stripped]:
+    """
+    Generate the message and the verification of the integers out of range.
+
+    The de-serialization and the serialization of the integers use the same
+    message, so that a verified instance is always serializable to JSON, and
+    the errors agree when it is not.
+    """
+    return [
+        Stripped(
+            f"""\
+/**
+ * Explain that the integer {{@code value}} lies outside the safe integer
+ * range [-2^53 + 1, 2^53 - 1].
+ *
+ * @param value integer, written as it was given
+ * @return the message
+ */
+public static String integerOutsideSafeRangeMessage(Object value) {{
+{I}return "Expected an integer, but got " + value +
+{II}", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]";
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Verify that the integer {{@code that}} lies in the safe integer range.
+ */
+private static Stream<Reporting.Error> verify_long(long that) {{
+{I}return isSafeInteger(that)
+{II}? Stream.empty()
+{II}: Stream.of(new Reporting.Error(integerOutsideSafeRangeMessage(that)));
+}}"""
+        ),
+    ]
+
+
+def _generate_check_json_able_number() -> Stripped:
+    """
+    Generate the check of a number in a JSON-able value.
+
+    The verification, the de-serialization and the serialization of a JSON-able
+    value all use it, so that they agree on what a JSON-able number is.
+    The XML-RPC de-serialization reads an integer before it has a node, so
+    the message is given separately as well.
+    """
+    return Stripped(
+        f"""\
+/**
+ * Explain that the integer {{@code value}} of a JSON-able value lies outside
+ * the safe integer range [-2^53 + 1, 2^53 - 1].
+ *
+ * @param value integer, written as it was given
+ * @return the message
+ */
+public static String jsonAbleIntegerOutsideSafeRangeMessage(Object value) {{
+{I}return "Expected a JSON-able value, but got the integer " + value +
+{II}", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]";
+}}
+
+/**
+ * Check that the number {{@code node}} is a number of a JSON-able value.
+ *
+ * <p>JSON knows a single numeric type, which all the other SDKs read into
+ * a {{@code double}}. Hence a JSON-able number has to be finite, and
+ * an integer has to lie in the safe integer range [-2^53 + 1, 2^53 - 1],
+ * as for the integer properties of the model -- otherwise a reader might
+ * quietly get a different number than the one which was given.
+ *
+ * <p>The verification, the de-serialization and the serialization of
+ * a JSON-able value all use this check, so that they agree on what
+ * a JSON-able number is.
+ *
+ * @param node number node to be checked
+ * @return cause why {{@code node}} is not JSON-able, or null if it is
+ */
+public static String checkJsonAbleNumber(JsonNode node) {{
+{I}switch (node.numberType()) {{
+{II}case INT:
+{II}case LONG:
+{III}if (isSafeInteger(node.longValue())) {{
+{IIII}return null;
+{III}}}
+{III}break;
+
+{II}case BIG_INTEGER:
+{III}// NOTE (mristin):
+{III}// Jackson gives a big integer for every integer if
+{III}// ``USE_BIG_INTEGER_FOR_INTS`` is enabled, so a small one can arrive
+{III}// as well.
+{III}if (isSafeInteger(node.bigIntegerValue())) {{
+{IIII}return null;
+{III}}}
+{III}break;
+
+{II}default: {{
+{III}// NOTE (mristin):
+{III}// JSON knows neither an infinity nor a not-a-number. Jackson's own
+{III}// parser never gives us one, but {{@code node}} may well have been
+{III}// put together programmatically.
+{III}final double value = node.doubleValue();
+{III}if (Double.isInfinite(value) || Double.isNaN(value)) {{
+{IIII}return "Expected a JSON-able value, but got the number " + value +
+{IIIII}", which is neither finite nor representable in JSON";
+{III}}}
+{III}return null;
+{II}}}
+{I}}}
+
+{I}return jsonAbleIntegerOutsideSafeRangeMessage(node);
+}}"""
+    )
+
+
 def _generate_verify_json_value(
     symbol_table: intermediate.SymbolTable,
 ) -> List[Stripped]:
@@ -1217,14 +1399,12 @@ def _generate_verify_json_value(
     Generate the methods verifying that a value is JSON-able.
 
     A JSON-able value is, recursively, exactly as JSON itself is defined, but
-    a Jackson node rules out neither of the two ways of not being one:
-    a missing node and a non-finite number. Both are reported here, at any
+    a Jackson node rules out neither a missing node nor a number which is not
+    JSON-able (see ``checkJsonAbleNumber``). Both are reported here, at any
     depth. A null node is a JSON null, and hence a JSON-able value.
 
-    The path *within* a JSON-able value goes into the message rather than into
-    the structured path of the error: a name segment points at a property of
-    one of our classes and an index segment at an item of one of our lists,
-    and a member of an open JSON object is neither.
+    The path within a JSON-able value is given by index and key segments, as
+    in the de-serialization.
     """
     if not intermediate_uses.json_types(symbol_table):
         return []
@@ -1243,79 +1423,60 @@ private static Stream<String> streamOfFieldNames(JsonNode node) {{
 {I}return names.stream();
 }}"""
         ),
+        _generate_check_json_able_number(),
         Stripped(
             f"""\
 /**
  * Verify that {{@code node}} is a JSON-able value, at any depth.
  *
+ * <p>The path of an error is relative to {{@code node}}.
+ *
  * @param node to be verified
- * @param path JSON path to {{@code node}}, written into the messages
  * @return a stream of errors, if any
  */
-private static Stream<Reporting.Error> verifyJsonValueAt(
-{II}JsonNode node, String path) {{
+public static Stream<Reporting.Error> verifyJsonValue(JsonNode node) {{
 {I}if (node == null || node.isMissingNode()) {{
 {II}return Stream.of(
 {III}new Reporting.Error(
-{IIII}"Expected a JSON-able value at " + path
-{IIIII}+ ", but got: " + node));
+{IIII}"Expected a JSON-able value, but got: " + node));
 {I}}}
 
-{I}if (node.isNull()) {{
+{I}if (node.isNull() || node.isBoolean() || node.isTextual()) {{
 {II}return Stream.empty();
 {I}}}
 
 {I}if (node.isNumber()) {{
-{II}// NOTE (mristin):
-{II}// JSON knows neither an infinity nor a not-a-number, so neither is
-{II}// a JSON-able value, even though a Jackson node holds either.
-{II}final double value = node.doubleValue();
-{II}if (Double.isInfinite(value) || Double.isNaN(value)) {{
-{III}return Stream.of(
-{IIII}new Reporting.Error(
-{IIIII}"Expected a JSON-able value at " + path
-{IIIIII}+ ", but got the number " + value
-{IIIIII}+ ", which is neither finite nor representable in JSON"));
-{II}}}
-{II}return Stream.empty();
-{I}}}
-
-{I}if (node.isBoolean() || node.isTextual()) {{
-{II}return Stream.empty();
+{II}final String cause = checkJsonAbleNumber(node);
+{II}return (cause == null)
+{III}? Stream.empty()
+{III}: Stream.of(new Reporting.Error(cause));
 {I}}}
 
 {I}if (node.isArray()) {{
 {II}return Verification.zip(
 {III}IntStream.iterate(0, i -> i + 1).boxed(),
 {III}StreamSupport.stream(node.spliterator(), false))
-{IIII}.flatMap(elemTuple -> verifyJsonValueAt(
-{IIIII}elemTuple.getSecond(),
-{IIIII}path + "[" + elemTuple.getFirst() + "]"));
+{IIII}.flatMap(itemTuple -> verifyJsonValue(itemTuple.getSecond())
+{IIIII}.map(error -> {{
+{IIIIII}error.prependSegment(
+{IIIIIII}new Reporting.IndexSegment(itemTuple.getFirst()));
+{IIIIII}return error;
+{IIIII}}}));
 {I}}}
 
 {I}if (node.isObject()) {{
 {II}return streamOfFieldNames(node)
-{III}.flatMap(name -> verifyJsonValueAt(
-{IIII}node.get(name), path + "." + name));
+{III}.flatMap(name -> verifyJsonValue(node.get(name))
+{IIII}.map(error -> {{
+{IIIII}error.prependSegment(new Reporting.KeySegment(name));
+{IIIII}return error;
+{IIII}}}));
 {I}}}
 
 {I}return Stream.of(
 {II}new Reporting.Error(
 {III}"Expected a JSON-able value (a null, a boolean, a number, a string, "
-{IIII}+ "an array or an object) at " + path
-{IIII}+ ", but got: " + node.getNodeType()));
-}}"""
-        ),
-        Stripped(
-            f"""\
-/**
- * Verify that {{@code node}} is a JSON-able value, at any depth.
- *
- * @param node to be verified
- * @return a stream of errors, if any
- */
-public static Stream<Reporting.Error> verifyJsonValue(JsonNode node) {{
-{I}return verifyJsonValueAt(node, "$");
+{IIII}+ "an array or an object), but got: " + node.getNodeType()));
 }}"""
         ),
         Stripped(
@@ -1487,6 +1648,15 @@ def _generate_verify_constrained_primitive(
 
     that_type = java_common.PRIMITIVE_TYPE_MAP[constrained_primitive.constrainee]
 
+    # NOTE (mristin):
+    # An integer has to lie in the safe integer range to be serializable to
+    # JSON, whatever the invariants of the constrained primitive say.
+    initial_stream = (
+        "verify_long(that)"
+        if constrained_primitive.constrainee is intermediate.PrimitiveType.INT
+        else "Stream.empty()"
+    )
+
     writer = io.StringIO()
     writer.write(
         f"""\
@@ -1495,7 +1665,7 @@ def _generate_verify_constrained_primitive(
  */
 public static Stream<Reporting.Error> verify{name} (
 {I}{that_type} that) {{
-{I}Stream<Reporting.Error> errorStream = Stream.empty();
+{I}Stream<Reporting.Error> errorStream = {initial_stream};
 
 """
     )
@@ -1703,6 +1873,12 @@ def generate(
 private static final _Transformer transformer = new _Transformer();"""
         )
     )
+
+    if intermediate_uses.safe_integer_checks(symbol_table):
+        verification_blocks.extend(_generate_is_safe_integer())
+
+    if intermediate_uses.integers(symbol_table):
+        verification_blocks.extend(_generate_safe_integer_verification())
 
     verification_blocks.extend(_generate_verify_json_value(symbol_table=symbol_table))
 

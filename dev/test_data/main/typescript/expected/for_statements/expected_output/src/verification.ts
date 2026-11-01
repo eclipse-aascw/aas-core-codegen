@@ -422,6 +422,41 @@ export function textsBeforeStopAreFew(
 }
 
 /**
+ * Verify that `that` is a safe integer so that it can be serialized to JSON.
+ *
+ * @param that - to be verified
+ * @returns errors, if any
+ */
+export function *verifyInteger(
+  that: number
+): IterableIterator<VerificationError> {
+  if (!Number.isInteger(that)) {
+    yield new VerificationError(OurCommon.notWholeIntegerMessage(that));
+  } else if (!Number.isSafeInteger(that)) {
+    yield new VerificationError(OurCommon.unsafeIntegerMessage(that));
+  }
+}
+
+/**
+ * Verify the items of `that` recursively.
+ */
+function *verify_ListOf_int(
+  that: ReadonlyArray<number>
+): IterableIterator<VerificationError> {
+  for (let i = 0; i < that.length; i++) {
+    for (const error of verifyInteger(that[i])) {
+      error.path.prepend(
+        new IndexSegment(
+          that,
+          i
+        )
+      );
+      yield error;
+    }
+  }
+}
+
+/**
  * Verify the items of `that` recursively.
  */
 function *verify_ListOf_class(
@@ -539,6 +574,16 @@ class Verifier
     }
 
     if (context === true) {
+      for (const error of verify_ListOf_int(that.numbers)) {
+        error.path.prepend(
+          new PropertySegment(
+            that,
+            "numbers"
+          )
+        );
+        yield error;
+      }
+
       for (const error of verify_ListOf_class(that.items)) {
         error.path.prepend(
           new PropertySegment(

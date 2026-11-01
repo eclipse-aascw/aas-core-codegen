@@ -5,6 +5,10 @@
 #include "./common_jsonization.hpp"
 
 #include <dummy/jsonization.hpp>
+#include <dummy/verification.hpp>
+#include <dummy/xmlization.hpp>
+
+#include <sstream>
 
 #include <limits>
 
@@ -212,6 +216,112 @@ void AssertSerializationFailsAt(
   REQUIRE(false);
 }
 
+/**
+ * Assert that the verification, the JSON serialization and the XML serialization
+ * of \p that instance all report \p expected_cause at \p expected_path.
+ */
+void AssertReportedEverywhere(
+  const std::shared_ptr<our::types::IClass>& that,
+  const std::string& expected_path,
+  const std::wstring& expected_cause
+) {
+  bool reported = false;
+  std::vector<std::string> error_messages;
+  for (
+    const our::verification::Error& error
+    : our::verification::RecursiveVerification(that)
+  ) {
+    const std::string path(
+      our::common::WstringToUtf8(error.path.ToWstring())
+    );
+    if (path == expected_path && error.cause == expected_cause) {
+      reported = true;
+      break;
+    }
+
+    error_messages.emplace_back(
+      our::common::Concat(
+        path,
+        ": ",
+        our::common::WstringToUtf8(error.cause)
+      )
+    );
+  }
+
+  INFO(
+    our::common::Concat(
+      "Expected the verification to report at ",
+      expected_path,
+      ": ",
+      our::common::WstringToUtf8(expected_cause),
+      ", but got:\n",
+      test::common::JoinStrings(error_messages, "\n")
+    )
+  )
+  REQUIRE(reported);
+
+  try {
+    our::jsonization::Serialize(*that);
+
+    INFO("Expected the JSON serialization to fail at " + expected_path)
+    REQUIRE(false);
+  } catch (const our::jsonization::SerializationException& exception) {
+    REQUIRE(
+      our::common::WstringToUtf8(exception.path().ToWstring())
+        == expected_path
+    );
+    REQUIRE(exception.cause() == expected_cause);
+  }
+
+  std::ostringstream oss;
+  try {
+    our::xmlization::Serialize(*that, {}, oss);
+
+    INFO("Expected the XML serialization to fail at " + expected_path)
+    REQUIRE(false);
+  } catch (const our::xmlization::SerializationException& exception) {
+    REQUIRE(
+      our::common::WstringToUtf8(exception.path().ToWstring())
+        == expected_path
+    );
+    REQUIRE(exception.cause() == expected_cause);
+  }
+}
+
+/**
+ * Assert that neither the verification nor the JSON serialization nor the XML
+ * serialization of \p that instance report an error of the safe integer range
+ * at \p path.
+ */
+void AssertNotReportedAnywhere(
+  const std::shared_ptr<our::types::IClass>& that,
+  const std::string& path
+) {
+  for (
+    const our::verification::Error& error
+    : our::verification::RecursiveVerification(that)
+  ) {
+    INFO(
+      our::common::Concat(
+        our::common::WstringToUtf8(error.path.ToWstring()),
+        ": ",
+        our::common::WstringToUtf8(error.cause)
+      )
+    )
+    REQUIRE(
+      !(
+        our::common::WstringToUtf8(error.path.ToWstring()) == path
+        && error.cause.find(L"safe integer range") != std::wstring::npos
+      )
+    );
+  }
+
+  REQUIRE_NOTHROW(our::jsonization::Serialize(*that));
+
+  std::ostringstream oss;
+  REQUIRE_NOTHROW(our::xmlization::Serialize(*that, {}, oss));
+}
+
 TEST_CASE("Test the round-trip of an expected Something") {
   const std::deque<std::filesystem::path> paths(
     test::common::FindFilesBySuffixRecursively(
@@ -269,38 +379,6 @@ TEST_CASE("Test the de-serialization failure on an unexpected Something") {
 }
 
 TEST_CASE(
-  "Test the serialization failure on an integer outside the range representable in JSON "
-  "at .some_ints[1] of Something"
-) {
-  for (
-    const int64_t value
-    : {
-      9007199254740992LL,
-      -9007199254740992LL
-    }
-  ) {
-    std::shared_ptr<our::types::ISomething> instance(
-      MustDeserializeTheFirstExpected<our::types::ISomething>(
-        "Something",
-        our::jsonization::SomethingFrom
-      )
-    );
-
-    instance->set_some_ints(
-      std::vector<int64_t>{
-        0LL,
-        value
-      }
-    );
-
-    AssertSerializationFailsAt(
-      *instance,
-      ".some_ints[1]"
-    );
-  }
-}
-
-TEST_CASE(
   "Test the serialization failure on a non-finite floating-point number "
   "at .some_floats[1] of Something"
 ) {
@@ -330,6 +408,64 @@ TEST_CASE(
       *instance,
       ".some_floats[1]"
     );
+  }
+}
+
+TEST_CASE(
+  "Test the safe integer range at .some_ints[1] of Something"
+) {
+  for (
+    const int64_t integer
+    : {9007199254740992LL, -9007199254740992LL}
+  ) {
+    const int64_t value(integer);
+
+    std::shared_ptr<our::types::ISomething> instance(
+      MustDeserializeTheFirstExpected<our::types::ISomething>(
+        "Something",
+        our::jsonization::SomethingFrom
+      )
+    );
+
+    instance->set_some_ints(
+      std::vector<int64_t>{
+        0LL,
+        value
+      }
+    );
+
+    AssertReportedEverywhere(
+      instance,
+      ".some_ints[1]",
+      our::common::Concat(
+        L"Expected an integer, but got ",
+        std::to_wstring(integer),
+        L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+      )
+    );
+  }
+
+  for (
+    const int64_t integer
+    : {9007199254740991LL, -9007199254740991LL}
+  ) {
+    const int64_t value(integer);
+
+    std::shared_ptr<our::types::ISomething> instance(
+      MustDeserializeTheFirstExpected<our::types::ISomething>(
+        "Something",
+        our::jsonization::SomethingFrom
+      )
+    );
+
+    instance->set_some_ints(
+      std::vector<int64_t>{
+        0LL,
+        value
+      }
+    );
+
+    AssertNotReportedAnywhere(instance, ".some_ints[1]");
   }
 }
 

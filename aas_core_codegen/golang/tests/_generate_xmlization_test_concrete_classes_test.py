@@ -1,7 +1,7 @@
 """Generate code to test the XML de/serialization of concrete classes."""
 
 import io
-from typing import Dict, List, Mapping, Tuple
+from typing import Dict, Final, List, Mapping, Sequence, Tuple
 
 from icontract import ensure
 
@@ -212,6 +212,13 @@ _LEXICAL_CASES_BY_PRIMITIVE: Mapping[
         ("S G k =", "[]byte{72, 105}"),
         ("", "[]byte{}"),
     ],
+    intermediate.PrimitiveType.INT: [
+        # NOTE:
+        # The bounds of the safe integer range [-2^53 + 1, 2^53 - 1] are
+        # accepted, see ``_UNSAFE_INTEGER_TEXTS`` for the ones just outside.
+        ("9007199254740991", "int64(9007199254740991)"),
+        ("-9007199254740991", "int64(-9007199254740991)"),
+    ],
     intermediate.PrimitiveType.BOOL: [
         # NOTE:
         # ``xs:boolean`` spells the two values in four ways, not two.
@@ -221,6 +228,14 @@ _LEXICAL_CASES_BY_PRIMITIVE: Mapping[
         ("false", "false"),
     ],
 }
+
+
+#: Texts of the valid ``xs:long``'s which lie just outside the safe integer range,
+#: and are hence refused
+_UNSAFE_INTEGER_TEXTS: Final[Sequence[str]] = [
+    "9007199254740992",
+    "-9007199254740992",
+]
 
 
 def _lexical_test_name_chunk(text: str) -> str:
@@ -258,6 +273,7 @@ def _generate_lexical_tests(symbol_table: intermediate.SymbolTable) -> List[Stri
     relevant = [
         (a_type, prop_by_a_type[a_type])
         for a_type in (
+            intermediate.PrimitiveType.INT,
             intermediate.PrimitiveType.FLOAT,
             intermediate.PrimitiveType.BOOL,
             intermediate.PrimitiveType.BYTEARRAY,
@@ -272,19 +288,22 @@ def _generate_lexical_tests(symbol_table: intermediate.SymbolTable) -> List[Stri
     cls_name_go = golang_naming.private_function_name(
         Identifier(f"read_{cls.name}_with")
     )
+    patch_function = golang_naming.private_function_name(
+        Identifier(f"patch_{cls.name}_with")
+    )
     cls_name_xml = naming.xml_class_name(cls.name)
     unmarshal_function = golang_naming.function_name(Identifier("unmarshal"))
 
     result: List[Stripped] = [
         Stripped(
             f"""\
-// Read the first recorded example of {interface_name} with the content of
-// the element `xmlName` replaced by `text`.
-func {cls_name_go}(
+// Give the text of the first recorded example of {interface_name} with
+// the content of the element `xmlName` replaced by `text`.
+func {patch_function}(
 {I}t *testing.T,
 {I}xmlName string,
 {I}text string,
-) ourtypes.{interface_name} {{
+) string {{
 {I}pths := ourtesting.FindFilesBySuffixRecursively(
 {II}filepath.Join(
 {III}ourtesting.TestDataDir,
@@ -313,7 +332,19 @@ func {cls_name_go}(
 {I}start := strings.Index(original, "<"+xmlName+">") + len(xmlName) + 2
 {I}end := strings.Index(original, "</"+xmlName+">")
 
-{I}patched := original[:start] + text + original[end:]
+{I}return original[:start] + text + original[end:]
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Read the first recorded example of {interface_name} with the content of
+// the element `xmlName` replaced by `text`.
+func {cls_name_go}(
+{I}t *testing.T,
+{I}xmlName string,
+{I}text string,
+) ourtypes.{interface_name} {{
+{I}patched := {patch_function}(t, xmlName, text)
 
 {I}decoder := xml.NewDecoder(strings.NewReader(patched))
 {I}deserialized, deseriaErr := ourxmlization.{unmarshal_function}(decoder)
@@ -331,7 +362,7 @@ func {cls_name_go}(
 
 {I}return instance
 }}"""
-        )
+        ),
     ]
 
     for a_type, prop in relevant:
@@ -368,6 +399,44 @@ func {test_name}(t *testing.T) {{
 {I}expected := {expected}
 {I}if {comparison} {{
 {II}t.Fatalf("Expected %v, but got %v", expected, got)
+{I}}}
+}}"""
+                )
+            )
+
+        if a_type is not intermediate.PrimitiveType.INT:
+            continue
+
+        for a_text in _UNSAFE_INTEGER_TEXTS:
+            test_name = golang_naming.function_name(
+                Identifier(
+                    f"Test_{prop.name}_read_from_"
+                    f"{_lexical_test_name_chunk(a_text)}_fails"
+                )
+            )
+
+            expected_message_literal = golang_common.string_literal(
+                f"Expected an integer, but got {a_text}, which is outside "
+                f"the safe integer range [-2^53 + 1, 2^53 - 1]"
+            )
+
+            result.append(
+                Stripped(
+                    f"""\
+func {test_name}(t *testing.T) {{
+{I}patched := {patch_function}(
+{II}t,
+{II}{golang_common.string_literal(prop_xml_name)},
+{II}{golang_common.string_literal(a_text)},
+{I})
+
+{I}decoder := xml.NewDecoder(strings.NewReader(patched))
+{I}_, err := ourxmlization.{unmarshal_function}(decoder)
+
+{I}expected := {expected_message_literal}
+{I}deseriaErr, ok := err.(*ourxmlization.DeserializationError)
+{I}if !ok || deseriaErr.Message != expected {{
+{II}t.Fatalf("Expected the de-serialization error %q, but got: %v", expected, err)
 {I}}}
 }}"""
                 )

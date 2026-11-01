@@ -209,17 +209,20 @@ private static Reporting.Result<JsonNode> readXmlRpcDouble(
 {I}// does a JSON document, so reading every double element as a double
 {I}// node would silently turn the 1 of a document into a 1.0 on the way
 {I}// through XML, and back again.
+{I}//
+{I}// Such an integer has to be a safe integer, exactly as in JSON. We read
+{I}// it as a big integer first, so that a numeral beyond a long is refused
+{I}// rather than truncated.
 {I}if (text.indexOf('.') < 0
 {II}&& text.indexOf('e') < 0
 {II}&& text.indexOf('E') < 0) {{
-{II}try {{
-{III}return Reporting.Result.success(
-{IIII}JsonNodeFactory.instance.numberNode(Long.parseLong(text)));
-{II}}} catch (NumberFormatException exception) {{
-{III}// NOTE (mristin):
-{III}// The numeral does not fit a long, so it stays a double -- which
-{III}// is what a JSON parser would give for it as well.
+{II}final BigInteger integer = new BigInteger(text);
+{II}if (!Verification.isSafeInteger(integer)) {{
+{III}return Reporting.Result.failure(new Reporting.Error(
+{IIII}Verification.jsonAbleIntegerOutsideSafeRangeMessage(integer)));
 {II}}}
+{II}return Reporting.Result.success(
+{III}JsonNodeFactory.instance.numberNode(integer.longValue()));
 {I}}}
 
 {I}return Reporting.Result.success(
@@ -508,15 +511,13 @@ private static void writeValueContent(
 {I}}}
 
 {I}if (that.isNumber()) {{
-{II}final double value = that.doubleValue();
-
 {II}// NOTE (mristin):
-{II}// JSON knows neither an infinity nor a not-a-number, so neither is
-{II}// a JSON-able value, and readXmlRpcDouble refuses to read either back.
-{II}if (Double.isInfinite(value) || Double.isNaN(value)) {{
-{III}throw new XmlCommon.SerializeFailure(new Reporting.Error(
-{IIII}"Expected a JSON-able value, but got the number " + value +
-{IIII}", which is neither finite nor representable in JSON"));
+{II}// We check the number exactly as the verification and the JSON
+{II}// de/serialization do, and readXmlRpcDouble refuses to read back
+{II}// what we refuse here.
+{II}final String cause = Verification.checkJsonAbleNumber(that);
+{II}if (cause != null) {{
+{III}throw new XmlCommon.SerializeFailure(new Reporting.Error(cause));
 {II}}}
 
 {II}XmlCommon.writeElementInNoNamespace(
@@ -719,6 +720,7 @@ public final class XmlRpc {{
         Stripped("import javax.xml.stream.XMLStreamConstants;"),
         Stripped("import javax.xml.stream.XMLStreamException;"),
         Stripped("import javax.xml.stream.XMLStreamWriter;"),
+        Stripped("import java.math.BigInteger;"),
         Stripped("import java.util.Iterator;"),
         Stripped("import java.util.regex.Pattern;"),
         *(
@@ -727,6 +729,7 @@ public final class XmlRpc {{
         ),
         Stripped("import com.fasterxml.jackson.databind.node.JsonNodeFactory;"),
         Stripped(f"import {package}.reporting.Reporting;"),
+        Stripped(f"import {package}.verification.Verification;"),
         Stripped(f"import {package}.xmlcommon.XmlCommon;"),
     ]
 

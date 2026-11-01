@@ -239,11 +239,24 @@ export function noNumberIsSeven(
 
 /**
  * Check the ranges over the integers with a length as a bound.
+ *
+ * @remarks
+ *
+ * The `start` is checked against the bounds before it is used as an index,
+ * so that the invariant holds up even against integers as large as
+ * `2 ** 53`. A negative `start` is refused, while a `start` beyond
+ * the numbers leaves nothing to check.
  */
 export function noSevenFrom(
   numbers: Array<number>,
   start: number
 ): boolean {
+  if (start < 0) {
+    return false;
+  }
+  if (start >= numbers.length) {
+    return true;
+  }
   for (let i = start; i < numbers.length; i++) {
     const number = OurCommon.at(numbers, i);
     if (number == 7) {
@@ -304,6 +317,41 @@ export function setCounts(
 }
 
 /**
+ * Verify that `that` is a safe integer so that it can be serialized to JSON.
+ *
+ * @param that - to be verified
+ * @returns errors, if any
+ */
+export function *verifyInteger(
+  that: number
+): IterableIterator<VerificationError> {
+  if (!Number.isInteger(that)) {
+    yield new VerificationError(OurCommon.notWholeIntegerMessage(that));
+  } else if (!Number.isSafeInteger(that)) {
+    yield new VerificationError(OurCommon.unsafeIntegerMessage(that));
+  }
+}
+
+/**
+ * Verify the items of `that` recursively.
+ */
+function *verify_ListOf_int(
+  that: ReadonlyArray<number>
+): IterableIterator<VerificationError> {
+  for (let i = 0; i < that.length; i++) {
+    for (const error of verifyInteger(that[i])) {
+      error.path.prepend(
+        new IndexSegment(
+          that,
+          i
+        )
+      );
+      yield error;
+    }
+  }
+}
+
+/**
  * Verify an instance of the model recursively or non-recursively (depending on the context).
  */
 class Verifier
@@ -312,7 +360,6 @@ class Verifier
   > {
   *transformSomethingWithContext(
     that: OurTypes.Something,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
     if (!(
@@ -367,6 +414,40 @@ class Verifier
       yield new VerificationError(
         "No number is seven"
       )
+    }
+
+    for (const error of verifyInteger(that.count)) {
+      error.path.prepend(
+        new PropertySegment(
+          that,
+          "count"
+        )
+      );
+      yield error;
+    }
+
+    if (that.maybeCount !== null) {
+      for (const error of verifyInteger(that.maybeCount)) {
+        error.path.prepend(
+          new PropertySegment(
+            that,
+            "maybeCount"
+          )
+        );
+        yield error;
+      }
+    }
+
+    if (context === true) {
+      for (const error of verify_ListOf_int(that.numbers)) {
+        error.path.prepend(
+          new PropertySegment(
+            that,
+            "numbers"
+          )
+        );
+        yield error;
+      }
     }
   }
 }

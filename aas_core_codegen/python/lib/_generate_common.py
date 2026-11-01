@@ -19,7 +19,11 @@ from aas_core_codegen.python.common import (
 )
 
 
-#: Parse a text as a safe integer; this is how we transpile the built-in ``int``
+#: Parse a text as a safe integer; this is how we transpile the built-in ``int``.
+#:
+#: We limit ourselves to the safe integers, though the Python ``int`` could hold
+#: larger ones, as TypeScript represents the integers as ``number``, and
+#: the invariants must behave the same in all the SDKs.
 _PARSE_SAFE_INT = Stripped(
     f"""\
 #: Match an optional sign followed by the ASCII digits.
@@ -38,6 +42,11 @@ def parse_safe_int(text: str) -> int:
 {I}only the safe integers, *i.e.*, the integers within ``-(2 ** 53 - 1)`` and
 {I}``2 ** 53 - 1``, which a double-precision floating-point number represents
 {I}exactly.
+
+{I}We check the safe range even though :py:class:`int` could hold larger
+{I}integers. TypeScript represents the integers as ``number``, which holds them
+{I}exactly only within the safe range, and all the SDKs check the same range so
+{I}that the invariants which parse a text behave the same everywhere.
 
 {I}:param text: to be parsed
 {I}:return: parsed integer
@@ -58,23 +67,17 @@ def parse_safe_int(text: str) -> int:
 {I}# NOTE (mristin):
 {I}# We count the significant digits before we call ``int``, as the conversion
 {I}# is quadratic in the length of the text, and Python refuses a text of more
-{I}# than 4300 digits, leading zeros included.
+{I}# than 4300 digits, leading zeros included. A safe integer has at most
+{I}# 16 significant digits.
 {I}digits = text.lstrip("+-").lstrip("0")
-{I}if len(digits) > 16:
+{I}value = int(text) if len(digits) <= 16 else None
+
+{I}if value is None or not is_safe_integer(value):
 {II}raise ValueError(
 {III}f"Expected a safe integer, but got a text out of its range: {{text!r}}"
 {II})
 
-{I}value = int(digits) if len(digits) > 0 else 0
-
-{I}# NOTE (mristin):
-{I}# This is 2 ** 53 - 1.
-{I}if value > 9007199254740991:
-{II}raise ValueError(
-{III}f"Expected a safe integer, but got a text out of its range: {{text!r}}"
-{II})
-
-{I}return -value if text[0] == "-" else value"""
+{I}return value"""
 )
 
 
@@ -188,51 +191,92 @@ def try_to_cast_to_array_like(
         blocks.insert(len(blocks) - 1, _PARSE_SAFE_INT)
 
     # NOTE (mristin):
-    # Only a meta-model which uses a JSON-able type ever meets a bare number
-    # whose type it does not already know, so the conversion is generated
-    # only for such a model.
-    if intermediate_uses.json_types(symbol_table):
+    # The range is checked by a single predicate, and each message is written by
+    # a single function, so that the JSON de-serialization, the JSON serialization
+    # and the verification can not drift apart: an instance which passes
+    # the verification is guaranteed to be serializable to JSON.
+    # The transpiled ``int`` calls, see ``parse_safe_int``, use the predicate as well.
+    integers = intermediate_uses.integers(symbol_table)
+    json_types = intermediate_uses.json_types(symbol_table)
+
+    if intermediate_uses.safe_integer_checks(symbol_table):
         blocks.insert(
             len(blocks) - 1,
             Stripped(
                 f'''\
-def try_to_convert_int_to_float(
+def is_safe_integer(
 {I}value: int
-) -> Optional[float]:
+) -> bool:
 {I}"""
-{I}Try to convert :paramref:`value` to the ``float`` which JSON prescribes.
+{I}Check that :paramref:`value` lies in the safe integer range.
 
-{I}JSON knows a single numeric type, so an ``int`` has to become a ``float``
-{I}on its way into and out of a JSON-able value. The conversion has to be
-{I}exact: a ``float`` which does not convert back to :paramref:`value` would
-{I}quietly say a different number than the one which was given, so such
-{I}a value is refused instead of rounded.
+{I}The safe integer range [-2^53 + 1, 2^53 - 1] covers the integers which
+{I}a double-precision floating-point number represents exactly. JSON knows
+{I}a single numeric type, and the JSON de-serializers of the other languages
+{I}read a number into such a float, so an integer outside of the range might
+{I}quietly come out as a different number.
 
 {I}Mind that a ``bool`` is an ``int`` in Python. The callers all sort out
 {I}the booleans before they come here.
 
-{I}>>> try_to_convert_int_to_float(1)
-{I}1.0
+{I}:param value: integer to be checked
+{I}:return: True if :paramref:`value` is a safe integer
 
-{I}>>> try_to_convert_int_to_float(-3)
-{I}-3.0
+{I}>>> is_safe_integer(2 ** 53 - 1)
+{I}True
 
-{I}>>> assert try_to_convert_int_to_float(2 ** 53 + 1) is None
+{I}>>> is_safe_integer(-(2 ** 53 - 1))
+{I}True
 
-{I}>>> assert try_to_convert_int_to_float(10 ** 400) is None
+{I}>>> is_safe_integer(2 ** 53)
+{I}False
+
+{I}>>> is_safe_integer(-(2 ** 53))
+{I}False
 {I}"""
-{I}try:
-{II}result = float(value)
-{I}except OverflowError:
-{II}# NOTE (mristin):
-{II}# A Python ``int`` is unbounded, so one can be far too large for
-{II}# a ``float`` to hold at all.
-{II}return None
+{I}return -9007199254740991 <= value <= 9007199254740991'''
+            ),
+        )
 
-{I}if int(result) != value:
-{II}return None
+    if integers:
+        blocks.insert(
+            len(blocks) - 1,
+            Stripped(
+                f'''\
+def unsafe_integer_message(
+{I}value: int
+) -> str:
+{I}"""
+{I}Describe that :paramref:`value` lies outside the safe integer range.
 
-{I}return result'''
+{I}See :py:func:`is_safe_integer`.
+{I}"""
+{I}return (
+{II}f"Expected an integer, but got {{value}}, "
+{II}f"which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+{I})'''
+            ),
+        )
+
+    if json_types:
+        blocks.insert(
+            len(blocks) - 1,
+            Stripped(
+                f'''\
+def unsafe_json_able_integer_message(
+{I}value: int
+) -> str:
+{I}"""
+{I}Describe that :paramref:`value` in a JSON-able value is not a safe integer.
+
+{I}JSON knows a single numeric type, so an ``int`` has to become a ``float``
+{I}on its way into and out of a JSON-able value. Only a safe integer survives
+{I}the conversion exactly, see :py:func:`is_safe_integer`.
+{I}"""
+{I}return (
+{II}f"Expected a JSON-able value, but got the integer {{value}}, "
+{II}f"which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+{I})'''
             ),
         )
 

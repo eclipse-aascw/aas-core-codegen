@@ -362,6 +362,22 @@ func LevelsArePositive(
 		)
 }
 
+// Verify that `that` integer lies in the safe integer range of JSON, as
+// checked by [ourcommon.IsSafeInteger] in the serialization as well.
+func verifyInt64(
+	that int64,
+	onError func(*VerificationError) bool,
+) (abort bool) {
+	if !ourcommon.IsSafeInteger(that) {
+		abort = onError(newVerificationError(ourcommon.UnsafeIntegerMessage(that)))
+		if abort {
+			return
+		}
+	}
+
+	return
+}
+
 // Verify `that` instance of [ourtypes.ISomeItem].
 //
 // You have to supply the callback `onError` to iterate over the errors.
@@ -391,7 +407,20 @@ func VerifySpecialItem(
 ) (abort bool) {
 	abort = false
 
-	// No verification has been defined for ISpecialItem.
+	abort = verifyInt64(
+		that.Level(),
+		func(err *VerificationError) bool {
+			err.Path.PrependName(
+				&ourreporting.NameSegment{
+					Name: "Level",
+				},
+			)
+			return onError(err)
+		},
+	)
+	if abort {
+		return
+	}
 
 	return
 }

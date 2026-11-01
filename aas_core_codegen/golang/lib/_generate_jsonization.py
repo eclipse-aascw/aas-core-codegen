@@ -26,7 +26,6 @@ from aas_core_codegen.golang.common import (
     INDENT3 as III,
     INDENT4 as IIII,
     INDENT5 as IIIII,
-    INDENT6 as IIIIII,
 )
 from aas_core_codegen.intermediate import uses as intermediate_uses
 
@@ -69,62 +68,42 @@ def _generate_int64_from_jsonable() -> Stripped:
     return Stripped(
         f"""\
 // Parse `jsonable` as a 64-bit integer, or return an error.
+//
+// A whole float64 such as `5.0` or `1e2` is accepted, but only within
+// the safe integer range [-2^53 + 1, 2^53 - 1], as checked by
+// [ourcommon.IsSafeIntegerFloat64].
 func int64FromJsonable(
 {I}jsonable interface{{}},
 ) (result int64, err error) {{
-{I}if jsonable == nil {{
-{II}err = newDeserializationError(
-{III}"Expected an integer number, but got null",
-{II})
-{II}return
-{I}}}
-
 {I}f, ok := jsonable.(float64)
 {I}if !ok {{
 {II}err = newDeserializationError(
 {III}fmt.Sprintf(
-{IIII}"Expected an integer number, but got %T",
+{IIII}"Expected an integer, but got: %T",
 {IIII}jsonable,
 {III}),
 {II})
 {II}return
 {I}}}
 
-{I}if math.IsNaN(f) {{
-{II}err = newDeserializationError(
-{III}"Expected an integer number, but got a NaN",
-{II})
-{II}return
-{I}}}
-
-{I}if math.IsInf(f, 0) {{
-{II}err = newDeserializationError(
-{III}"Expected an integer number, but got an infinity",
-{II})
-{II}return
-{I}}}
-
-{I}if f != math.Trunc(f) {{
+{I}// NOTE (mristin):
+{I}// A not-a-number is never equal to its truncation.
+{I}if math.IsInf(f, 0) || f != math.Trunc(f) {{
 {II}err = newDeserializationError(
 {III}fmt.Sprintf(
-{IIII}"Expected an integer number, but got a non-integer: %v",
+{IIII}"Expected an integer, but got %v, which is not a whole number",
 {IIII}f,
 {III}),
 {II})
 {II}return
 {I}}}
 
-{I}result = int64(f)
-{I}if f != float64(result) {{
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Expected an integer number fitting into int64, but got: %v",
-{IIII}jsonable,
-{III}),
-{II})
+{I}if !ourcommon.IsSafeIntegerFloat64(f) {{
+{II}err = newDeserializationError(ourcommon.UnsafeIntegerMessage(f))
 {II}return
 {I}}}
 
+{I}result = int64(f)
 {I}return
 }}"""
     )
@@ -1099,13 +1078,13 @@ def _determine_parse_function_for_atomic_value(
             assert_never(our_type)
 
     elif isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
-        function_name = "jsonValueFromJsonable"
+        function_name = "JsonValueFromJsonable"
 
     elif isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
-        function_name = "jsonArrayFromJsonable"
+        function_name = "JsonArrayFromJsonable"
 
     elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
-        function_name = "jsonObjectFromJsonable"
+        function_name = "JsonObjectFromJsonable"
 
     else:
         # noinspection PyTypeChecker
@@ -1633,8 +1612,9 @@ def _generate_int64_to_jsonable() -> Stripped:
     """Generate the function to encode an ``int64`` to a JSON-able."""
     return Stripped(
         f"""\
-// Try to cast `that` to a float64 and box it as a JSON-able value, or
-// return an error.
+// Cast `that` to a float64 and box it as a JSON-able value, or return
+// an error if `that` is outside the safe integer range, as checked by
+// [ourcommon.IsSafeInteger].
 //
 // The result is returned as `interface{{}}`, not the more specific
 // `float64`, so that this function itself can be passed on as a bare
@@ -1643,17 +1623,12 @@ def _generate_int64_to_jsonable() -> Stripped:
 func int64ToJsonable(
 {I}that int64,
 ) (result interface{{}}, err error) {{
-{I}if that > 9007199254740991 || that < -9007199254740991 {{
-{II}err = newSerializationError(
-{III}fmt.Sprintf(
-{IIII}"64-bit integer can not be represented as 64-bit float in JSON: %v",
-{IIII}that,
-{III}),
-{II})
+{I}if !ourcommon.IsSafeInteger(that) {{
+{II}err = newSerializationError(ourcommon.UnsafeIntegerMessage(that))
 {II}return
 {I}}}
 
-{I}result = float64(that);
+{I}result = float64(that)
 {I}return
 }}"""
     )
@@ -1781,13 +1756,13 @@ def _generate_json_able_as_jsonable_interface() -> Stripped:
         f"""\
 // Serialize the JSON-able `item` as a JSON-able value.
 //
-// ``jsonValueToJsonable`` takes an ``ourtypes.JsonValue``, so a *function*
+// ``JsonValueToJsonable`` takes an ``ourtypes.JsonValue``, so a *function*
 // which takes an ``ourtypes.JsonArray`` or an ``ourtypes.JsonObject`` is
 // a different type altogether, even though either value is assignable to
 // an ``ourtypes.JsonValue``. This wrapper gives the one signature which
 // ``serializeArray``/``serializeTupleN`` expect for every shape.
 func jsonAbleToJsonable[T any](item T) (interface{{}}, error) {{
-{I}return jsonValueToJsonable(item)
+{I}return JsonValueToJsonable(item)
 }}"""
     )
 
@@ -1895,16 +1870,26 @@ def _generate_json_able_helpers(
 // a not-a-number are rejected at any depth, as JSON can not represent them
 // at all.
 //
+// An int or an int64, as it might come from a value put together
+// programmatically, is accepted as well, and parsed as a float64, provided
+// that it lies in the safe integer range [-2^53 + 1, 2^53 - 1].
+//
 // The result is a new structure, and never `jsonable` itself, so that
 // the parsed instance does not alias the document it came from.
 //
-// The path of an error is relative to `jsonable`, and the caller is expected
-// to prepend the way to it.
-func jsonValueFromJsonable(
+// The path of an error is relative to `jsonable`.
+func JsonValueFromJsonable(
 {I}jsonable interface{{}},
 ) (result ourtypes.JsonValue, err error) {{
 {I}if jsonable == nil {{
 {II}return
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// An int is widened to an int64 first, so that a single case below
+{I}// handles both.
+{I}if integer, ok := jsonable.(int); ok {{
+{II}jsonable = int64(integer)
 {I}}}
 
 {I}switch casted := jsonable.(type) {{
@@ -1916,19 +1901,23 @@ func jsonValueFromJsonable(
 {III}result = casted
 {III}return
 
+{II}case int64:
+{III}if !ourcommon.IsSafeInteger(casted) {{
+{IIII}err = newDeserializationError(
+{IIIII}ourcommon.NotJsonAbleIntegerMessage(casted),
+{IIII})
+{IIII}return
+{III}}}
+{III}result = float64(casted)
+{III}return
+
 {II}case float64:
 {III}// NOTE (mristin):
 {III}// JSON knows neither an infinity nor a not-a-number. encoding/json
 {III}// never gives us one, but `jsonable` may well have been put together
 {III}// programmatically.
-{III}if math.IsInf(casted, 0) || math.IsNaN(casted) {{
-{IIII}err = newDeserializationError(
-{IIIII}fmt.Sprintf(
-{IIIIII}"Expected a JSON-able value, but got the number %v, "+
-{IIIIII}"which is neither finite nor representable in JSON",
-{IIIIII}casted,
-{IIIII}),
-{IIII})
+{III}if cause := ourcommon.CheckJsonAbleFloat64(casted); cause != "" {{
+{IIII}err = newDeserializationError(cause)
 {IIII}return
 {III}}}
 {III}result = casted
@@ -1938,7 +1927,7 @@ func jsonValueFromJsonable(
 {III}items := make(ourtypes.JsonArray, 0, len(casted))
 {III}for i, item := range casted {{
 {IIII}var parsed ourtypes.JsonValue
-{IIII}parsed, err = jsonValueFromJsonable(item)
+{IIII}parsed, err = JsonValueFromJsonable(item)
 {IIII}if err != nil {{
 {IIIII}mustDeserializationError(err).prependIndex(i)
 {IIIII}return
@@ -1952,7 +1941,7 @@ func jsonValueFromJsonable(
 {III}members := make(ourtypes.JsonObject, len(casted))
 {III}for key, value := range casted {{
 {IIII}var parsed ourtypes.JsonValue
-{IIII}parsed, err = jsonValueFromJsonable(value)
+{IIII}parsed, err = JsonValueFromJsonable(value)
 {IIII}if err != nil {{
 {IIIII}mustDeserializationError(err).prependKey(key)
 {IIIII}return
@@ -1965,8 +1954,8 @@ func jsonValueFromJsonable(
 {II}default:
 {III}err = newDeserializationError(
 {IIII}fmt.Sprintf(
-{IIIII}"Expected a JSON-able value (a bool, a float64, a string, "+
-{IIIII}"an array or an object), but got: %T",
+{IIIII}"Expected a JSON-able value (a bool, a float64, an int, an int64, "+
+{IIIII}"a string, an array or an object), but got: %T",
 {IIIII}jsonable,
 {IIII}),
 {III})
@@ -1977,7 +1966,7 @@ func jsonValueFromJsonable(
         Stripped(
             f"""\
 // Parse `jsonable` as a JSON-able array.
-func jsonArrayFromJsonable(
+func JsonArrayFromJsonable(
 {I}jsonable interface{{}},
 ) (result ourtypes.JsonArray, err error) {{
 {I}if _, ok := jsonable.([]interface{{}}); !ok {{
@@ -1988,7 +1977,7 @@ func jsonArrayFromJsonable(
 {I}}}
 
 {I}var value ourtypes.JsonValue
-{I}value, err = jsonValueFromJsonable(jsonable)
+{I}value, err = JsonValueFromJsonable(jsonable)
 {I}if err != nil {{
 {II}return
 {I}}}
@@ -2000,7 +1989,7 @@ func jsonArrayFromJsonable(
         Stripped(
             f"""\
 // Parse `jsonable` as a JSON-able object.
-func jsonObjectFromJsonable(
+func JsonObjectFromJsonable(
 {I}jsonable interface{{}},
 ) (result ourtypes.JsonObject, err error) {{
 {I}if _, ok := jsonable.(map[string]interface{{}}); !ok {{
@@ -2011,7 +2000,7 @@ func jsonObjectFromJsonable(
 {I}}}
 
 {I}var value ourtypes.JsonValue
-{I}value, err = jsonValueFromJsonable(jsonable)
+{I}value, err = JsonValueFromJsonable(jsonable)
 {I}if err != nil {{
 {II}return
 {I}}}
@@ -2029,13 +2018,23 @@ func jsonObjectFromJsonable(
 // represent. It is refused here, at any depth. A nil is written as
 // a JSON null.
 //
+// An int or an int64 is accepted as well, and written as a float64, provided
+// that it lies in the safe integer range [-2^53 + 1, 2^53 - 1].
+//
 // The result is a new structure, and never `value` itself, so that
 // the serialized document does not alias the instance it came from.
-func jsonValueToJsonable(
+func JsonValueToJsonable(
 {I}value ourtypes.JsonValue,
 ) (result interface{{}}, err error) {{
 {I}if value == nil {{
 {II}return
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// An int is widened to an int64 first, so that a single case below
+{I}// handles both.
+{I}if integer, ok := value.(int); ok {{
+{II}value = int64(integer)
 {I}}}
 
 {I}switch casted := value.(type) {{
@@ -2047,15 +2046,19 @@ func jsonValueToJsonable(
 {III}result = casted
 {III}return
 
-{II}case float64:
-{III}if math.IsInf(casted, 0) || math.IsNaN(casted) {{
+{II}case int64:
+{III}if !ourcommon.IsSafeInteger(casted) {{
 {IIII}err = newSerializationError(
-{IIIII}fmt.Sprintf(
-{IIIIII}"Expected a JSON-able value, but got the number %v, which "+
-{IIIIII}"is neither finite nor representable in JSON",
-{IIIIII}casted,
-{IIIII}),
+{IIIII}ourcommon.NotJsonAbleIntegerMessage(casted),
 {IIII})
+{IIII}return
+{III}}}
+{III}result = float64(casted)
+{III}return
+
+{II}case float64:
+{III}if cause := ourcommon.CheckJsonAbleFloat64(casted); cause != "" {{
+{IIII}err = newSerializationError(cause)
 {IIII}return
 {III}}}
 {III}result = casted
@@ -2065,7 +2068,7 @@ func jsonValueToJsonable(
 {III}items := make([]interface{{}}, 0, len(casted))
 {III}for i, item := range casted {{
 {IIII}var serialized interface{{}}
-{IIII}serialized, err = jsonValueToJsonable(item)
+{IIII}serialized, err = JsonValueToJsonable(item)
 {IIII}if err != nil {{
 {IIIII}mustSerializationError(err).prependIndex(i)
 {IIIII}return
@@ -2079,7 +2082,7 @@ func jsonValueToJsonable(
 {III}members := make(map[string]interface{{}}, len(casted))
 {III}for key, item := range casted {{
 {IIII}var serialized interface{{}}
-{IIII}serialized, err = jsonValueToJsonable(item)
+{IIII}serialized, err = JsonValueToJsonable(item)
 {IIII}if err != nil {{
 {IIIII}mustSerializationError(err).prependKey(key)
 {IIIII}return
@@ -2092,8 +2095,8 @@ func jsonValueToJsonable(
 {II}default:
 {III}err = newSerializationError(
 {IIII}fmt.Sprintf(
-{IIIII}"Expected a JSON-able value (a bool, a float64, a string, "+
-{IIIII}"a JsonArray or a JsonObject), but got: %T",
+{IIIII}"Expected a JSON-able value (a bool, a float64, an int, an int64, "+
+{IIIII}"a string, a JsonArray or a JsonObject), but got: %T",
 {IIIII}value,
 {IIII}),
 {III})
@@ -2159,7 +2162,7 @@ def _item_serializer_function(
             return Stripped(f"directToJsonable[{item_type}]")
 
     # NOTE (mristin):
-    # A JSON-able item is checked and copied by ``jsonValueToJsonable``, which
+    # A JSON-able item is checked and copied by ``JsonValueToJsonable``, which
     # already has the expected signature, so it needs no wrapper.
     if isinstance(
         type_annotation,
@@ -2539,7 +2542,7 @@ def _determine_serialization_of_atomic_value(
             intermediate.JsonObjectTypeAnnotation,
         ),
     ):
-        return Stripped("jsonValueToJsonable"), Stripped(access_expression)
+        return Stripped("JsonValueToJsonable"), Stripped(access_expression)
 
     # NOTE (mristin):
     # The following types are handled as primitive values in Golang, so we have
@@ -2979,7 +2982,6 @@ func mustDeserializationError(err error) *DeserializationError {{
 }}"""
         ),
         _generate_bool_from_jsonable(),
-        _generate_int64_from_jsonable(),
         _generate_float64_from_jsonable(),
         _generate_string_from_jsonable(),
         _generate_bytes_from_jsonable(),
@@ -2989,6 +2991,15 @@ func mustDeserializationError(err error) *DeserializationError {{
         _generate_check_model_type(),
         _generate_parse_array(),
     ]
+
+    # NOTE (mristin):
+    # The integers are de/serialized with ``ourcommon.IsSafeInteger`` and
+    # ``ourcommon.IsSafeIntegerFloat64``, which are generated only if
+    # the instances can hold any integers.
+    uses_integers = intermediate_uses.integers(symbol_table)
+
+    if uses_integers:
+        blocks.append(_generate_int64_from_jsonable())
 
     if len(symbol_table.enumerations) > 0:
         blocks.append(_generate_not_an_enum_text_error())
@@ -3148,7 +3159,9 @@ func mustSerializationError(err error) *SerializationError {{
         ]
     )
 
-    blocks.append(_generate_int64_to_jsonable())
+    if uses_integers:
+        blocks.append(_generate_int64_to_jsonable())
+
     blocks.append(_generate_float64_to_jsonable())
     blocks.append(_generate_bytes_to_jsonable())
     blocks.append(_generate_serialize_array())

@@ -334,7 +334,7 @@ def _list_from_jsonable(
     return result
 
 
-def _json_value_from_jsonable(
+def json_value_from_jsonable(
     jsonable: Jsonable
 ) -> our_types.JsonValue:
     """
@@ -367,14 +367,12 @@ def _json_value_from_jsonable(
         # JSON knows a single numeric type, so :py:mod:`json` giving us
         # an ``int`` says nothing about the document: "1" and "1.0" are
         # the same number, and a JSON-able value holds it as a ``float``.
-        number = our_common.try_to_convert_int_to_float(jsonable)
-        if number is None:
+        if not our_common.is_safe_integer(jsonable):
             raise DeserializationException(
-                f"Expected a JSON-able value, but got the integer {jsonable}, "
-                f"which is not exactly representable as a JSON number"
+                our_common.unsafe_json_able_integer_message(jsonable)
             )
 
-        return number
+        return float(jsonable)
 
     if isinstance(jsonable, float):
         # NOTE (mristin):
@@ -402,7 +400,7 @@ def _json_value_from_jsonable(
                 )
 
             try:
-                mapping[key] = _json_value_from_jsonable(jsonable_value)
+                mapping[key] = json_value_from_jsonable(jsonable_value)
             except DeserializationException as exception:
                 exception.path._prepend(KeySegment(jsonable, key))
                 raise
@@ -415,7 +413,7 @@ def _json_value_from_jsonable(
         items: List[Any] = []
         for i, jsonable_item in enumerate(array_like):
             try:
-                items.append(_json_value_from_jsonable(jsonable_item))
+                items.append(json_value_from_jsonable(jsonable_item))
             except DeserializationException as exception:
                 exception.path._prepend(IndexSegment(array_like, i))
                 raise
@@ -428,7 +426,7 @@ def _json_value_from_jsonable(
     )
 
 
-def _json_array_from_jsonable(
+def json_array_from_jsonable(
     jsonable: Jsonable
 ) -> our_types.JsonArray:
     """
@@ -443,12 +441,12 @@ def _json_array_from_jsonable(
             f"Expected a JSON-able array, but got: {type(jsonable)}"
         )
 
-    result = _json_value_from_jsonable(jsonable)
+    result = json_value_from_jsonable(jsonable)
     assert isinstance(result, list)
     return result
 
 
-def _json_object_from_jsonable(
+def json_object_from_jsonable(
     jsonable: Jsonable
 ) -> our_types.JsonObject:
     """
@@ -463,7 +461,7 @@ def _json_object_from_jsonable(
             f"Expected a JSON-able object, but got: {type(jsonable)}"
         )
 
-    result = _json_value_from_jsonable(jsonable)
+    result = json_value_from_jsonable(jsonable)
     assert isinstance(result, dict)
     return result
 
@@ -560,7 +558,7 @@ def _list_of__json_object_from_jsonable(
     """
     return _list_from_jsonable(
         jsonable,
-        _json_object_from_jsonable
+        json_object_from_jsonable
     )
 
 
@@ -577,7 +575,7 @@ def _list_of__json_value_from_jsonable(
     """
     return _list_from_jsonable(
         jsonable,
-        _json_value_from_jsonable
+        json_value_from_jsonable
     )
 
 
@@ -594,9 +592,9 @@ def _tuple4_of__str__json_value__json_array__json_object_from_jsonable(
     return _tuple4_from_jsonable(
         jsonable,
         _str_from_jsonable,
-        _json_value_from_jsonable,
-        _json_array_from_jsonable,
-        _json_object_from_jsonable
+        json_value_from_jsonable,
+        json_array_from_jsonable,
+        json_object_from_jsonable
     )
 
 
@@ -638,7 +636,7 @@ def something_from_jsonable(
             elif key == 'optionalObjects':
                 the_optional_objects = _list_of__json_object_from_jsonable(jsonable_value)
             elif key == 'optionalObject':
-                the_optional_object = _json_object_from_jsonable(jsonable_value)
+                the_optional_object = json_object_from_jsonable(jsonable_value)
             else:
                 unexpected_key = key
                 break
@@ -728,7 +726,7 @@ class SerializationException(Exception):
         return f'{self.path}: {self.cause}'
 
 
-def _json_value_to_jsonable(
+def json_value_to_jsonable(
     value: our_types.JsonValue
 ) -> MutableJsonable:
     """
@@ -758,13 +756,12 @@ def _json_value_to_jsonable(
     if isinstance(value, int):
         # NOTE (mristin):
         # An ``int`` is written out as it stands. JSON knows a single
-        # numeric type, though, so it has to be one which a ``float`` can
-        # hold exactly -- otherwise a reader, which reads every number as
-        # a ``float``, would get a different number back.
-        if our_common.try_to_convert_int_to_float(value) is None:
+        # numeric type, though, so it has to lie in the safe integer range
+        # [-2^53 + 1, 2^53 - 1] -- otherwise a reader, which reads every number
+        # as a ``float``, might get a different number back.
+        if not our_common.is_safe_integer(value):
             raise SerializationException(
-                f"Expected a JSON-able value, but got the integer {value}, "
-                f"which is not exactly representable as a JSON number"
+                our_common.unsafe_json_able_integer_message(value)
             )
 
         return value
@@ -791,7 +788,7 @@ def _json_value_to_jsonable(
                 )
 
             try:
-                mapping[key] = _json_value_to_jsonable(item_value)
+                mapping[key] = json_value_to_jsonable(item_value)
             except SerializationException as exception:
                 exception._prepend_key(key)
                 raise
@@ -804,7 +801,7 @@ def _json_value_to_jsonable(
         items: List[Any] = []
         for i, item_value in enumerate(array_like):
             try:
-                items.append(_json_value_to_jsonable(item_value))
+                items.append(json_value_to_jsonable(item_value))
             except SerializationException as exception:
                 exception._prepend_index(i)
                 raise
@@ -831,7 +828,7 @@ def _list_of__json_object_to_jsonable(
     for i, item in enumerate(that):
         try:
             jsonable.append(
-                _json_value_to_jsonable(
+                json_value_to_jsonable(
                     item
                 )
             )
@@ -855,7 +852,7 @@ def _list_of__json_value_to_jsonable(
     for i, item in enumerate(that):
         try:
             jsonable.append(
-                _json_value_to_jsonable(
+                json_value_to_jsonable(
                     item
                 )
             )
@@ -889,7 +886,7 @@ def _tuple4_of__str__json_value__json_array__json_object_to_jsonable(
         raise
     try:
         jsonable.append(
-            _json_value_to_jsonable(
+            json_value_to_jsonable(
                 that[1]
             )
         )
@@ -898,7 +895,7 @@ def _tuple4_of__str__json_value__json_array__json_object_to_jsonable(
         raise
     try:
         jsonable.append(
-            _json_value_to_jsonable(
+            json_value_to_jsonable(
                 that[2]
             )
         )
@@ -907,7 +904,7 @@ def _tuple4_of__str__json_value__json_array__json_object_to_jsonable(
         raise
     try:
         jsonable.append(
-            _json_value_to_jsonable(
+            json_value_to_jsonable(
                 that[3]
             )
         )
@@ -946,7 +943,7 @@ def _something_to_jsonable(
             raise
     if that.optional_object is not None:
         try:
-            jsonable['optionalObject'] = _json_value_to_jsonable(
+            jsonable['optionalObject'] = json_value_to_jsonable(
                 that.optional_object
             )
         except SerializationException as exception:

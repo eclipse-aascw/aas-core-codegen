@@ -225,6 +225,60 @@ namespace dummy
                         new Reporting.NameSegment("even"));
                     yield return error;
                 }
+
+                foreach (var error in Verification.Verify_long(that.Offset))
+                {
+                    error.PrependSegment(
+                        new Reporting.NameSegment("offset"));
+                    yield return error;
+                }
+
+                foreach (var error in Verification.Verify_long(that.Small))
+                {
+                    error.PrependSegment(
+                        new Reporting.NameSegment("small"));
+                    yield return error;
+                }
+
+                foreach (var error in Verification.Verify_long(that.ByNegative))
+                {
+                    error.PrependSegment(
+                        new Reporting.NameSegment("byNegative"));
+                    yield return error;
+                }
+
+                foreach (var error in Verification.Verify_long(that.Negative))
+                {
+                    error.PrependSegment(
+                        new Reporting.NameSegment("negative"));
+                    yield return error;
+                }
+
+                foreach (var error in Verification.Verify_long(that.Deviation))
+                {
+                    error.PrependSegment(
+                        new Reporting.NameSegment("deviation"));
+                    yield return error;
+                }
+
+                foreach (var error in Verification.Verify_long(that.Alignment))
+                {
+                    error.PrependSegment(
+                        new Reporting.NameSegment("alignment"));
+                    yield return error;
+                }
+
+                if (that.OptionalNumber.HasValue)
+                {
+                    foreach (
+                        var error in Verification.Verify_long(
+                            that.OptionalNumber.Value))
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment("optionalNumber"));
+                        yield return error;
+                    }
+                }
             }
         }  // private class Transformer
 
@@ -248,11 +302,46 @@ namespace dummy
         public static IEnumerable<Reporting.Error> VerifyEvenInt (
             long that)
         {
+            foreach (var error in Verify_long(that))
+            {
+                yield return error;
+            }
+
             if (!((Common.FloorMod(that, 2)) == (0)))
             {
                 yield return new Reporting.Error(
                     "Invariant violated:\n" +
                     "Even");
+            }
+        }
+
+        /// <summary>
+        /// Report that the integer <paramref name="value" /> is not a safe integer.
+        /// </summary>
+        /// <remarks>
+        /// See <see cref="Common.IsSafeInteger(long)" /> for what a safe integer is.
+        /// </remarks>
+        /// <param name="value">integer outside the safe integer range</param>
+        /// <returns>the cause of the error</returns>
+        internal static string UnsafeIntegerMessage(System.IFormattable value)
+        {
+            return $"Expected an integer, but got {value}, " +
+                "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]";
+        }
+
+        /// <summary>
+        /// Verify that <paramref name="that" /> lies in the safe integer range.
+        /// </summary>
+        /// <remarks>
+        /// See <see cref="Common.IsSafeInteger(long)" /> for what a safe integer is.
+        /// </remarks>
+        private static IEnumerable<Reporting.Error> Verify_long(
+            long that)
+        {
+            if (!Common.IsSafeInteger(that))
+            {
+                yield return new Reporting.Error(
+                    UnsafeIntegerMessage(that));
             }
         }
     }  // public static class Verification

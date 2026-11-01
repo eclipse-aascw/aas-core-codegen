@@ -47,6 +47,7 @@ else:
     from typing_extensions import Final
 
 from dummy import (
+    common as our_common,
     constants as our_constants,
     reporting as our_reporting,
     types as our_types,
@@ -341,6 +342,15 @@ class _Transformer(
                 'The first text must not be empty'
             )
 
+        for error in _verify_list_of__int(that.numbers):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'numbers'
+                )
+            )
+            yield error
+
         for error in _verify_list_of__class(that.items):
             error.path._prepend(
                 PropertySegment(
@@ -364,6 +374,29 @@ def verify(
     :yield: constraint violations
     """
     yield from _TRANSFORMER.transform(that)
+
+
+def _verify_int(
+        that: int
+) -> Iterator[Error]:
+    """Verify that :paramref:`that` lies in the safe integer range."""
+    if not our_common.is_safe_integer(that):
+        yield Error(our_common.unsafe_integer_message(that))
+
+
+def _verify_list_of__int(
+        that: Sequence[int]
+) -> Iterator[Error]:
+    """Verify the items of :paramref:`that` recursively."""
+    for i, item in enumerate(that):
+        for error in _verify_int(item):
+            error.path._prepend(
+                IndexSegment(
+                    that,
+                    i
+                )
+            )
+            yield error
 
 
 def _verify_list_of__class(

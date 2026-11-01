@@ -12,6 +12,7 @@ from typing import (
     Union,
     Set,
     Dict,
+    Final,
 )
 
 from icontract import ensure, require
@@ -864,7 +865,9 @@ def _needs_verification(type_annotation: intermediate.TypeAnnotationUnion) -> bo
     Check whether a value of ``type_annotation`` has anything to verify at any depth.
 
     In Go, we verify all our types, including the enumerations, as any string
-    can be converted to an enumeration, and all the JSON-able values.
+    can be converted to an enumeration, all the JSON-able values, and all
+    the integers, as an ``int64`` might lie outside the safe integer range
+    of JSON.
     """
     return any(
         isinstance(
@@ -875,6 +878,10 @@ def _needs_verification(type_annotation: intermediate.TypeAnnotationUnion) -> bo
                 intermediate.JsonArrayTypeAnnotation,
                 intermediate.JsonObjectTypeAnnotation,
             ),
+        )
+        or (
+            isinstance(type_anno, intermediate.PrimitiveTypeAnnotation)
+            and type_anno.a_type is intermediate.PrimitiveType.INT
         )
         for type_anno in intermediate.over_type_annotation_and_nested_type_annotations(
             type_annotation
@@ -1004,6 +1011,12 @@ def _generate_verify_into(
 
         else:
             assert_never(our_type)
+
+    elif (
+        isinstance(type_anno, intermediate.PrimitiveTypeAnnotation)
+        and type_anno.a_type is intermediate.PrimitiveType.INT
+    ):
+        function = "verifyInt64"
 
     elif isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
         function = "verifyJsonValue"
@@ -1162,8 +1175,9 @@ def _generate_verify_json_value(
 
     A JSON-able value is, recursively, exactly as JSON itself is defined, but
     ``JsonValue`` is an ``any``, so it rules out none of the two ways of not
-    being one: a non-finite number and a value of some other type altogether.
-    Each is reported here, at any depth. A ``nil`` is a JSON null, and hence
+    being one: a number which is not JSON-able (see ``IsSafeInteger`` and
+    ``CheckJsonAbleFloat64`` in the common package) and a value of some other
+    type altogether. Each is reported here, at any depth. A ``nil`` is a JSON null, and hence
     a JSON-able value.
 
     The path *within* a JSON-able value is a path of the error like any other:
@@ -1202,6 +1216,13 @@ func verifyJsonValue(
 {II}return false
 {I}}}
 
+{I}// NOTE (mristin):
+{I}// An int is widened to an int64 first, so that a single case below
+{I}// handles both, as in the de/serialization.
+{I}if integer, ok := value.(int); ok {{
+{II}value = int64(integer)
+{I}}}
+
 {I}switch casted := value.(type) {{
 {II}case bool:
 {III}return false
@@ -1209,20 +1230,17 @@ func verifyJsonValue(
 {II}case string:
 {III}return false
 
-{II}case float64:
-{III}// NOTE (mristin):
-{III}// JSON knows neither an infinity nor a not-a-number, so neither is
-{III}// a JSON-able value, even though a float64 holds either.
-{III}if math.IsInf(casted, 0) || math.IsNaN(casted) {{
+{II}case int64:
+{III}if !ourcommon.IsSafeInteger(casted) {{
 {IIII}return onError(
-{IIIII}newVerificationError(
-{IIIIII}fmt.Sprintf(
-{IIIIIII}"Expected a JSON-able value, but got the number %v, "+
-{IIIIIII}"which is neither finite nor representable in JSON",
-{IIIIIII}casted,
-{IIIIII}),
-{IIIII}),
+{IIIII}newVerificationError(ourcommon.NotJsonAbleIntegerMessage(casted)),
 {IIII})
+{III}}}
+{III}return false
+
+{II}case float64:
+{III}if cause := ourcommon.CheckJsonAbleFloat64(casted); cause != "" {{
+{IIII}return onError(newVerificationError(cause))
 {III}}}
 {III}return false
 
@@ -1270,8 +1288,8 @@ func verifyJsonValue(
 {III}return onError(
 {IIII}newVerificationError(
 {IIIII}fmt.Sprintf(
-{IIIIII}"Expected a JSON-able value (a bool, a float64, a string, "+
-{IIIIII}"a JsonArray or a JsonObject), but got: %T",
+{IIIIII}"Expected a JSON-able value (a bool, a float64, an int, an int64, "+
+{IIIIII}"a string, a JsonArray or a JsonObject), but got: %T",
 {IIIIII}value,
 {IIIII}),
 {IIII}),
@@ -1630,6 +1648,36 @@ func {function_name}(
     )
 
 
+#: Report an integer ``that`` outside the safe integer range of JSON, as
+#: the statements of a verification function
+_SAFE_INTEGER_CHECK: Final[Stripped] = Stripped(
+    f"""\
+if !ourcommon.IsSafeInteger(that) {{
+{I}abort = onError(newVerificationError(ourcommon.UnsafeIntegerMessage(that)))
+{I}if abort {{
+{II}return
+{I}}}
+}}"""
+)
+
+
+def _generate_verify_int64() -> Stripped:
+    """Generate the function verifying an ``int64`` as an item or a property."""
+    return Stripped(
+        f"""\
+// Verify that `that` integer lies in the safe integer range of JSON, as
+// checked by [ourcommon.IsSafeInteger] in the serialization as well.
+func verifyInt64(
+{I}that int64,
+{I}onError func(*VerificationError) bool,
+) (abort bool) {{
+{I}{indent_but_first_line(_SAFE_INTEGER_CHECK, I)}
+
+{I}return
+}}"""
+    )
+
+
 def _generate_verify_constrained_primitive(
     constrained_primitive: intermediate.ConstrainedPrimitive,
     symbol_table: intermediate.SymbolTable,
@@ -1662,6 +1710,12 @@ def _generate_verify_constrained_primitive(
 
     if len(errors) > 0:
         return None, errors
+
+    # NOTE (mristin):
+    # An integer outside the safe range can not be serialized to JSON, so we
+    # report it before the invariants, with the same check as the serialization.
+    if constrained_primitive.constrainee is intermediate.PrimitiveType.INT:
+        blocks.insert(0, _SAFE_INTEGER_CHECK)
 
     if len(blocks) == 0:
         blocks.append(Stripped("// There is no verification specified."))
@@ -1790,6 +1844,7 @@ func (ve *VerificationError) PathString() string {{
     # collide with the unexported names that we generate in the same package.
     origin_by_unexported_name: MutableMapping[str, str] = {
         "newVerificationError": "our helper function to create verification errors",
+        "verifyInt64": "our helper function to verify integers",
         "verifyJsonValue": "our helper function to verify JSON-able values",
         "verifyJsonArray": "our helper function to verify JSON-able arrays",
         "verifyJsonObject": "our helper function to verify JSON-able objects",
@@ -1879,6 +1934,9 @@ func (ve *VerificationError) PathString() string {{
             assert_never(verification)
 
     blocks.extend(_generate_verify_json_value(symbol_table=symbol_table))
+
+    if intermediate_uses.integers(symbol_table):
+        blocks.append(_generate_verify_int64())
 
     for cls in symbol_table.concrete_classes:
         block, underlying_errors = _generate_verify_class(

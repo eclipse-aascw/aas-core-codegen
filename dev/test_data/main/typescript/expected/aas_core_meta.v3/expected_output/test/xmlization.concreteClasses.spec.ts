@@ -2754,7 +2754,10 @@ test("DataSpecificationIec61360 XML deserialization fail", () => {
  * Read the first recorded example of LevelType with the content
  * of the element `xmlName` replaced by `text`.
  */
-function readWith(xmlName: string, text: string): OurTypes.LevelType {
+function readEitherWith(
+  xmlName: string,
+  text: string
+): ReturnType<typeof OurXmlization.fromXmlString> {
   const pths = Array.from(
     TestCommon.findFilesBySuffixRecursively(
       path.join(
@@ -2777,7 +2780,15 @@ function readWith(xmlName: string, text: string): OurTypes.LevelType {
 
   const patched = original.slice(0, start) + text + original.slice(end);
 
-  const instanceOrError = OurXmlization.fromXmlString(patched);
+  return OurXmlization.fromXmlString(patched);
+}
+
+/**
+ * Read the first recorded example of LevelType with the content
+ * of the element `xmlName` replaced by `text`, and expect no error.
+ */
+function readWith(xmlName: string, text: string): OurTypes.LevelType {
+  const instanceOrError = readEitherWith(xmlName, text);
   expect(instanceOrError.error).toBeNull();
 
   const casted = OurTypes.asLevelType(instanceOrError.mustValue());

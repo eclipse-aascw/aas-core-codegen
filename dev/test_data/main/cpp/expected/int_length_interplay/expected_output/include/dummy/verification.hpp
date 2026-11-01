@@ -133,6 +133,18 @@ class IVerificator {
 }  // namespace impl
 /// \endcond
 
+/// \cond HIDDEN
+namespace impl {
+/**
+ * \brief Describe that the \p integer lies outside the safe integer range.
+ *
+ * \param integer textual representation of the integer
+ * \return the cause of the error
+ */
+std::wstring DescribeIntegerOutsideSafeRange(const std::wstring& integer);
+}  // namespace impl
+/// \endcond
+
 class IVerification {
  public:
   virtual Iterator begin() const = 0;
@@ -231,6 +243,11 @@ bool NoNumberIsSeven(
 );
 
 /// \brief Check the ranges over the integers with a length as a bound.
+///
+/// The `start` is checked against the bounds before it is used as an index,
+/// so that the invariant holds up even against integers as large as
+/// `2 ** 53`. A negative `start` is refused, while a `start` beyond
+/// the numbers leaves nothing to check.
 bool NoSevenFrom(
   const std::vector<int64_t>& numbers,
   int64_t start

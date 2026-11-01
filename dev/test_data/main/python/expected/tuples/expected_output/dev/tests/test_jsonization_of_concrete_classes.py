@@ -110,59 +110,48 @@ def _load_the_first_expected(model_type: str) -> Any:
         return json.load(fid)
 
 
-class TestSerializationFailures(unittest.TestCase):
-    def test_another_item_serial_number_out_of_range(self) -> None:
-        for value in [9007199254740992, -9007199254740992]:
-            instance = our_jsonization.another_item_from_jsonable(
-                _load_the_first_expected('AnotherItem')
-            )
+class TestDeserializationOfIntegers(unittest.TestCase):
+    def test_another_item_serial_number(self) -> None:
+        jsonable = _load_the_first_expected('AnotherItem')
 
-            instance.serial_number = value
+        # NOTE (mristin):
+        # JSON has a single number type, so a whole float is an integer.
+        jsonable['serialNumber'] = 5.0
+        instance = our_jsonization.another_item_from_jsonable(jsonable)
+        self.assertIs(int, type(instance.serial_number))
+        self.assertEqual(5, instance.serial_number)
+
+        for value, expected_cause in [
+            ("5", "Expected an integer, but got: <class 'str'>"),
+            (
+                1.5,
+                "Expected an integer, but got 1.5, which is not a whole number"
+            ),
+            (
+                9007199254740992,
+                (
+                    "Expected an integer, but got 9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            ),
+            (
+                -9007199254740992.0,
+                (
+                    "Expected an integer, but got -9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            )
+        ]:
+            jsonable['serialNumber'] = value
 
             with self.assertRaises(
-                our_jsonization.SerializationException
+                our_jsonization.DeserializationException
             ) as context_manager:
-                our_jsonization.to_jsonable(instance)
+                our_jsonization.another_item_from_jsonable(jsonable)
 
             self.assertEqual(
-                '.serial_number',
-                context_manager.exception.path
-            )
-
-    def test_something_pair_out_of_range(self) -> None:
-        for value in [9007199254740992, -9007199254740992]:
-            instance = our_jsonization.something_from_jsonable(
-                _load_the_first_expected('Something')
-            )
-
-            instance.pair = (instance.pair[0], value)
-
-            with self.assertRaises(
-                our_jsonization.SerializationException
-            ) as context_manager:
-                our_jsonization.to_jsonable(instance)
-
-            self.assertEqual(
-                '.pair[1]',
-                context_manager.exception.path
-            )
-
-    def test_something_tricky_out_of_range(self) -> None:
-        for value in [9007199254740992, -9007199254740992]:
-            instance = our_jsonization.something_from_jsonable(
-                _load_the_first_expected('Something')
-            )
-
-            instance.tricky = (value, instance.tricky[1], instance.tricky[2], instance.tricky[3], instance.tricky[4], instance.tricky[5])
-
-            with self.assertRaises(
-                our_jsonization.SerializationException
-            ) as context_manager:
-                our_jsonization.to_jsonable(instance)
-
-            self.assertEqual(
-                '.tricky[0]',
-                context_manager.exception.path
+                expected_cause,
+                context_manager.exception.cause
             )
 
 

@@ -298,7 +298,7 @@ const std::vector<Check>& ChecksOf(Shape shape) {
     case Shape::kJSONArray:
     case Shape::kJSONObject:
       // NOTE (mristin):
-      // The JSON-able values are verified by the nested verification.
+      // These values are verified by the nested verification.
       return kNoChecks;
     default:
       throw std::logic_error(

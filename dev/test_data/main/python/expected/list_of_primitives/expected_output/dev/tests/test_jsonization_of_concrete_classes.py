@@ -64,24 +64,6 @@ def _load_the_first_expected(model_type: str) -> Any:
 
 
 class TestSerializationFailures(unittest.TestCase):
-    def test_something_some_ints_out_of_range(self) -> None:
-        for value in [9007199254740992, -9007199254740992]:
-            instance = our_jsonization.something_from_jsonable(
-                _load_the_first_expected('Something')
-            )
-
-            instance.some_ints = [0, value]
-
-            with self.assertRaises(
-                our_jsonization.SerializationException
-            ) as context_manager:
-                our_jsonization.to_jsonable(instance)
-
-            self.assertEqual(
-                '.some_ints[1]',
-                context_manager.exception.path
-            )
-
     def test_something_some_floats_non_finite(self) -> None:
         for value in [math.inf, -math.inf, math.nan]:
             instance = our_jsonization.something_from_jsonable(

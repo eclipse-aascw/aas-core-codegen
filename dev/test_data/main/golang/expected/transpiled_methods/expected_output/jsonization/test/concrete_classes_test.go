@@ -4,13 +4,17 @@ package jsonization_test
 // Do NOT edit or append.
 
 import (
+	"encoding/xml"
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	ourjsonization "github.com/dummy-works/dummy/jsonization"
 	ourtesting "github.com/dummy-works/dummy/ourtesting"
 	ourtypes "github.com/dummy-works/dummy/types"
+	ourverification "github.com/dummy-works/dummy/verification"
+	ourxmlization "github.com/dummy-works/dummy/xmlization"
 )
 
 // Determine the path to the first recorded example of `modelType`.
@@ -36,38 +40,99 @@ func mustFirstExpectedPath(t *testing.T, modelType string) string {
 	return pths[0]
 }
 
-// Assert that `that` can not be serialized to JSON, and that the failure
-// is reported at `expectedPath`.
-func assertSerializationFailsAt(
+// Assert that the verification, the JSON serialization and the XML
+// serialization of `that` all report `expectedMessage`. The verification
+// reports it at `expectedVerificationPath`, and the JSON serialization at
+// `expectedSerializationPath`.
+//
+// The serialization names a property by its getter, *e.g.*, `Value()`, while
+// the verification names it by the property, *e.g.*, `Value`.
+func assertSafeIntegerRefused(
 	t *testing.T,
 	that ourtypes.IClass,
-	expectedPath string,
+	expectedVerificationPath string,
+	expectedSerializationPath string,
+	expectedMessage string,
 ) {
+	var veriErrs []*ourverification.VerificationError
+	ourverification.Verify(
+		that,
+		func(err *ourverification.VerificationError) (abort bool) {
+			veriErrs = append(veriErrs, err)
+			return
+		},
+	)
+
+	found := false
+	for _, veriErr := range veriErrs {
+		if veriErr.PathString() == expectedVerificationPath &&
+			veriErr.Message == expectedMessage {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf(
+			"Expected the verification to report at %s: %s, but got: %v",
+			expectedVerificationPath, expectedMessage, veriErrs,
+		)
+		return
+	}
+
 	_, err := ourjsonization.ToJsonable(that)
-
-	if err == nil {
+	jsonErr, ok := err.(*ourjsonization.SerializationError)
+	if !ok ||
+		jsonErr.PathString() != expectedSerializationPath ||
+		jsonErr.Message != expectedMessage {
 		t.Fatalf(
-			"Expected the serialization to fail at %s, but it succeeded",
-			expectedPath,
+			"Expected the JSON serialization to fail at %s: %s, but got: %v",
+			expectedSerializationPath, expectedMessage, err,
 		)
 		return
 	}
 
-	seriaErr, ok := err.(*ourjsonization.SerializationError)
-	if !ok {
+	var builder strings.Builder
+	err = ourxmlization.Marshal(xml.NewEncoder(&builder), that, true)
+	xmlErr, ok := err.(*ourxmlization.SerializationError)
+	if !ok || xmlErr.Message != expectedMessage {
 		t.Fatalf(
-			"Expected a *SerializationError, but got %T: %v",
-			err, err,
+			"Expected the XML serialization to fail with: %s, but got: %v",
+			expectedMessage, err,
 		)
 		return
 	}
+}
 
-	if seriaErr.PathString() != expectedPath {
-		t.Fatalf(
-			"Expected the serialization to fail at %s, "+
-				"but it failed at %s: %s",
-			expectedPath, seriaErr.PathString(), seriaErr.Message,
-		)
+// Assert that neither the verification, nor the JSON serialization nor
+// the XML serialization of `that` refuses an integer as unsafe.
+//
+// The verification might still report the violations of the invariants, as
+// the tests change the instance at will.
+func assertSafeIntegerAccepted(
+	t *testing.T,
+	that ourtypes.IClass,
+) {
+	ourverification.Verify(
+		that,
+		func(err *ourverification.VerificationError) (abort bool) {
+			if strings.Contains(err.Message, "safe integer range") {
+				t.Fatalf("Expected no safe-integer error, but got: %v", err)
+			}
+			return
+		},
+	)
+
+	_, err := ourjsonization.ToJsonable(that)
+	if err != nil {
+		t.Fatalf("Expected no JSON serialization error, but got: %v", err)
+		return
+	}
+
+	var builder strings.Builder
+	err = ourxmlization.Marshal(xml.NewEncoder(&builder), that, true)
+	if err != nil {
+		t.Fatalf("Expected no XML serialization error, but got: %v", err)
+		return
 	}
 }
 
@@ -281,7 +346,7 @@ func TestSecondDeserializationFail(t *testing.T) {
 	}
 }
 
-func TestFirstSerializationFailOnOutOfRangeCount(t *testing.T) {
+func TestFirstRefusesUnsafeIntegerInCount(t *testing.T) {
 	pth := mustFirstExpectedPath(t, "First")
 
 	for _, value := range []int64{
@@ -299,15 +364,43 @@ func TestFirstSerializationFailOnOutOfRangeCount(t *testing.T) {
 
 		instance.SetCount(value)
 
-		assertSerializationFailsAt(
+		assertSafeIntegerRefused(
 			t,
 			instance,
+			"Count",
 			"Count()",
+			fmt.Sprintf(
+				"Expected an integer, but got %d, "+
+				"which is outside the safe integer range [-2^53 + 1, 2^53 - 1]",
+				value,
+			),
 		)
 	}
 }
 
-func TestSecondSerializationFailOnOutOfRangeCount(t *testing.T) {
+func TestFirstAcceptsSafeIntegerInCount(t *testing.T) {
+	pth := mustFirstExpectedPath(t, "First")
+
+	for _, value := range []int64{
+		9007199254740991,
+		-9007199254740991,
+	} {
+		jsonable := ourtesting.MustReadJsonable(pth)
+
+		instance, deseriaErr := ourjsonization.FirstFromJsonable(
+			jsonable,
+		)
+		if !assertNoDeserializationError(t, deseriaErr, pth) {
+			return
+		}
+
+		instance.SetCount(value)
+
+		assertSafeIntegerAccepted(t, instance)
+	}
+}
+
+func TestSecondRefusesUnsafeIntegerInCount(t *testing.T) {
 	pth := mustFirstExpectedPath(t, "Second")
 
 	for _, value := range []int64{
@@ -325,11 +418,39 @@ func TestSecondSerializationFailOnOutOfRangeCount(t *testing.T) {
 
 		instance.SetCount(value)
 
-		assertSerializationFailsAt(
+		assertSafeIntegerRefused(
 			t,
 			instance,
+			"Count",
 			"Count()",
+			fmt.Sprintf(
+				"Expected an integer, but got %d, "+
+				"which is outside the safe integer range [-2^53 + 1, 2^53 - 1]",
+				value,
+			),
 		)
+	}
+}
+
+func TestSecondAcceptsSafeIntegerInCount(t *testing.T) {
+	pth := mustFirstExpectedPath(t, "Second")
+
+	for _, value := range []int64{
+		9007199254740991,
+		-9007199254740991,
+	} {
+		jsonable := ourtesting.MustReadJsonable(pth)
+
+		instance, deseriaErr := ourjsonization.SecondFromJsonable(
+			jsonable,
+		)
+		if !assertNoDeserializationError(t, deseriaErr, pth) {
+			return
+		}
+
+		instance.SetCount(value)
+
+		assertSafeIntegerAccepted(t, instance)
 	}
 }
 

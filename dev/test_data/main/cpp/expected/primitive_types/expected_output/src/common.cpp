@@ -14060,6 +14060,26 @@ std::wstring Utf8ToWstring(const std::string& utf8_text) {
   return Utf8ToWstring(&(utf8_text[0]), utf8_text.size());
 }
 
+bool IsSafeInteger(int64_t value) {
+  return (
+    -9007199254740991LL <= value
+    && value <= 9007199254740991LL
+  );
+}
+
+bool IsSafeInteger(uint64_t value) {
+  return value <= 9007199254740991ULL;
+}
+
+bool IsSafeInteger(double value) {
+  // NOTE (mristin):
+  // A not-a-number fails both comparisons, so it lies outside the range.
+  return (
+    -9007199254740991.0 <= value
+    && value <= 9007199254740991.0
+  );
+}
+
 }  // namespace common
 }  // namespace dummy
 

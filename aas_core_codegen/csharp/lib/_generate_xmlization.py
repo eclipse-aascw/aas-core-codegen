@@ -653,6 +653,47 @@ private static {csharp_type} {function_name}(Xml.XmlReader reader)
             )
         )
 
+    if intermediate.PrimitiveType.INT in primitive_types:
+        result.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Refuse an integer read by <paramref name="readInteger" /> if it lies
+/// outside the safe integer range.
+/// </summary>
+/// <remarks>
+/// The lexical rules of xs:long are left to <paramref name="readInteger" />,
+/// while the range is checked exactly as in the JSON de-serialization, see
+/// <see cref="Common.IsSafeInteger(long)" />.
+/// </remarks>
+private static ContentReader<long> AsSafeInteger(
+{I}ContentReader<long> readInteger
+{I})
+{{
+{I}return (
+{II}Xml.XmlReader reader,
+{II}bool isEmpty,
+{II}out Reporting.Error? error
+{I}) =>
+{I}{{
+{II}long result = readInteger(reader, isEmpty, out error);
+{II}if (error != null)
+{II}{{
+{III}return default;
+{II}}}
+
+{II}if (!Common.IsSafeInteger(result))
+{II}{{
+{III}error = new Reporting.Error(
+{IIII}Verification.UnsafeIntegerMessage(result));
+{III}return default;
+{II}}}
+{II}return result;
+{I}}};
+}}"""
+            )
+        )
+
     return result
 
 
@@ -1008,6 +1049,14 @@ def _content_reader_initializer(
         arguments = content_reader
         if empty_value is not None:
             arguments = f"{arguments}, {empty_value}"
+
+        if primitive_type is intermediate.PrimitiveType.INT:
+            return Stripped(
+                f"""\
+AsSafeInteger(
+{I}AsText<{csharp_type}>({arguments}))"""
+            )
+
         return Stripped(f"AsText<{csharp_type}>({arguments})")
 
     if isinstance(type_anno, intermediate.OurTypeAnnotation):
@@ -2706,6 +2755,24 @@ def _content_writer_initializer(
         return Stripped("XmlRpc.SerializeStructBodyTo")
 
     primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is intermediate.PrimitiveType.INT:
+        # NOTE (mristin):
+        # We refuse an integer outside the safe integer range exactly as
+        # the JSON serialization does, so that the two never disagree.
+        return Stripped(
+            f"""\
+(that, writer) =>
+{{
+{I}if (!Common.IsSafeInteger(that))
+{I}{{
+{II}throw new SerializationFailure(
+{III}new Reporting.Error(
+{IIII}Verification.UnsafeIntegerMessage(that)));
+{I}}}
+{I}{_WRITE_VALUE_BY_PRIMITIVE[primitive_type]};
+}}"""
+        )
+
     if primitive_type is not None:
         return Stripped(
             f"(that, writer) => {_WRITE_VALUE_BY_PRIMITIVE[primitive_type]}"

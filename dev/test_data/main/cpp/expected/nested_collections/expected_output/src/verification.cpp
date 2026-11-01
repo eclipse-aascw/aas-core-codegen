@@ -37,6 +37,16 @@ Error::Error(
 
 // endregion struct Error
 
+namespace impl {
+std::wstring DescribeIntegerOutsideSafeRange(const std::wstring& integer) {
+  return common::Concat(
+    L"Expected an integer, but got ",
+    integer,
+    L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+  );
+}
+}  // namespace impl
+
 // region Verification functions
 
 bool GridIsRectangular(
@@ -136,7 +146,8 @@ enum class Shape : std::uint32_t {
   kPositiveInt = 0,
   kCode = 1,
   kSomeItem = 2,
-  kSomething = 3
+  kSomething = 3,
+  kINT64 = 4
 };  // enum class Shape
 
 /**
@@ -302,6 +313,8 @@ bool Something_8(
  * Give out the checks of the values of the \p shape.
  */
 const std::vector<Check>& ChecksOf(Shape shape) {
+  static const std::vector<Check> kNoChecks;
+
   switch (shape) {
     case Shape::kPositiveInt: {
       static const std::vector<Check> checks = {
@@ -371,6 +384,10 @@ const std::vector<Check>& ChecksOf(Shape shape) {
       };
       return checks;
     }
+    case Shape::kINT64:
+      // NOTE (mristin):
+      // These values are verified by the nested verification.
+      return kNoChecks;
     default:
       throw std::logic_error(
         common::Concat(
@@ -384,18 +401,80 @@ const std::vector<Check>& ChecksOf(Shape shape) {
 // endregion Checks
 
 /**
+ * \brief Report a single error whose cause depends on the value.
+ *
+ * The path of the error is empty, as \ref ErrorIterator prefixes it with
+ * the path to the value.
+ */
+class SingleErrorVerificator : public impl::IVerificator {
+ public:
+  explicit SingleErrorVerificator(
+    std::wstring cause
+  ) :
+    cause_(std::move(cause)) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    // NOTE (mristin):
+    // We copy the cause as the caller might take over the data members of
+    // the error, and we still need to be able to start again.
+    error_ = Error(cause_);
+  }
+
+  void Next() override {
+    error_ = common::nullopt;
+  }
+
+  bool Done() const override {
+    return !error_.has_value();
+  }
+
+  const Error& Get() const override {
+    return *error_;
+  }
+
+  Error& GetMutable() override {
+    return *error_;
+  }
+
+  long Index() const override {
+    return error_.has_value() ? 0 : -1;
+  }
+
+  std::unique_ptr<impl::IVerificator> Clone() const override {
+    return common::make_unique<SingleErrorVerificator>(*this);
+  }
+
+ private:
+  std::wstring cause_;
+  common::optional<Error> error_;
+};  // class SingleErrorVerificator
+
+/**
  * \brief Create the nested verification of the \p value, if its \p shape has one.
  *
  * \return nullptr if the shape has no nested verification
  */
 std::unique_ptr<impl::IVerificator> NewNestedVerificator(
-  Shape,
-  const void*
+  Shape shape,
+  const void* value
 ) {
-  // NOTE (mristin):
-  // The meta-model uses no JSON-able values, so no value needs a nested
-  // verification.
-  return nullptr;
+  switch (shape) {
+    case Shape::kPositiveInt:
+    case Shape::kINT64: {
+      const int64_t integer = *static_cast<const int64_t*>(value);
+      if (common::IsSafeInteger(integer)) {
+        return nullptr;
+      }
+
+      return common::make_unique<SingleErrorVerificator>(
+        impl::DescribeIntegerOutsideSafeRange(std::to_wstring(integer))
+      );
+    }
+    default:
+      return nullptr;
+  }
 }
 
 // region Iteration over the values
@@ -1048,6 +1127,12 @@ std::unique_ptr<IIterator> ThroughPointer(
   return Over(*instance, recursive);
 }
 
+using listOf_int = std::vector<int64_t>;
+
+using listOf_listOf_int = std::vector<
+  std::vector<int64_t>
+>;
+
 using tupleOf2_PositiveInt_setOf_str = std::tuple<
   int64_t,
   std::unordered_set<std::wstring>
@@ -1101,6 +1186,27 @@ using listOf_listOf_AbstractItem = std::vector<
   >
 >;
 
+std::unique_ptr<IIterator> Over_int(
+  const int64_t& value,
+  bool
+) {
+  return One(&value, Shape::kINT64);
+}
+
+std::unique_ptr<IIterator> Over_listOf_int(
+  const listOf_int& value,
+  bool recursive
+) {
+  return Each(value, &Over_int, recursive);
+}
+
+std::unique_ptr<IIterator> Over_listOf_listOf_int(
+  const listOf_listOf_int& value,
+  bool recursive
+) {
+  return Each(value, &Over_listOf_int, recursive);
+}
+
 std::unique_ptr<IIterator> Over_tupleOf2_PositiveInt_setOf_str(
   const tupleOf2_PositiveInt_setOf_str& value,
   bool
@@ -1145,7 +1251,10 @@ std::unique_ptr<IIterator> Over_tupleOf2_int_Code(
   const tupleOf2_int_Code& value,
   bool
 ) {
-  return AtIndex(1, One(&std::get<1>(value), Shape::kCode));
+  return Chain(
+    AtIndex(0, One(&std::get<0>(value), Shape::kINT64)),
+    AtIndex(1, One(&std::get<1>(value), Shape::kCode))
+  );
 }
 
 std::unique_ptr<IIterator> Over_tupleOf3_listOf_AbstractItem_setOf_Color_tupleOf2_int_Code(
@@ -1218,12 +1327,26 @@ std::unique_ptr<IIterator> Over_SomeItem(
   return One(&that, Shape::kSomeItem);
 }
 
+std::unique_ptr<IIterator> Over_AnotherItem(
+  const types::IAnotherItem& that,
+  bool
+) {
+  return InProperty(
+    iteration::Property::kSerialNumber,
+    OneByValue(that.serial_number(), Shape::kINT64)
+  );
+}
+
 std::unique_ptr<IIterator> Over_Something(
   const types::ISomething& that,
   bool recursive
 ) {
   return Chain(
     One(&that, Shape::kSomething),
+    InProperty(
+      iteration::Property::kGrid,
+      Over_listOf_listOf_int(that.grid(), recursive)
+    ),
     InProperty(
       iteration::Property::kRowsOfPairs,
       Over_listOf_listOf_tupleOf2_PositiveInt_setOf_str(
@@ -1268,6 +1391,11 @@ std::unique_ptr<IIterator> DispatchOnModelType(
     case types::ModelType::kSomeItem:
       return Over_SomeItem(
         dynamic_cast<const types::ISomeItem&>(instance),
+        recursive
+      );
+    case types::ModelType::kAnotherItem:
+      return Over_AnotherItem(
+        dynamic_cast<const types::IAnotherItem&>(instance),
         recursive
       );
     case types::ModelType::kSomething:

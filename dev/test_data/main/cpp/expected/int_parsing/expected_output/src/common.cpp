@@ -14249,10 +14249,27 @@ std::wstring LStrip(
   return text.substr(offset);
 }
 
-int64_t ParseSafeInt(const std::wstring& text) {
-  // NOTE: This is 2^53 - 1.
-  const int64_t kMaxSafeInteger = 9007199254740991LL;
+bool IsSafeInteger(int64_t value) {
+  return (
+    -9007199254740991LL <= value
+    && value <= 9007199254740991LL
+  );
+}
 
+bool IsSafeInteger(uint64_t value) {
+  return value <= 9007199254740991ULL;
+}
+
+bool IsSafeInteger(double value) {
+  // NOTE (mristin):
+  // A not-a-number fails both comparisons, so it lies outside the range.
+  return (
+    -9007199254740991.0 <= value
+    && value <= 9007199254740991.0
+  );
+}
+
+int64_t ParseSafeInt(const std::wstring& text) {
   size_t offset = 0;
   bool negative = false;
   if (!text.empty() && (text[0] == L'-' || text[0] == L'+')) {
@@ -14280,7 +14297,7 @@ int64_t ParseSafeInt(const std::wstring& text) {
     // NOTE: The value never overflows as we check it after each digit, and
     // ten times the largest safe integer fits into int64_t.
     value = value * 10 + static_cast<int64_t>(character - L'0');
-    if (value > kMaxSafeInteger) {
+    if (!IsSafeInteger(value)) {
       throw std::invalid_argument(
         "Expected a safe integer, but got a text out of its range: "
         + WstringToUtf8(text)

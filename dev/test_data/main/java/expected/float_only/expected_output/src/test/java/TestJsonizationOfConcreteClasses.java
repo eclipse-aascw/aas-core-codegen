@@ -6,6 +6,9 @@
 package dummy.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import dummy.jsonization.Jsonization;
@@ -16,19 +19,29 @@ import dummy.common.*;
 import dummy.types.enums.*;
 import dummy.types.model.*;
 import dummy.verification.Verification;
+import dummy.xmlcommon.XmlCommon;
+import dummy.xmlization.Xmlization;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.StringWriter;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
+import javax.xml.stream.XMLOutputFactory;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamWriter;
 import org.junit.jupiter.api.Test;
 
 public class TestJsonizationOfConcreteClasses {

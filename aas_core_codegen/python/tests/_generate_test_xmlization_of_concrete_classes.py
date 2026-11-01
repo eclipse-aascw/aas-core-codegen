@@ -211,6 +211,41 @@ def {python_naming.method_name(
             )
         )
 
+        # NOTE (mristin):
+        # A valid ``xs:long`` outside of the safe integer range can not be
+        # serialized to JSON, so it is refused as in the JSON de-serialization.
+        blocks.append(
+            Stripped(
+                f"""\
+def {python_naming.method_name(
+                Identifier(f"test_{int_prop.name}_read_at_the_safe_bounds")
+            )}(self) -> None:
+{I}for value in [2 ** 53 - 1, -(2 ** 53 - 1)]:
+{II}instance = self._read_with({int_prop_xml_name!r}, str(value))
+{II}self.assertEqual(value, instance.{int_prop_name})"""
+            )
+        )
+
+        blocks.append(
+            Stripped(
+                f"""\
+def {python_naming.method_name(
+                Identifier(f"test_{int_prop.name}_read_outside_the_safe_range_fails")
+            )}(self) -> None:
+{I}for value in [2 ** 53, -(2 ** 53)]:
+{II}with self.assertRaises(
+{III}our_xmlization.DeserializationException
+{II}) as context_manager:
+{III}self._read_with({int_prop_xml_name!r}, str(value))
+
+{II}self.assertEqual(
+{III}f"Expected an integer, but got {{value}}, "
+{III}f"which is outside the safe integer range [-2^53 + 1, 2^53 - 1]",
+{III}context_manager.exception.cause
+{II})"""
+            )
+        )
+
     body = "\n\n".join(blocks)
 
     return (

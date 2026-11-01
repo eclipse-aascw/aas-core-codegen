@@ -37,6 +37,16 @@ Error::Error(
 
 // endregion struct Error
 
+namespace impl {
+std::wstring DescribeIntegerOutsideSafeRange(const std::wstring& integer) {
+  return common::Concat(
+    L"Expected an integer, but got ",
+    integer,
+    L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+  );
+}
+}  // namespace impl
+
 // region Verification functions
 
 bool TextsAreUnique(
@@ -337,7 +347,8 @@ namespace {
 enum class Shape : std::uint32_t {
   kCode = 0,
   kSomething = 1,
-  kCollection = 2
+  kCollection = 2,
+  kINT64 = 3
 };  // enum class Shape
 
 /**
@@ -634,6 +645,8 @@ bool Collection_5(
  * Give out the checks of the values of the \p shape.
  */
 const std::vector<Check>& ChecksOf(Shape shape) {
+  static const std::vector<Check> kNoChecks;
+
   switch (shape) {
     case Shape::kCode: {
       static const std::vector<Check> checks = {
@@ -747,6 +760,10 @@ const std::vector<Check>& ChecksOf(Shape shape) {
       };
       return checks;
     }
+    case Shape::kINT64:
+      // NOTE (mristin):
+      // These values are verified by the nested verification.
+      return kNoChecks;
     default:
       throw std::logic_error(
         common::Concat(
@@ -760,18 +777,79 @@ const std::vector<Check>& ChecksOf(Shape shape) {
 // endregion Checks
 
 /**
+ * \brief Report a single error whose cause depends on the value.
+ *
+ * The path of the error is empty, as \ref ErrorIterator prefixes it with
+ * the path to the value.
+ */
+class SingleErrorVerificator : public impl::IVerificator {
+ public:
+  explicit SingleErrorVerificator(
+    std::wstring cause
+  ) :
+    cause_(std::move(cause)) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    // NOTE (mristin):
+    // We copy the cause as the caller might take over the data members of
+    // the error, and we still need to be able to start again.
+    error_ = Error(cause_);
+  }
+
+  void Next() override {
+    error_ = common::nullopt;
+  }
+
+  bool Done() const override {
+    return !error_.has_value();
+  }
+
+  const Error& Get() const override {
+    return *error_;
+  }
+
+  Error& GetMutable() override {
+    return *error_;
+  }
+
+  long Index() const override {
+    return error_.has_value() ? 0 : -1;
+  }
+
+  std::unique_ptr<impl::IVerificator> Clone() const override {
+    return common::make_unique<SingleErrorVerificator>(*this);
+  }
+
+ private:
+  std::wstring cause_;
+  common::optional<Error> error_;
+};  // class SingleErrorVerificator
+
+/**
  * \brief Create the nested verification of the \p value, if its \p shape has one.
  *
  * \return nullptr if the shape has no nested verification
  */
 std::unique_ptr<impl::IVerificator> NewNestedVerificator(
-  Shape,
-  const void*
+  Shape shape,
+  const void* value
 ) {
-  // NOTE (mristin):
-  // The meta-model uses no JSON-able values, so no value needs a nested
-  // verification.
-  return nullptr;
+  switch (shape) {
+    case Shape::kINT64: {
+      const int64_t integer = *static_cast<const int64_t*>(value);
+      if (common::IsSafeInteger(integer)) {
+        return nullptr;
+      }
+
+      return common::make_unique<SingleErrorVerificator>(
+        impl::DescribeIntegerOutsideSafeRange(std::to_wstring(integer))
+      );
+    }
+    default:
+      return nullptr;
+  }
 }
 
 // region Iteration over the values
@@ -928,6 +1006,67 @@ std::unique_ptr<IIterator> One(
   Shape shape
 ) {
   return common::make_unique<OneIterator>(value, shape);
+}
+
+/**
+ * \brief Iterate over a single value which we keep a copy of.
+ *
+ * The getters of booleans, integers and floating-point numbers return by value,
+ * so these values have no address in the model which we could point to.
+ */
+template<typename T>
+class OneByValueIterator : public IIterator {
+ public:
+  OneByValueIterator(
+    T value,
+    Shape shape
+  ) :
+    value_(value),
+    shape_(shape),
+    done_(true) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    done_ = false;
+  }
+
+  void Next() override {
+    done_ = true;
+  }
+
+  bool Done() const override {
+    return done_;
+  }
+
+  const void* Value() const override {
+    return &value_;
+  }
+
+  Shape ShapeOf() const override {
+    return shape_;
+  }
+
+  void AppendToPath(iteration::Path&) const override {
+    // Intentionally empty, as the value itself is the end of the path.
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<OneByValueIterator<T> >(*this);
+  }
+
+ private:
+  T value_;
+  Shape shape_;
+  bool done_;
+};  // class OneByValueIterator
+
+template<typename T>
+std::unique_ptr<IIterator> OneByValue(
+  T value,
+  Shape shape
+) {
+  return common::make_unique<OneByValueIterator<T> >(value, shape);
 }
 
 /**
@@ -1347,9 +1486,27 @@ std::unique_ptr<IIterator> EachSorted(
   );
 }
 
+using listOf_int = std::vector<int64_t>;
+
 using listOf_Code = std::vector<std::wstring>;
 
+using setOf_int = std::unordered_set<int64_t>;
+
 using setOf_Code = std::unordered_set<std::wstring>;
+
+std::unique_ptr<IIterator> Over_int(
+  const int64_t& value,
+  bool
+) {
+  return One(&value, Shape::kINT64);
+}
+
+std::unique_ptr<IIterator> Over_listOf_int(
+  const listOf_int& value,
+  bool recursive
+) {
+  return Each(value, &Over_int, recursive);
+}
 
 std::unique_ptr<IIterator> Over_Code(
   const std::wstring& value,
@@ -1363,6 +1520,18 @@ std::unique_ptr<IIterator> Over_listOf_Code(
   bool recursive
 ) {
   return Each(value, &Over_Code, recursive);
+}
+
+std::unique_ptr<IIterator> Over_setOf_int(
+  const setOf_int& value,
+  bool recursive
+) {
+  return EachSorted(
+    value,
+    std::less<int64_t>(),
+    &Over_int,
+    recursive
+  );
 }
 
 std::unique_ptr<IIterator> Over_setOf_Code(
@@ -1384,6 +1553,14 @@ std::unique_ptr<IIterator> Over_Something(
   return Chain(
     One(&that, Shape::kSomething),
     InProperty(
+      iteration::Property::kNumber,
+      OneByValue(that.number(), Shape::kINT64)
+    ),
+    InProperty(
+      iteration::Property::kNumbers,
+      Over_listOf_int(that.numbers(), recursive)
+    ),
+    InProperty(
       iteration::Property::kCodes,
       Over_listOf_Code(that.codes(), recursive)
     )
@@ -1396,6 +1573,10 @@ std::unique_ptr<IIterator> Over_Collection(
 ) {
   return Chain(
     One(&that, Shape::kCollection),
+    InProperty(
+      iteration::Property::kNumbers,
+      Over_setOf_int(that.numbers(), recursive)
+    ),
     InProperty(
       iteration::Property::kCodes,
       Over_setOf_Code(that.codes(), recursive)

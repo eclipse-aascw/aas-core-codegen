@@ -1342,22 +1342,20 @@ common::optional<SerializationError> SerializeValueBodyTo(
 {II}writer.SerializeString(value.get<bool>() ? "1" : "0");
 {II}writer.StopElement("boolean");
 {I}}} else if (value.is_number()) {{
-{II}const double number = value.get<double>();
-
 {II}// NOTE (mristin):
-{II}// JSON knows neither an infinity nor a not-a-number, so neither is
-{II}// a JSON-able value. ``SelfClosingWriter::SerializeDouble`` would
-{II}// happily write "INF" or "NaN" -- the xs:double spellings -- which
+{II}// We check the number exactly as the verification and the JSON
+{II}// de/serialization do. In particular, JSON knows neither an infinity nor
+{II}// a not-a-number, and ``SelfClosingWriter::SerializeDouble`` would happily
+{II}// write "INF" or "NaN" -- the xs:double spellings -- which
 {II}// ``DeserializeDoubleBodyFrom`` deliberately refuses to read back.
-{II}if (!std::isfinite(number)) {{
-{III}return common::make_optional<SerializationError>(
-{IIII}common::Concat(
-{IIIII}L"Expected a JSON-able value, but got the number ",
-{IIIII}std::to_wstring(number),
-{IIIII}L", which is neither finite nor representable in JSON"
-{IIII})
-{III});
+{II}common::optional<std::wstring> cause(
+{III}verification::CheckJsonAbleNumber(value)
+{II});
+{II}if (cause.has_value()) {{
+{III}return common::make_optional<SerializationError>(std::move(*cause));
 {II}}}
+
+{II}const double number = value.get<double>();
 
 {II}writer.StartElementInNoNamespace(
 {III}"double", undeclare_namespace
@@ -1566,6 +1564,7 @@ def generate_implementation(library_namespace: Stripped) -> str:
         Stripped(
             """\
 #include "xml_rpc.hpp"
+#include "json_value_verification.hpp"
 #include "xml_common.hpp"
 
 #pragma warning(push, 0)

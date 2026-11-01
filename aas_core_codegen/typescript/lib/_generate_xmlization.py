@@ -14,6 +14,7 @@ from aas_core_codegen.common import (
     assert_never,
     indent_but_first_line,
 )
+from aas_core_codegen.intermediate import uses as intermediate_uses
 from aas_core_codegen.typescript import (
     common as typescript_common,
     naming as typescript_naming,
@@ -83,17 +84,13 @@ function {function_name}(
 
 {I}// NOTE (mristin):
 {I}// An integer is a ``number`` in TypeScript, and a ``number`` holds only
-{I}// the integers up to 2^53 - 1 exactly. Beyond that ``Number`` rounds
-{I}// silently -- 9007199254740993 comes back as 9007199254740992, and
-{I}// 9223372036854775807 as 9223372036854776000, which is a perfectly
-{I}// well-formed but *different* xs:long. We refuse instead of corrupting.
-{I}//
-{I}// ``Number.isSafeInteger`` covers ``Number.isInteger`` as well, so
-{I}// a non-integer is refused here too.
+{I}// the safe integers exactly. Beyond them ``Number`` rounds silently --
+{I}// 9007199254740993 comes back as 9007199254740992, and 9223372036854775807
+{I}// as 9223372036854776000, which is a perfectly well-formed but *different*
+{I}// xs:long. We refuse instead of corrupting, and report the original text.
 {I}if (!Number.isSafeInteger(value)) {{
 {II}return newDeserializationError<number>(
-{III}`Expected an integer within the safe range of a number, `
-{IIII}+ `but got: ${{text}}`
+{III}OurCommon.unsafeIntegerMessage(text)
 {II});
 {I}}}
 
@@ -1230,15 +1227,14 @@ function {function_name}(
 {I}value: number
 ): void {{
 {I}// NOTE (mristin):
-{I}// Beyond 2^53 - 1 a ``number`` no longer holds every integer, so the value
-{I}// we were handed has already lost its identity -- writing it out would
-{I}// record a different xs:long without a word. ``Number.isSafeInteger``
-{I}// covers ``Number.isInteger`` as well.
+{I}// Beyond the safe integers a ``number`` no longer holds every integer, so
+{I}// the value we were handed has already lost its identity -- writing it out
+{I}// would record a different xs:long without a word.
+{I}if (!Number.isInteger(value)) {{
+{II}throw new SerializationError(OurCommon.notWholeIntegerMessage(value));
+{I}}}
 {I}if (!Number.isSafeInteger(value)) {{
-{II}throw new SerializationError(
-{III}`Expected an integer within the safe range of a number, `
-{IIII}+ `but got: ${{value}}`
-{II});
+{II}throw new SerializationError(OurCommon.unsafeIntegerMessage(value));
 {I}}}
 
 {I}parts.push(`${{value}}`);
@@ -2042,6 +2038,11 @@ function duplicatePropertyError(localName: string): DeserializationError {{
         )
 
     for primitive_type in intermediate.PrimitiveType:
+        if primitive_type is intermediate.PrimitiveType.INT and not (
+            intermediate_uses.integers(symbol_table)
+        ):
+            continue
+
         blocks.append(_generate_parse_content_for_primitive_type(primitive_type))
 
     for enumeration in symbol_table.enumerations:
@@ -2302,6 +2303,11 @@ function writeEnumerationContent<T>(
     )
 
     for primitive_type in intermediate.PrimitiveType:
+        if primitive_type is intermediate.PrimitiveType.INT and not (
+            intermediate_uses.integers(symbol_table)
+        ):
+            continue
+
         blocks.append(_generate_write_content_for_primitive_type(primitive_type))
 
     blocks.extend(

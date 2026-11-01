@@ -103,12 +103,9 @@ def verify_json_value(
 {II}# JSON knows a single numeric type, so an ``int`` becomes a ``float``
 {II}# on the way out. Only an ``int`` which that conversion can not carry
 {II}# exactly is an error here -- see
-{II}# :py:func:`.common.try_to_convert_int_to_float`.
-{II}if our_common.try_to_convert_int_to_float(value) is None:
-{III}yield Error(
-{IIII}f"Expected a JSON-able value, but got the integer {{value}}, "
-{IIII}f"which is not exactly representable as a JSON number"
-{III})
+{II}# :py:func:`.common.is_safe_integer`.
+{II}if not our_common.is_safe_integer(value):
+{III}yield Error(our_common.unsafe_json_able_integer_message(value))
 
 {II}return
 

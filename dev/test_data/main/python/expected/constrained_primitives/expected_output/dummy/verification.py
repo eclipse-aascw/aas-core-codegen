@@ -47,6 +47,7 @@ else:
     from typing_extensions import Final
 
 from dummy import (
+    common as our_common,
     constants as our_constants,
     reporting as our_reporting,
     types as our_types,
@@ -133,6 +134,14 @@ def verify(
     yield from _TRANSFORMER.transform(that)
 
 
+def _verify_int(
+        that: int
+) -> Iterator[Error]:
+    """Verify that :paramref:`that` lies in the safe integer range."""
+    if not our_common.is_safe_integer(that):
+        yield Error(our_common.unsafe_integer_message(that))
+
+
 def verify_constrainedbool(
         that: bool
 ) -> Iterator[Error]:
@@ -147,6 +156,8 @@ def verify_positiveint(
         that: int
 ) -> Iterator[Error]:
     """Verify the constraints of :paramref:`that`."""
+    yield from _verify_int(that)
+
     if not (that > 0):
         yield Error(
             'Larger than zero'

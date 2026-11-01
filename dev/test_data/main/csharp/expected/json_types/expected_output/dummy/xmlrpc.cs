@@ -721,6 +721,17 @@ namespace dummy
                     break;
 
                 case Nodes.JsonValue jsonValue:
+                    // NOTE (mristin):
+                    // We check a number exactly as the verification and the JSON
+                    // de/serialization do. Otherwise, an integer outside the safe integer
+                    // range would be quietly written as a different double below.
+                    string? cause = JsonValueVerification.CheckJsonAbleNumber(jsonValue);
+                    if (cause != null)
+                    {
+                        throw new SerializationFailure(
+                            new Reporting.Error(cause));
+                    }
+
                     if (jsonValue.TryGetValue(out bool boolValue))
                     {
                         writer.WriteStartElement("boolean", "");
@@ -733,22 +744,28 @@ namespace dummy
                         writer.WriteString(boolValue ? "1" : "0");
                         writer.WriteEndElement();
                     }
+                    else if (jsonValue.TryGetValue(out long integer))
+                    {
+                        // NOTE (mristin):
+                        // XML-RPC carries every JSON number in a <double>, and the check
+                        // above made sure that the integer is represented exactly.
+                        writer.WriteStartElement("double", "");
+                        writer.WriteValue(integer);
+                        writer.WriteEndElement();
+                    }
+                    else if (jsonValue.TryGetValue(out ulong unsignedInteger))
+                    {
+                        writer.WriteStartElement("double", "");
+                        writer.WriteValue((long)unsignedInteger);
+                        writer.WriteEndElement();
+                    }
                     else if (jsonValue.TryGetValue(out double doubleValue))
                     {
                         // NOTE (mristin):
-                        // JSON knows neither an infinity nor a not-a-number, so neither
-                        // is a JSON-able value. XmlWriter would happily write "INF" or
-                        // "NaN" -- the xs:double spellings -- which
-                        // DeserializeDoubleTextFrom deliberately refuses to read back.
-                        if (!System.Double.IsFinite(doubleValue))
-                        {
-                            throw new SerializationFailure(
-                                new Reporting.Error(
-                                    "Expected a JSON-able value, but got the number " +
-                                    $"{doubleValue}, which is neither finite nor " +
-                                    "representable in JSON"));
-                        }
-
+                        // The check above refused an infinity and a not-a-number, which
+                        // XmlWriter would otherwise happily write as "INF" or "NaN" -- the
+                        // xs:double spellings -- and which DeserializeDoubleTextFrom
+                        // deliberately refuses to read back.
                         writer.WriteStartElement("double", "");
                         writer.WriteValue(doubleValue);
                         writer.WriteEndElement();

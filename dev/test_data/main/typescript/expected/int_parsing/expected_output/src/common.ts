@@ -580,6 +580,10 @@ export function sliceStr(text: string, start: number, end?: number): string {
  * `Number.MAX_SAFE_INTEGER`, which a double-precision floating-point number
  * represents exactly.
  *
+ * A `number` holds the integers exactly only within the safe range. The other
+ * SDKs check the same range, though their integers could be larger, so that
+ * the invariants which parse a text behave the same everywhere.
+ *
  * @param text - to be parsed
  * @returns the parsed integer
  * @throws {@link Error} if `text` is not a safe integer
@@ -610,17 +614,16 @@ export function parseSafeInt(text: string): number {
     const digit = code - 48;
 
     // NOTE (mristin):
-    // We check the range before we accumulate so that the arithmetic stays
-    // exact. The number 900719925474099 is Number.MAX_SAFE_INTEGER divided by 10,
-    // and 1 is its last digit.
-    if (value > 900719925474099 || (value === 900719925474099 && digit > 1)) {
+    // While the result stays a safe integer, the arithmetic is exact. Once
+    // the exact result leaves the safe range, the rounded one leaves it as
+    // well, as 2^53 is representable, so we stop before we lose any precision.
+    value = value * 10 + digit;
+    if (!Number.isSafeInteger(value)) {
       throw new Error(
         "Expected a safe integer, but got a text out of its range: " +
           JSON.stringify(text)
       );
     }
-
-    value = value * 10 + digit;
   }
 
   // NOTE (mristin):

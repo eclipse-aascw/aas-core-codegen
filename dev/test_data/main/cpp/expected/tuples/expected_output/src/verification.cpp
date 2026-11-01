@@ -37,6 +37,16 @@ Error::Error(
 
 // endregion struct Error
 
+namespace impl {
+std::wstring DescribeIntegerOutsideSafeRange(const std::wstring& integer) {
+  return common::Concat(
+    L"Expected an integer, but got ",
+    integer,
+    L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+  );
+}
+}  // namespace impl
+
 // region Verification functions
 
 bool SomeVerification(
@@ -87,7 +97,8 @@ namespace {
  */
 enum class Shape : std::uint32_t {
   kPositiveInt = 0,
-  kSomething = 1
+  kSomething = 1,
+  kINT64 = 2
 };  // enum class Shape
 
 /**
@@ -148,6 +159,8 @@ bool Something_2(
  * Give out the checks of the values of the \p shape.
  */
 const std::vector<Check>& ChecksOf(Shape shape) {
+  static const std::vector<Check> kNoChecks;
+
   switch (shape) {
     case Shape::kPositiveInt: {
       static const std::vector<Check> checks = {
@@ -175,6 +188,10 @@ const std::vector<Check>& ChecksOf(Shape shape) {
       };
       return checks;
     }
+    case Shape::kINT64:
+      // NOTE (mristin):
+      // These values are verified by the nested verification.
+      return kNoChecks;
     default:
       throw std::logic_error(
         common::Concat(
@@ -188,18 +205,80 @@ const std::vector<Check>& ChecksOf(Shape shape) {
 // endregion Checks
 
 /**
+ * \brief Report a single error whose cause depends on the value.
+ *
+ * The path of the error is empty, as \ref ErrorIterator prefixes it with
+ * the path to the value.
+ */
+class SingleErrorVerificator : public impl::IVerificator {
+ public:
+  explicit SingleErrorVerificator(
+    std::wstring cause
+  ) :
+    cause_(std::move(cause)) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    // NOTE (mristin):
+    // We copy the cause as the caller might take over the data members of
+    // the error, and we still need to be able to start again.
+    error_ = Error(cause_);
+  }
+
+  void Next() override {
+    error_ = common::nullopt;
+  }
+
+  bool Done() const override {
+    return !error_.has_value();
+  }
+
+  const Error& Get() const override {
+    return *error_;
+  }
+
+  Error& GetMutable() override {
+    return *error_;
+  }
+
+  long Index() const override {
+    return error_.has_value() ? 0 : -1;
+  }
+
+  std::unique_ptr<impl::IVerificator> Clone() const override {
+    return common::make_unique<SingleErrorVerificator>(*this);
+  }
+
+ private:
+  std::wstring cause_;
+  common::optional<Error> error_;
+};  // class SingleErrorVerificator
+
+/**
  * \brief Create the nested verification of the \p value, if its \p shape has one.
  *
  * \return nullptr if the shape has no nested verification
  */
 std::unique_ptr<impl::IVerificator> NewNestedVerificator(
-  Shape,
-  const void*
+  Shape shape,
+  const void* value
 ) {
-  // NOTE (mristin):
-  // The meta-model uses no JSON-able values, so no value needs a nested
-  // verification.
-  return nullptr;
+  switch (shape) {
+    case Shape::kPositiveInt:
+    case Shape::kINT64: {
+      const int64_t integer = *static_cast<const int64_t*>(value);
+      if (common::IsSafeInteger(integer)) {
+        return nullptr;
+      }
+
+      return common::make_unique<SingleErrorVerificator>(
+        impl::DescribeIntegerOutsideSafeRange(std::to_wstring(integer))
+      );
+    }
+    default:
+      return nullptr;
+  }
 }
 
 // region Iteration over the values
@@ -652,6 +731,104 @@ std::unique_ptr<IIterator> AtIndex(
   return common::make_unique<AtIndexIterator>(index, std::move(child));
 }
 
+/**
+ * \brief Iterate over the values of an instance, dispatched on its runtime type.
+ *
+ * Defined below, once all the classes have been covered.
+ */
+std::unique_ptr<IIterator> DispatchOnModelType(
+  const types::IClass& instance,
+  bool recursive
+);
+
+/**
+ * \brief Iterate recursively over the values of an instance referenced from
+ * another instance.
+ *
+ * We dispatch on the runtime type of the instance only in \ref Start so that
+ * we descend into the instance only once the iteration reaches it.
+ */
+class DispatchingIterator : public IIterator {
+ public:
+  explicit DispatchingIterator(
+    const types::IClass* instance
+  ) :
+    instance_(instance) {
+    // Intentionally empty.
+  }
+
+  DispatchingIterator(const DispatchingIterator& other) :
+    instance_(other.instance_),
+    child_(other.child_ == nullptr ? nullptr : other.child_->Clone()) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    child_ = DispatchOnModelType(*instance_, true);
+    child_->Start();
+  }
+
+  void Next() override {
+    child_->Next();
+  }
+
+  bool Done() const override {
+    return child_->Done();
+  }
+
+  const void* Value() const override {
+    return child_->Value();
+  }
+
+  Shape ShapeOf() const override {
+    return child_->ShapeOf();
+  }
+
+  void AppendToPath(iteration::Path& path) const override {
+    child_->AppendToPath(path);
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<DispatchingIterator>(*this);
+  }
+
+ private:
+  const types::IClass* instance_;
+  std::unique_ptr<IIterator> child_;
+};  // class DispatchingIterator
+
+std::unique_ptr<IIterator> Over(
+  const types::IClass& instance,
+  bool recursive
+) {
+  if (!recursive) {
+    // NOTE (mristin):
+    // In the non-recursive mode, we verify only the instance itself, but not
+    // the instances that it references.
+    return Empty();
+  }
+
+  return common::make_unique<DispatchingIterator>(&instance);
+}
+
+template<typename T>
+std::unique_ptr<IIterator> ThroughPointer(
+  const std::shared_ptr<T>& instance,
+  bool recursive
+) {
+  return Over(*instance, recursive);
+}
+
+using tupleOf2_str_int = std::tuple<
+  std::wstring,
+  int64_t
+>;
+
+using tupleOf2_AbstractItem_AbstractItem = std::tuple<
+  std::shared_ptr<types::IAbstractItem>,
+  std::shared_ptr<types::IAbstractItem>
+>;
+
 using tupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result = std::tuple<
   int64_t,
   std::shared_ptr<types::ISomeItem>,
@@ -661,11 +838,62 @@ using tupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result = std::tupl
   types::Result
 >;
 
-std::unique_ptr<IIterator> Over_tupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result(
-  const tupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result& value,
+using tupleOf2_str_AbstractItem = std::tuple<
+  std::wstring,
+  std::shared_ptr<types::IAbstractItem>
+>;
+
+std::unique_ptr<IIterator> Over_tupleOf2_str_int(
+  const tupleOf2_str_int& value,
   bool
 ) {
-  return AtIndex(4, One(&std::get<4>(value), Shape::kPositiveInt));
+  return AtIndex(1, One(&std::get<1>(value), Shape::kINT64));
+}
+
+std::unique_ptr<IIterator> Over_tupleOf2_AbstractItem_AbstractItem(
+  const tupleOf2_AbstractItem_AbstractItem& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Chain(
+    AtIndex(0, Over(*std::get<0>(value), recursive)),
+    AtIndex(1, Over(*std::get<1>(value), recursive))
+  );
+}
+
+std::unique_ptr<IIterator> Over_tupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result(
+  const tupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result& value,
+  bool recursive
+) {
+  return Chain(
+    AtIndex(0, One(&std::get<0>(value), Shape::kINT64)),
+    AtIndex(2, Over(*std::get<2>(value), recursive)),
+    AtIndex(4, One(&std::get<4>(value), Shape::kPositiveInt))
+  );
+}
+
+std::unique_ptr<IIterator> Over_tupleOf2_str_AbstractItem(
+  const tupleOf2_str_AbstractItem& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return AtIndex(1, Over(*std::get<1>(value), recursive));
+}
+
+std::unique_ptr<IIterator> Over_AnotherItem(
+  const types::IAnotherItem& that,
+  bool
+) {
+  return InProperty(
+    iteration::Property::kSerialNumber,
+    OneByValue(that.serial_number(), Shape::kINT64)
+  );
 }
 
 std::unique_ptr<IIterator> Over_Something(
@@ -675,11 +903,31 @@ std::unique_ptr<IIterator> Over_Something(
   return Chain(
     One(&that, Shape::kSomething),
     InProperty(
+      iteration::Property::kPair,
+      Over_tupleOf2_str_int(that.pair(), recursive)
+    ),
+    InProperty(
+      iteration::Property::kItems,
+      Over_tupleOf2_AbstractItem_AbstractItem(
+        that.items(),
+        recursive
+      )
+    ),
+    InProperty(
       iteration::Property::kTricky,
       Over_tupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result(
         that.tricky(),
         recursive
       )
+    ),
+    InProperty(
+      iteration::Property::kOptionalPair,
+      that.optional_pair().has_value()
+        ? Over_tupleOf2_str_AbstractItem(
+            (*that.optional_pair()),
+            recursive
+          )
+        : Empty()
     )
   );
 }
@@ -692,6 +940,11 @@ std::unique_ptr<IIterator> DispatchOnModelType(
   bool recursive
 ) {
   switch (instance.model_type()) {
+    case types::ModelType::kAnotherItem:
+      return Over_AnotherItem(
+        dynamic_cast<const types::IAnotherItem&>(instance),
+        recursive
+      );
     case types::ModelType::kSomething:
       return Over_Something(
         dynamic_cast<const types::ISomething&>(instance),

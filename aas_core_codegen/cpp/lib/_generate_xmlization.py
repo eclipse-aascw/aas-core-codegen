@@ -1642,8 +1642,15 @@ std::pair<
     )
 
 
-def _generate_functions_to_deserialize_primitives() -> List[Stripped]:
-    """Generate functions to parse text nodes to primitives."""
+def _generate_functions_to_deserialize_primitives(
+    uses_integers: bool,
+) -> List[Stripped]:
+    """
+    Generate functions to parse text nodes to primitives.
+
+    The integers are parsed only if ``uses_integers``, *i.e.*, if the meta-model
+    holds any.
+    """
     return [
         Stripped("// region De-serialize primitives"),
         Stripped(
@@ -1717,8 +1724,10 @@ std::pair<
 {I});
 }}"""
         ),
-        Stripped(
-            f"""\
+        *(
+            [
+                Stripped(
+                    f"""\
 std::pair<
 {I}common::optional<int64_t>,
 {I}common::optional<DeserializationError>
@@ -1816,6 +1825,14 @@ std::pair<
 {II});
 {I}}}
 
+{I}if (!common::IsSafeInteger(*deserialized)) {{
+{II}return NoInstanceAndDeserializationErrorWithCause<int64_t>(
+{III}verification::impl::DescribeIntegerOutsideSafeRange(
+{IIII}std::to_wstring(*deserialized)
+{III})
+{II});
+{I}}}
+
 {I}// NOTE (mristin):
 {I}// We consume the text node.
 {I}reader.Read();
@@ -1829,6 +1846,10 @@ std::pair<
 {II}common::nullopt
 {I});
 }}"""
+                ),
+            ]
+            if uses_integers
+            else []
         ),
         Stripped(
             f"""\
@@ -3910,8 +3931,13 @@ const iteration::Path& SerializationException::path() const noexcept {{
     ]
 
 
-def _generate_write_primitives() -> List[Stripped]:
-    """Generate the writers of the primitive values as the content of an element."""
+def _generate_write_primitives(uses_integers: bool) -> List[Stripped]:
+    """
+    Generate the writers of the primitive values as the content of an element.
+
+    The integers are written only if ``uses_integers``, *i.e.*, if the meta-model
+    holds any.
+    """
     return [
         Stripped(
             f"""\
@@ -3927,12 +3953,22 @@ common::optional<xml_common::SerializationError> WriteBool(
 {I}return common::nullopt;
 }}"""
         ),
-        Stripped(
-            f"""\
+        *(
+            [
+                Stripped(
+                    f"""\
 common::optional<xml_common::SerializationError> WriteInt64(
 {I}int64_t value,
 {I}xml_common::SelfClosingWriter& writer
 ) {{
+{I}if (!common::IsSafeInteger(value)) {{
+{II}return xml_common::SerializationError(
+{III}verification::impl::DescribeIntegerOutsideSafeRange(
+{IIII}std::to_wstring(value)
+{III})
+{II});
+{I}}}
+
 {I}writer.SerializeInt64(value);
 {I}if (writer.error().has_value()) {{
 {II}return writer.move_error();
@@ -3940,6 +3976,10 @@ common::optional<xml_common::SerializationError> WriteInt64(
 
 {I}return common::nullopt;
 }}"""
+                ),
+            ]
+            if uses_integers
+            else []
         ),
         Stripped(
             f"""\
@@ -5635,6 +5675,14 @@ def generate_implementation(
 
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
+    # NOTE (mristin):
+    # The integers are checked against the safe integer range with the very same
+    # predicate as in the verification, so that the two agree.
+    uses_integers = intermediate_uses.integers(symbol_table)
+    verification_include = (
+        f'#include "{include_prefix_path}/verification.hpp"\n' if uses_integers else ""
+    )
+
     xml_rpc_include = (
         '#include "xml_rpc.hpp"\n' if intermediate_uses.json_types(symbol_table) else ""
     )
@@ -5644,6 +5692,7 @@ def generate_implementation(
         Stripped(
             f"""\
 #include "{include_prefix_path}/stringification.hpp"
+{verification_include}\
 #include "{include_prefix_path}/wstringification.hpp"
 #include "{include_prefix_path}/xmlization.hpp"
 
@@ -5721,7 +5770,9 @@ const std::string kNamespace(  // NOLINT(cert-err58-cpp)
         # our own dispatch function to construct the right alternative.
         blocks.append(_generate_named_union_from_element(named_union=named_union))
 
-    blocks.extend(_generate_functions_to_deserialize_primitives())
+    blocks.extend(
+        _generate_functions_to_deserialize_primitives(uses_integers=uses_integers)
+    )
 
     if intermediate_uses.json_types(symbol_table):
         # NOTE (mristin):
@@ -5819,7 +5870,7 @@ const std::string kNamespace(  // NOLINT(cert-err58-cpp)
             Stripped("// endregion De-serialization"),
             Stripped("// region Serialization"),
             *_generate_serialization_exception_implementation(),
-            *_generate_write_primitives(),
+            *_generate_write_primitives(uses_integers=uses_integers),
         ]
     )
 

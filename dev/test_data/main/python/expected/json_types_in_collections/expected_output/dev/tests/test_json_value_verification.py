@@ -112,7 +112,7 @@ class TestJsonValue(unittest.TestCase):
             )
 
     def test_an_integer_is_json_able_while_it_fits_a_float(self) -> None:
-        for number in (0, 1, -3, 2 ** 53):
+        for number in (0, 1, -3, 2 ** 53 - 1, -(2 ** 53 - 1)):
             self.assertListEqual(
                 [],
                 _paths_and_causes(
@@ -124,18 +124,19 @@ class TestJsonValue(unittest.TestCase):
     def test_an_integer_too_large_for_a_float_is_refused(self) -> None:
         # NOTE (mristin):
         # JSON knows a single numeric type, so an ``int`` has to become
-        # a ``float``. 2**53 + 1 is the first whole number which a ``float``
-        # can not tell from its neighbour, and 10**400 exceeds a ``float``
-        # altogether.
-        for number in (2 ** 53 + 1, 10 ** 400):
+        # a ``float``. 2**53 is the first integer outside the safe integer
+        # range [-2^53 + 1, 2^53 - 1], as for the integer properties of
+        # the model, and 10**400 exceeds a ``float`` altogether.
+        for number in (2 ** 53, -(2 ** 53), 10 ** 400):
             paths_and_causes = _paths_and_causes(
                 our_json_value_verification.verify_json_value([number])
             )
 
             self.assertEqual(1, len(paths_and_causes), f"for the number {number}")
             self.assertEqual("[0]", paths_and_causes[0][0])
-            self.assertIn(
-                "not exactly representable as a JSON number",
+            self.assertEqual(
+                f"Expected a JSON-able value, but got the integer {number}, "
+                f"which is outside the safe integer range [-2^53 + 1, 2^53 - 1]",
                 paths_and_causes[0][1]
             )
 

@@ -48,6 +48,7 @@ else:
     from typing_extensions import Final
 
 from dummy import (
+    common as our_common,
     constants as our_constants,
     reporting as our_reporting,
     types as our_types,
@@ -142,12 +143,14 @@ class _Transformer(
             self,
             that: our_types.AnotherItem
     ) -> Iterator[Error]:
-        # No verification has been defined for AnotherItem.
-        return
-        # For this uncommon return-yield construction, see:
-        # https://stackoverflow.com/questions/13243766/how-to-define-an-empty-generator-function
-        # noinspection PyUnreachableCode
-        yield
+        for error in _verify_int(that.serial_number):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'serial_number'
+                )
+            )
+            yield error
 
     # noinspection PyMethodMayBeStatic
     def transform_something(
@@ -220,6 +223,15 @@ class _Transformer(
                 'Grid must be rectangular.'
             )
 
+        for error in _verify_list_of__list_of__int(that.grid):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'grid'
+                )
+            )
+            yield error
+
         for error in _verify_list_of__list_of__tuple2_of__positive_int__set_of__str(
                 that.rows_of_pairs
         ):
@@ -277,6 +289,44 @@ def verify(
     :yield: constraint violations
     """
     yield from _TRANSFORMER.transform(that)
+
+
+def _verify_int(
+        that: int
+) -> Iterator[Error]:
+    """Verify that :paramref:`that` lies in the safe integer range."""
+    if not our_common.is_safe_integer(that):
+        yield Error(our_common.unsafe_integer_message(that))
+
+
+def _verify_list_of__list_of__int(
+        that: Sequence[Sequence[int]]
+) -> Iterator[Error]:
+    """Verify the items of :paramref:`that` recursively."""
+    for i, item in enumerate(that):
+        for error in _verify_list_of__int(item):
+            error.path._prepend(
+                IndexSegment(
+                    that,
+                    i
+                )
+            )
+            yield error
+
+
+def _verify_list_of__int(
+        that: Sequence[int]
+) -> Iterator[Error]:
+    """Verify the items of :paramref:`that` recursively."""
+    for i, item in enumerate(that):
+        for error in _verify_int(item):
+            error.path._prepend(
+                IndexSegment(
+                    that,
+                    i
+                )
+            )
+            yield error
 
 
 def _verify_list_of__list_of__tuple2_of__positive_int__set_of__str(
@@ -371,6 +421,15 @@ def _verify_tuple2_of__int__code(
         that: Tuple[int, str]
 ) -> Iterator[Error]:
     """Verify the items of :paramref:`that` recursively."""
+    for error in _verify_int(that[0]):
+        error.path._prepend(
+            IndexSegment(
+                that,
+                0
+            )
+        )
+        yield error
+
     for error in verify_code(that[1]):
         error.path._prepend(
             IndexSegment(
@@ -400,6 +459,8 @@ def verify_positive_int(
         that: int
 ) -> Iterator[Error]:
     """Verify the constraints of :paramref:`that`."""
+    yield from _verify_int(that)
+
     if not (that > 0):
         yield Error(
             'Positive int must be positive.'

@@ -190,6 +190,22 @@ export class VerificationError {
 }
 
 /**
+ * Verify that `that` is a safe integer so that it can be serialized to JSON.
+ *
+ * @param that - to be verified
+ * @returns errors, if any
+ */
+export function *verifyInteger(
+  that: number
+): IterableIterator<VerificationError> {
+  if (!Number.isInteger(that)) {
+    yield new VerificationError(OurCommon.notWholeIntegerMessage(that));
+  } else if (!Number.isSafeInteger(that)) {
+    yield new VerificationError(OurCommon.unsafeIntegerMessage(that));
+  }
+}
+
+/**
  * Verify an instance of the model recursively or non-recursively (depending on the context).
  */
 class Verifier
@@ -211,18 +227,6 @@ class Verifier
       yield error;
     }
 
-    if (!Number.isInteger(that.someInt)) {
-      const error = new VerificationError(
-        "Expected an integer, but got a floating-point number"
-      );
-      error.path.prepend(
-        new PropertySegment(
-          that,
-          "someInt"
-        )
-      );
-      yield error;
-    }
     for (const error of verifyPositiveint(that.someInt)) {
       error.path.prepend(
         new PropertySegment(
@@ -306,6 +310,11 @@ export function *verifyConstrainedbool(
 export function *verifyPositiveint(
   that: number
 ): IterableIterator<VerificationError> {
+  if (!Number.isSafeInteger(that)) {
+    yield* verifyInteger(that);
+    return;
+  }
+
   if (!(that > 0)) {
     yield new VerificationError(
       "Larger than zero"

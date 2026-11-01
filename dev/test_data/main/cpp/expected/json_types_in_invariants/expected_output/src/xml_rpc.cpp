@@ -2,6 +2,7 @@
 // Do NOT edit or append.
 
 #include "xml_rpc.hpp"
+#include "json_value_verification.hpp"
 #include "xml_common.hpp"
 
 #pragma warning(push, 0)
@@ -902,22 +903,20 @@ common::optional<SerializationError> SerializeValueBodyTo(
     writer.SerializeString(value.get<bool>() ? "1" : "0");
     writer.StopElement("boolean");
   } else if (value.is_number()) {
-    const double number = value.get<double>();
-
     // NOTE (mristin):
-    // JSON knows neither an infinity nor a not-a-number, so neither is
-    // a JSON-able value. ``SelfClosingWriter::SerializeDouble`` would
-    // happily write "INF" or "NaN" -- the xs:double spellings -- which
+    // We check the number exactly as the verification and the JSON
+    // de/serialization do. In particular, JSON knows neither an infinity nor
+    // a not-a-number, and ``SelfClosingWriter::SerializeDouble`` would happily
+    // write "INF" or "NaN" -- the xs:double spellings -- which
     // ``DeserializeDoubleBodyFrom`` deliberately refuses to read back.
-    if (!std::isfinite(number)) {
-      return common::make_optional<SerializationError>(
-        common::Concat(
-          L"Expected a JSON-able value, but got the number ",
-          std::to_wstring(number),
-          L", which is neither finite nor representable in JSON"
-        )
-      );
+    common::optional<std::wstring> cause(
+      verification::CheckJsonAbleNumber(value)
+    );
+    if (cause.has_value()) {
+      return common::make_optional<SerializationError>(std::move(*cause));
     }
+
+    const double number = value.get<double>();
 
     writer.StartElementInNoNamespace(
       "double", undeclare_namespace

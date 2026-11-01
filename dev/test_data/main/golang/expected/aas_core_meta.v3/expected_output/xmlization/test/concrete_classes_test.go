@@ -4862,13 +4862,13 @@ func TestDuplicatePropertyFails(t *testing.T) {
 	}
 }
 
-// Read the first recorded example of ILevelType with the content of
-// the element `xmlName` replaced by `text`.
-func readLevelTypeWith(
+// Give the text of the first recorded example of ILevelType with
+// the content of the element `xmlName` replaced by `text`.
+func patchLevelTypeWith(
 	t *testing.T,
 	xmlName string,
 	text string,
-) ourtypes.ILevelType {
+) string {
 	pths := ourtesting.FindFilesBySuffixRecursively(
 		filepath.Join(
 			ourtesting.TestDataDir,
@@ -4897,7 +4897,17 @@ func readLevelTypeWith(
 	start := strings.Index(original, "<"+xmlName+">") + len(xmlName) + 2
 	end := strings.Index(original, "</"+xmlName+">")
 
-	patched := original[:start] + text + original[end:]
+	return original[:start] + text + original[end:]
+}
+
+// Read the first recorded example of ILevelType with the content of
+// the element `xmlName` replaced by `text`.
+func readLevelTypeWith(
+	t *testing.T,
+	xmlName string,
+	text string,
+) ourtypes.ILevelType {
+	patched := patchLevelTypeWith(t, xmlName, text)
 
 	decoder := xml.NewDecoder(strings.NewReader(patched))
 	deserialized, deseriaErr := ourxmlization.Unmarshal(decoder)

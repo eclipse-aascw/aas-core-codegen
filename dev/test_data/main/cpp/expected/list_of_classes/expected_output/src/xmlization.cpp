@@ -2,6 +2,7 @@
 // Do NOT edit or append.
 
 #include "dummy/stringification.hpp"
+#include "dummy/verification.hpp"
 #include "dummy/wstringification.hpp"
 #include "dummy/xmlization.hpp"
 
@@ -1238,6 +1239,14 @@ std::pair<
     );
   }
 
+  if (!common::IsSafeInteger(*deserialized)) {
+    return NoInstanceAndDeserializationErrorWithCause<int64_t>(
+      verification::impl::DescribeIntegerOutsideSafeRange(
+        std::to_wstring(*deserialized)
+      )
+    );
+  }
+
   // NOTE (mristin):
   // We consume the text node.
   reader.Read();
@@ -2298,6 +2307,14 @@ common::optional<xml_common::SerializationError> WriteInt64(
   int64_t value,
   xml_common::SelfClosingWriter& writer
 ) {
+  if (!common::IsSafeInteger(value)) {
+    return xml_common::SerializationError(
+      verification::impl::DescribeIntegerOutsideSafeRange(
+        std::to_wstring(value)
+      )
+    );
+  }
+
   writer.SerializeInt64(value);
   if (writer.error().has_value()) {
     return writer.move_error();

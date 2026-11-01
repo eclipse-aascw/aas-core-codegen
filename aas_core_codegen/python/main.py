@@ -407,6 +407,23 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             ),
         ]
 
+    # NOTE (mristin):
+    # We test the safe integer range whenever the SDK checks it, see
+    # :py:func:`intermediate_uses.safe_integer_checks`.
+    if intermediate_uses.safe_integer_checks(context.symbol_table):
+        rel_paths_generators = list(rel_paths_generators) + [
+            (
+                tests_rel_path / "test_safe_integers.py",
+                lambda: (
+                    python_tests.generate_test_safe_integers(
+                        symbol_table=context.symbol_table,
+                        qualified_module_name=qualified_module_name,
+                    ),
+                    None,
+                ),
+            ),
+        ]
+
     for rel_path, generator_func in rel_paths_generators:
         assert not rel_path.is_absolute()
 

@@ -250,7 +250,18 @@ def _generate_definition_of_verify_constrained_primitive(
 
     arg_name = cpp_naming.argument_name(Identifier("that"))
 
-    if cpp_common.primitive_type_is_referencable(constrained_primitive.constrainee):
+    if constrained_primitive.constrainee is intermediate.PrimitiveType.INT:
+        documentation_comment = Stripped(
+            """\
+/**
+ * \\brief Verify that the invariants hold for \\p that value, and that
+ * it lies in the safe integer range [-2^53 + 1, 2^53 - 1].
+ *
+ * \\param that value to be verified
+ * \\return Iterable over constraint violations
+ */"""
+        )
+    elif cpp_common.primitive_type_is_referencable(constrained_primitive.constrainee):
         documentation_comment = Stripped(
             """\
 /**
@@ -532,6 +543,35 @@ static_assert(
     )
 
 
+def _generate_safe_integer_declarations(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the declaration of the message on the integers outside the safe range.
+
+    The range itself is checked by ``common::IsSafeInteger``.
+    """
+    if not intermediate_uses.integers(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            """\
+/// \\cond HIDDEN
+namespace impl {
+/**
+ * \\brief Describe that the \\p integer lies outside the safe integer range.
+ *
+ * \\param integer textual representation of the integer
+ * \\return the cause of the error
+ */
+std::wstring DescribeIntegerOutsideSafeRange(const std::wstring& integer);
+}  // namespace impl
+/// \\endcond"""
+        )
+    ]
+
+
 # fmt: off
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 @ensure(
@@ -742,6 +782,7 @@ class IVerificator {{
 }}  // namespace impl
 /// \\endcond"""
         ),
+        *_generate_safe_integer_declarations(symbol_table),
         Stripped(
             f"""\
 class IVerification {{
@@ -957,6 +998,34 @@ Error::Error(
 }}"""
         ),
         Stripped("// endregion struct Error"),
+    ]
+
+
+def _generate_safe_integer_implementations(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the message on the integers outside the safe integer range.
+
+    The range itself is checked by ``common::IsSafeInteger``, so that each bound
+    and each message is written exactly once.
+    """
+    if not intermediate_uses.integers(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+namespace impl {{
+std::wstring DescribeIntegerOutsideSafeRange(const std::wstring& integer) {{
+{I}return common::Concat(
+{II}L"Expected an integer, but got ",
+{II}integer,
+{II}L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+{I});
+}}
+}}  // namespace impl"""
+        )
     ]
 
 
@@ -1244,6 +1313,64 @@ struct Check {{
 {I} */
 {I}const wchar_t* message;
 }};  // struct Check"""
+    ),
+]
+
+
+#: Define the nested verification which reports a single error.
+_SINGLE_ERROR_VERIFICATOR: Final[Sequence[Stripped]] = [
+    Stripped(
+        f"""\
+/**
+ * \\brief Report a single error whose cause depends on the value.
+ *
+ * The path of the error is empty, as \\ref ErrorIterator prefixes it with
+ * the path to the value.
+ */
+class SingleErrorVerificator : public impl::IVerificator {{
+ public:
+{I}explicit SingleErrorVerificator(
+{II}std::wstring cause
+{I}) :
+{II}cause_(std::move(cause)) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}void Start() override {{
+{II}// NOTE (mristin):
+{II}// We copy the cause as the caller might take over the data members of
+{II}// the error, and we still need to be able to start again.
+{II}error_ = Error(cause_);
+{I}}}
+
+{I}void Next() override {{
+{II}error_ = common::nullopt;
+{I}}}
+
+{I}bool Done() const override {{
+{II}return !error_.has_value();
+{I}}}
+
+{I}const Error& Get() const override {{
+{II}return *error_;
+{I}}}
+
+{I}Error& GetMutable() override {{
+{II}return *error_;
+{I}}}
+
+{I}long Index() const override {{
+{II}return error_.has_value() ? 0 : -1;
+{I}}}
+
+{I}std::unique_ptr<impl::IVerificator> Clone() const override {{
+{II}return common::make_unique<SingleErrorVerificator>(*this);
+{I}}}
+
+ private:
+{I}std::wstring cause_;
+{I}common::optional<Error> error_;
+}};  // class SingleErrorVerificator"""
     ),
 ]
 
@@ -2520,7 +2647,9 @@ class _Analysis:
         the non-recursive verification.
         """
         if isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
-            return False
+            # NOTE (mristin):
+            # The integers have to lie in the safe integer range.
+            return type_annotation.a_type is intermediate.PrimitiveType.INT
 
         elif isinstance(type_annotation, intermediate.OurTypeAnnotation):
             our_type = type_annotation.our_type
@@ -2529,7 +2658,10 @@ class _Analysis:
                 return False
 
             elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-                return id(our_type) in self.checked_constrained_primitive_id_set
+                return (
+                    id(our_type) in self.checked_constrained_primitive_id_set
+                    or our_type.constrainee is intermediate.PrimitiveType.INT
+                )
 
             elif isinstance(our_type, intermediate.Class):
                 concrete_classes = list(our_type.concrete_descendants)
@@ -2598,11 +2730,37 @@ _JSON_SHAPE_LITERALS = (
 )
 
 
+#: Literal of ``Shape`` for the integers, which have to lie in the safe integer
+#: range. Like the literals of JSON-able values, it never clashes with the literals
+#: of our types by construction.
+_INT64_SHAPE_LITERAL = Identifier("kINT64")
+
+
 def _shape_literal(
     our_type: Union[intermediate.ConstrainedPrimitive, intermediate.ConcreteClass]
 ) -> Identifier:
     """Generate the literal of ``Shape`` for the values of ``our_type``."""
     return cpp_naming.enum_literal_name(our_type.name)
+
+
+@require(
+    lambda constrained_primitive: len(constrained_primitive.invariants) > 0
+    or constrained_primitive.constrainee is intermediate.PrimitiveType.INT,
+    "The values of the constrained primitive have something to verify",
+)
+def _constrained_primitive_shape_literal(
+    constrained_primitive: intermediate.ConstrainedPrimitive,
+) -> Identifier:
+    """
+    Generate the literal of ``Shape`` of the values of ``constrained_primitive``.
+
+    A constrained primitive over integers without invariants only needs the check
+    of the safe integer range, so its values take the shape of the integers.
+    """
+    if len(constrained_primitive.invariants) == 0:
+        return _INT64_SHAPE_LITERAL
+
+    return _shape_literal(constrained_primitive)
 
 
 def _json_shape_literal(
@@ -2718,7 +2876,15 @@ def _generate_over_expression(
         )
 
     elif isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
-        raise AssertionError("Primitive values have nothing to verify")
+        assert (
+            type_annotation.a_type is intermediate.PrimitiveType.INT
+        ), "Only the integers among the primitive values have anything to verify"
+
+        shape = f"Shape::{_INT64_SHAPE_LITERAL}"
+        if by_value:
+            return cpp_over.generate_call("OneByValue", [expr, shape])
+
+        return cpp_over.generate_call("One", [f"&{expr}", shape])
 
     elif isinstance(type_annotation, intermediate.OurTypeAnnotation):
         our_type = type_annotation.our_type
@@ -2727,7 +2893,7 @@ def _generate_over_expression(
             raise AssertionError("Enumeration literals have nothing to verify")
 
         elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-            shape = f"Shape::{_shape_literal(our_type)}"
+            shape = f"Shape::{_constrained_primitive_shape_literal(our_type)}"
             if by_value:
                 return cpp_over.generate_call("OneByValue", [expr, shape])
 
@@ -3058,16 +3224,10 @@ def _generate_over_class(
         # NOTE (mristin):
         # The getters return booleans, integers and floating-point numbers by value,
         # unless they are optional.
-        constrained_primitive = (
-            intermediate.try_constrained_primitive(prop.type_annotation)
-            if isinstance(prop.type_annotation, intermediate.OurTypeAnnotation)
-            else None
-        )
+        primitive_type = intermediate.try_primitive_type(prop.type_annotation)
         by_value = (
-            constrained_primitive is not None
-            and not cpp_common.primitive_type_is_referencable(
-                constrained_primitive.constrainee
-            )
+            primitive_type is not None
+            and not cpp_common.primitive_type_is_referencable(primitive_type)
         )
 
         expression = _generate_over_expression(
@@ -3183,9 +3343,14 @@ std::unique_ptr<IIterator> DispatchOnModelType(
 
 
 def _generate_shape_enum(
-    symbol_table: intermediate.SymbolTable, uses_json: bool
+    symbol_table: intermediate.SymbolTable, nested_literals: Sequence[Identifier]
 ) -> Stripped:
-    """Generate the enumeration of the shapes of the values that we verify."""
+    """
+    Generate the enumeration of the shapes of the values that we verify.
+
+    The ``nested_literals`` are the shapes of the built-in values which only
+    the nested verification verifies.
+    """
     literals = [
         _shape_literal(constrained_primitive)
         for constrained_primitive in symbol_table.constrained_primitives
@@ -3196,8 +3361,7 @@ def _generate_shape_enum(
         for cls in symbol_table.concrete_classes
         if len(cls.invariants) > 0
     )
-    if uses_json:
-        literals.extend(_JSON_SHAPE_LITERALS)
+    literals.extend(nested_literals)
 
     literals_joined = ",\n".join(
         f"{literal} = {i}" for i, literal in enumerate(literals)
@@ -3312,23 +3476,30 @@ case Shape::{_shape_literal(our_type)}: {{
     return (functions, case_block), None
 
 
-def _generate_checks_of(case_blocks: Sequence[Stripped], uses_json: bool) -> Stripped:
-    """Generate the function which gives out the checks of a shape."""
+def _generate_checks_of(
+    case_blocks: Sequence[Stripped], nested_literals: Sequence[Identifier]
+) -> Stripped:
+    """
+    Generate the function which gives out the checks of a shape.
+
+    The values of the ``nested_literals`` are verified only by the nested
+    verification, see :py:func:`_generate_new_nested_verificator`.
+    """
     blocks = list(case_blocks)
     no_checks = ""
 
-    if uses_json:
+    if len(nested_literals) > 0:
         no_checks = f"{I}static const std::vector<Check> kNoChecks;\n\n"
 
-        json_cases = "\n".join(
-            f"case Shape::{literal}:" for literal in _JSON_SHAPE_LITERALS
+        nested_cases = "\n".join(
+            f"case Shape::{literal}:" for literal in nested_literals
         )
         blocks.append(
             Stripped(
                 f"""\
-{json_cases}
+{nested_cases}
 {I}// NOTE (mristin):
-{I}// The JSON-able values are verified by the nested verification.
+{I}// These values are verified by the nested verification.
 {I}return kNoChecks;"""
             )
         )
@@ -3362,7 +3533,9 @@ const std::vector<Check>& ChecksOf(Shape shape) {{
     )
 
 
-def _generate_new_nested_verificator(uses_json: bool) -> Stripped:
+def _generate_new_nested_verificator(
+    symbol_table: intermediate.SymbolTable, uses_integers: bool, uses_json: bool
+) -> Stripped:
     """Generate the factory of the nested verifications of the values."""
     doc_comment = Stripped(
         """\
@@ -3373,7 +3546,7 @@ def _generate_new_nested_verificator(uses_json: bool) -> Stripped:
  */"""
     )
 
-    if not uses_json:
+    if not uses_integers and not uses_json:
         return Stripped(
             f"""\
 {doc_comment}
@@ -3382,26 +3555,61 @@ std::unique_ptr<impl::IVerificator> NewNestedVerificator(
 {I}const void*
 ) {{
 {I}// NOTE (mristin):
-{I}// The meta-model uses no JSON-able values, so no value needs a nested
-{I}// verification.
+{I}// The meta-model uses neither integers nor JSON-able values, so no value
+{I}// needs a nested verification.
 {I}return nullptr;
 }}"""
         )
 
     case_blocks: List[Stripped] = []
-    for literal, json_value_shape in zip(
-        _JSON_SHAPE_LITERALS, ("kAny", "kArray", "kObject"), strict=True
-    ):
+
+    if uses_integers:
+        # NOTE (mristin):
+        # The values of a constrained primitive over integers with invariants keep
+        # its own shape, so that its invariants are checked, but they also need
+        # the check of the safe integer range.
+        int64_literals = [
+            _shape_literal(constrained_primitive)
+            for constrained_primitive in symbol_table.constrained_primitives
+            if (
+                len(constrained_primitive.invariants) > 0
+                and constrained_primitive.constrainee is intermediate.PrimitiveType.INT
+            )
+        ]
+        int64_literals.append(_INT64_SHAPE_LITERAL)
+
+        int64_cases = "\n".join(f"case Shape::{literal}:" for literal in int64_literals)
+
         case_blocks.append(
             Stripped(
                 f"""\
+{int64_cases} {{
+{I}const int64_t integer = *static_cast<const int64_t*>(value);
+{I}if (common::IsSafeInteger(integer)) {{
+{II}return nullptr;
+{I}}}
+
+{I}return common::make_unique<SingleErrorVerificator>(
+{II}impl::DescribeIntegerOutsideSafeRange(std::to_wstring(integer))
+{I});
+}}"""
+            )
+        )
+
+    if uses_json:
+        for literal, json_value_shape in zip(
+            _JSON_SHAPE_LITERALS, ("kAny", "kArray", "kObject"), strict=True
+        ):
+            case_blocks.append(
+                Stripped(
+                    f"""\
 case Shape::{literal}:
 {I}return common::make_unique<JsonValueVerificator>(
 {II}*static_cast<const nlohmann::json*>(value),
 {II}JsonValueShape::{json_value_shape}
 {I});"""
+                )
             )
-        )
 
     case_blocks.append(
         Stripped(
@@ -3439,7 +3647,10 @@ def _generate_implementation_of_verify_constrained_primitive(
         primitive_type=constrained_primitive.constrainee
     )
 
-    if len(constrained_primitive.invariants) == 0:
+    if (
+        len(constrained_primitive.invariants) == 0
+        and constrained_primitive.constrainee is not intermediate.PrimitiveType.INT
+    ):
         return Stripped(
             f"""\
 std::unique_ptr<IVerification> {verify_name}(
@@ -3451,7 +3662,7 @@ std::unique_ptr<IVerification> {verify_name}(
 }}"""
         )
 
-    shape = f"Shape::{_shape_literal(constrained_primitive)}"
+    shape = f"Shape::{_constrained_primitive_shape_literal(constrained_primitive)}"
 
     values = (
         cpp_over.generate_call("One", ["&that", shape])
@@ -3554,6 +3765,15 @@ def generate_implementation(
     errors: List[Error] = []
 
     uses_json = intermediate_uses.json_types(symbol_table)
+    uses_integers = intermediate_uses.integers(symbol_table)
+
+    # NOTE (mristin):
+    # The values of these shapes are verified only by the nested verification.
+    nested_literals: List[Identifier] = []
+    if uses_integers:
+        nested_literals.append(_INT64_SHAPE_LITERAL)
+    if uses_json:
+        nested_literals.extend(_JSON_SHAPE_LITERALS)
 
     json_value_verification_include = (
         '#include "json_value_verification.hpp"\n\n' if uses_json else ""
@@ -3594,6 +3814,7 @@ def generate_implementation(
         ),
         cpp_common.generate_namespace_opening(namespace),
         *_generate_error_implementation(),
+        *_generate_safe_integer_implementations(symbol_table),
     ]
 
     # NOTE (mristin):
@@ -3718,20 +3939,19 @@ namespace {{
         *symbol_table.concrete_classes,
     ]
 
-    if uses_json:
-        taken_literal_set = {
-            _shape_literal(our_type) for our_type in constrained_primitives_and_classes
-        }
-        for literal in _JSON_SHAPE_LITERALS:
-            if literal in taken_literal_set:
-                errors.append(
-                    Error(
-                        None,
-                        f"The shape literal {literal!r} of JSON-able values clashes "
-                        f"with a class or a constrained primitive of the same name. "
-                        f"Please rename it, or contact the developers.",
-                    )
+    taken_literal_set = {
+        _shape_literal(our_type) for our_type in constrained_primitives_and_classes
+    }
+    for literal in nested_literals:
+        if literal in taken_literal_set:
+            errors.append(
+                Error(
+                    None,
+                    f"The shape literal {literal!r} of built-in values clashes "
+                    f"with a class or a constrained primitive of the same name. "
+                    f"Please rename it, or contact the developers.",
                 )
+            )
 
     check_functions: List[Stripped] = []
     checks_of_case_blocks: List[Stripped] = []
@@ -3841,13 +4061,22 @@ namespace {{
     blocks.extend(
         [
             Stripped("namespace {"),
-            _generate_shape_enum(symbol_table=symbol_table, uses_json=uses_json),
+            _generate_shape_enum(
+                symbol_table=symbol_table, nested_literals=nested_literals
+            ),
             *_CHECK_STRUCT,
             Stripped("// region Checks"),
             *check_functions,
-            _generate_checks_of(case_blocks=checks_of_case_blocks, uses_json=uses_json),
+            _generate_checks_of(
+                case_blocks=checks_of_case_blocks, nested_literals=nested_literals
+            ),
             Stripped("// endregion Checks"),
-            _generate_new_nested_verificator(uses_json=uses_json),
+            *(_SINGLE_ERROR_VERIFICATOR if uses_integers else ()),
+            _generate_new_nested_verificator(
+                symbol_table=symbol_table,
+                uses_integers=uses_integers,
+                uses_json=uses_json,
+            ),
             Stripped("// region Iteration over the values"),
             *_IITERATOR,
             *combinators,

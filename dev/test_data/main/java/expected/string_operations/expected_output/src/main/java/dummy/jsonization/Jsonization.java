@@ -77,18 +77,6 @@ public class Jsonization {
         return Reporting.Result.success(value.asBoolean());
       }
 
-      /** Convert {@code value} to a long 64-bit integer.
-       * @param node JSON node to be parsed
-       */
-      private static Reporting.Result<Long> tryLongFrom(JsonNode value) {
-        if (!value.isIntegralNumber()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonValue of Long, but got " + value.getNodeType());
-          return Reporting.Result.failure(error);
-        }
-        return Reporting.Result.success(value.asLong());
-      }
-
       /** Convert {@code value} to a double-precision 64-bit float.
        * @param node JSON node to be parsed
        */

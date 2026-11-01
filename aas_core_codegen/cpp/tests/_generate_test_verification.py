@@ -10,6 +10,7 @@ from aas_core_codegen.common import (
     Stripped,
 )
 from aas_core_codegen.cpp import common as cpp_common, naming as cpp_naming
+from aas_core_codegen.intermediate import uses as intermediate_uses
 from aas_core_codegen.cpp.common import (
     INDENT as I,
     INDENT2 as II,
@@ -18,6 +19,61 @@ from aas_core_codegen.cpp.common import (
     INDENT5 as IIIII,
     INDENT6 as IIIIII,
 )
+
+
+def _generate_safe_integer_predicate_test() -> Stripped:
+    """Generate the test of the predicates of the safe integer range."""
+    return Stripped(
+        f"""\
+TEST_CASE("Test the predicates of the safe integer range") {{
+{I}for (
+{II}const int64_t value
+{II}: {{9007199254740991LL, -9007199254740991LL, 0LL}}
+{I}) {{
+{II}REQUIRE(our::common::IsSafeInteger(value));
+{I}}}
+
+{I}for (
+{II}const int64_t value
+{II}: {{
+{III}int64_t(9007199254740992LL),
+{III}int64_t(-9007199254740992LL),
+{III}std::numeric_limits<int64_t>::max(),
+{III}std::numeric_limits<int64_t>::min()
+{II}}}
+{I}) {{
+{II}REQUIRE(!our::common::IsSafeInteger(value));
+{I}}}
+
+{I}REQUIRE(our::common::IsSafeInteger(uint64_t(9007199254740991ULL)));
+{I}REQUIRE(!our::common::IsSafeInteger(uint64_t(9007199254740992ULL)));
+{I}REQUIRE(
+{II}!our::common::IsSafeInteger(
+{III}std::numeric_limits<uint64_t>::max()
+{II})
+{I});
+
+{I}for (
+{II}const double value
+{II}: {{9007199254740991.0, -9007199254740991.0, 0.0}}
+{I}) {{
+{II}REQUIRE(our::common::IsSafeInteger(value));
+{I}}}
+
+{I}for (
+{II}const double value
+{II}: {{
+{III}9007199254740992.0,
+{III}-9007199254740992.0,
+{III}std::numeric_limits<double>::infinity(),
+{III}-std::numeric_limits<double>::infinity(),
+{III}std::numeric_limits<double>::quiet_NaN()
+{II}}}
+{I}) {{
+{II}REQUIRE(!our::common::IsSafeInteger(value));
+{I}}}
+}}"""
+    )
 
 
 # fmt: off
@@ -33,6 +89,14 @@ def generate_implementation(
     """Generate implementation to test the verification of pos. and neg. cases."""
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
+    # NOTE (mristin):
+    # Only the test of the safe integer range needs the limits.
+    limits_include = (
+        "\n#include <limits>"
+        if intermediate_uses.safe_integer_checks(symbol_table)
+        else ""
+    )
+
     blocks: List[Stripped] = [
         cpp_common.WARNING,
         Stripped(
@@ -45,7 +109,7 @@ def generate_implementation(
 
 #include <catch2/catch.hpp>
 
-#include <fstream>
+#include <fstream>{limits_include}
 
 namespace our = {library_namespace};"""
         ),
@@ -236,6 +300,9 @@ TEST_CASE("Test verification of invalid cases for {cls_name}") {{
 }}"""
             )
         )
+
+    if intermediate_uses.safe_integer_checks(symbol_table):
+        blocks.append(_generate_safe_integer_predicate_test())
 
     blocks.append(cpp_common.WARNING)
 

@@ -85,7 +85,11 @@ def _generate_lexical_tests(
         if a_type in prop_by_a_type
     ]
 
-    if len(relevant) == 0:
+    # NOTE (mristin):
+    # The integers additionally have to lie in the safe integer range.
+    int_prop = prop_by_a_type.get(intermediate.PrimitiveType.INT)
+
+    if len(relevant) == 0 and int_prop is None:
         return []
 
     interface_name = cpp_naming.interface_name(cls.name)
@@ -95,10 +99,10 @@ def _generate_lexical_tests(
         Stripped(
             f"""\
 /**
- * \\brief Read the first recorded example of {interface_name} with the content
- * of the element \\p xml_name replaced by \\p text.
+ * \\brief Patch the first recorded example of {interface_name} so that
+ * the content of the element \\p xml_name is replaced by \\p text.
  */
-std::shared_ptr<our::types::{interface_name}> ReadWith(
+std::string PatchTheFirstExample(
 {I}const std::string& xml_name,
 {I}const std::string& text
 ) {{
@@ -126,9 +130,20 @@ std::shared_ptr<our::types::{interface_name}> ReadWith(
 {II}original.find(our::common::Concat("</", xml_name, ">"))
 {I});
 
-{I}const std::string patched(
-{II}original.substr(0, start) + text + original.substr(end)
-{I});
+{I}return original.substr(0, start) + text + original.substr(end);
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * \\brief Read the first recorded example of {interface_name} with the content
+ * of the element \\p xml_name replaced by \\p text.
+ */
+std::shared_ptr<our::types::{interface_name}> ReadWith(
+{I}const std::string& xml_name,
+{I}const std::string& text
+) {{
+{I}const std::string patched(PatchTheFirstExample(xml_name, text));
 
 {I}std::istringstream iss(patched);
 
@@ -147,7 +162,7 @@ std::shared_ptr<our::types::{interface_name}> ReadWith(
 
 {I}return casted;
 }}"""
-        )
+        ),
     ]
 
     for a_type, prop in relevant:
@@ -172,6 +187,58 @@ TEST_CASE({cpp_common.string_literal(title)}) {{
 }}"""
                 )
             )
+
+    if int_prop is not None:
+        prop_xml_name = naming.xml_property(int_prop.name)
+        getter_name = cpp_naming.getter_name(int_prop.name)
+
+        result.append(
+            Stripped(
+                f"""\
+TEST_CASE("Refuse {prop_xml_name} outside the safe integer range") {{
+{I}for (
+{II}const std::string text : {{"9007199254740992", "-9007199254740992"}}
+{I}) {{
+{II}std::istringstream iss(
+{III}PatchTheFirstExample({cpp_common.string_literal(prop_xml_name)}, text)
+{II});
+
+{II}our::common::expected<
+{III}std::shared_ptr<our::types::IClass>,
+{III}our::xmlization::DeserializationError
+{II}> deserialized = our::xmlization::From(iss);
+
+{II}INFO(our::common::Concat("De-serializing ", text))
+{II}REQUIRE(!deserialized.has_value());
+{II}REQUIRE(
+{III}deserialized.error().cause
+{III}== L"Expected an integer, but got " + our::common::Utf8ToWstring(text)
+{IIII}+ L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+{II});
+{I}}}
+}}"""
+            )
+        )
+
+        result.append(
+            Stripped(
+                f"""\
+TEST_CASE("Read {prop_xml_name} at the bounds of the safe integer range") {{
+{I}for (
+{II}const int64_t value : {{9007199254740991LL, -9007199254740991LL}}
+{I}) {{
+{II}std::shared_ptr<our::types::{interface_name}> instance(
+{III}ReadWith(
+{IIII}{cpp_common.string_literal(prop_xml_name)},
+{IIII}std::to_string(value)
+{III})
+{II});
+
+{II}REQUIRE(instance->{getter_name}() == value);
+{I}}}
+}}"""
+            )
+        )
 
     return result
 

@@ -47,6 +47,7 @@ else:
     from typing_extensions import Final
 
 from dummy import (
+    common as our_common,
     constants as our_constants,
     reporting as our_reporting,
     types as our_types,
@@ -106,12 +107,14 @@ class _Transformer(
             self,
             that: our_types.AnotherItem
     ) -> Iterator[Error]:
-        # No verification has been defined for AnotherItem.
-        return
-        # For this uncommon return-yield construction, see:
-        # https://stackoverflow.com/questions/13243766/how-to-define-an-empty-generator-function
-        # noinspection PyUnreachableCode
-        yield
+        for error in _verify_int(that.serial_number):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'serial_number'
+                )
+            )
+            yield error
 
     # noinspection PyMethodMayBeStatic
     def transform_something(
@@ -135,6 +138,15 @@ class _Transformer(
             yield Error(
                 'The optional pair must have two items'
             )
+
+        for error in _verify_tuple2_of__str__int(that.pair):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'pair'
+                )
+            )
+            yield error
 
         for error in _verify_tuple2_of__class__class(that.items):
             error.path._prepend(
@@ -182,6 +194,28 @@ def verify(
     yield from _TRANSFORMER.transform(that)
 
 
+def _verify_int(
+        that: int
+) -> Iterator[Error]:
+    """Verify that :paramref:`that` lies in the safe integer range."""
+    if not our_common.is_safe_integer(that):
+        yield Error(our_common.unsafe_integer_message(that))
+
+
+def _verify_tuple2_of__str__int(
+        that: Tuple[str, int]
+) -> Iterator[Error]:
+    """Verify the items of :paramref:`that` recursively."""
+    for error in _verify_int(that[1]):
+        error.path._prepend(
+            IndexSegment(
+                that,
+                1
+            )
+        )
+        yield error
+
+
 def _verify_tuple2_of__class__class(
         that: Tuple[our_types.Class, our_types.Class]
 ) -> Iterator[Error]:
@@ -216,6 +250,15 @@ def _verify_tuple6_of__int__class__class__class__positive_int__result(
         ]
 ) -> Iterator[Error]:
     """Verify the items of :paramref:`that` recursively."""
+    for error in _verify_int(that[0]):
+        error.path._prepend(
+            IndexSegment(
+                that,
+                0
+            )
+        )
+        yield error
+
     for error in verify(that[1]):
         error.path._prepend(
             IndexSegment(
@@ -271,6 +314,8 @@ def verify_positive_int(
         that: int
 ) -> Iterator[Error]:
     """Verify the constraints of :paramref:`that`."""
+    yield from _verify_int(that)
+
     if not (that > 0):
         yield Error(
             'Larger than zero'

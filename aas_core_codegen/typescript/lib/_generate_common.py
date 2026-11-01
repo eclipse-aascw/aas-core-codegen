@@ -168,6 +168,9 @@ export function compareNumbers(that: number, other: number): number {{
 #: We deliberately do not use the native ``parseInt`` or ``Number``. They accept
 #: much more than the other targets, *e.g.*, the white space, ``1e3`` or ``0x10``,
 #: and silently lose the precision beyond ``Number.MAX_SAFE_INTEGER``.
+#:
+#: The other SDKs check the same safe range, though their integers could be
+#: larger, as the invariants must behave the same in all the SDKs.
 PARSE_SAFE_INT = Stripped(
     f"""\
 /**
@@ -181,6 +184,10 @@ PARSE_SAFE_INT = Stripped(
  * the safe integers, *i.e.*, the integers within `Number.MIN_SAFE_INTEGER` and
  * `Number.MAX_SAFE_INTEGER`, which a double-precision floating-point number
  * represents exactly.
+ *
+ * A `number` holds the integers exactly only within the safe range. The other
+ * SDKs check the same range, though their integers could be larger, so that
+ * the invariants which parse a text behave the same everywhere.
  *
  * @param text - to be parsed
  * @returns the parsed integer
@@ -212,17 +219,16 @@ export function parseSafeInt(text: string): number {{
 {II}const digit = code - 48;
 
 {II}// NOTE (mristin):
-{II}// We check the range before we accumulate so that the arithmetic stays
-{II}// exact. The number 900719925474099 is Number.MAX_SAFE_INTEGER divided by 10,
-{II}// and 1 is its last digit.
-{II}if (value > 900719925474099 || (value === 900719925474099 && digit > 1)) {{
+{II}// While the result stays a safe integer, the arithmetic is exact. Once
+{II}// the exact result leaves the safe range, the rounded one leaves it as
+{II}// well, as 2^53 is representable, so we stop before we lose any precision.
+{II}value = value * 10 + digit;
+{II}if (!Number.isSafeInteger(value)) {{
 {III}throw new Error(
 {IIII}"Expected a safe integer, but got a text out of its range: " +
 {IIIII}JSON.stringify(text)
 {III});
 {II}}}
-
-{II}value = value * 10 + digit;
 {I}}}
 
 {I}// NOTE (mristin):
@@ -230,6 +236,49 @@ export function parseSafeInt(text: string): number {{
 {I}return text[0] === "-" && value !== 0 ? -value : value;
 }}"""
 )
+
+#: Describe why a number is not an integer of the meta-model
+#:
+#: The predicates are the standard ``Number.isInteger`` and
+#: ``Number.isSafeInteger``. The messages are kept apart from them, and written
+#: only once, so that the de-serialization, the serialization and
+#: the verification report the very same errors.
+INTEGER_MESSAGES: Final[Sequence[Stripped]] = [
+    Stripped(
+        f"""\
+/**
+ * Describe that `value` is not a whole number, and thus not an integer.
+ *
+ * @param value - which is not a whole number
+ * @returns the error message
+ */
+export function notWholeIntegerMessage(value: number): string {{
+{I}return `Expected an integer, but got ${{value}}, which is not a whole number`;
+}}"""
+    ),
+    Stripped(
+        f"""\
+/**
+ * Describe that `value` is outside the safe integer range.
+ *
+ * @remarks
+ * The JSON de-serializers of the other languages read a number into a 64-bit
+ * floating-point number, which represents exactly only the integers in
+ * the safe integer range, see `Number.isSafeInteger`.
+ *
+ * @param value - which is a whole number outside the safe integer range, or
+ * its text if a `number` can not hold it exactly
+ * @returns the error message
+ */
+export function unsafeIntegerMessage(value: number | string): string {{
+{I}return (
+{II}`Expected an integer, but got ${{value}}, which is outside ` +
+{II}"the safe integer range [-2^53 + 1, 2^53 - 1]"
+{I});
+}}"""
+    ),
+]
+
 
 # fmt: off
 @ensure(
@@ -1021,6 +1070,13 @@ export function compareByCodePoints(that: string, other: string): number {{
     # the built-in ``int``.
     if intermediate_uses.int_call(symbol_table):
         blocks.insert(len(blocks) - 1, PARSE_SAFE_INT)
+
+    # NOTE (mristin):
+    # Analogous to the modulo, we add the messages only if an instance of
+    # the meta-model can hold an integer.
+    if intermediate_uses.integers(symbol_table):
+        for block in INTEGER_MESSAGES:
+            blocks.insert(len(blocks) - 1, block)
 
     # NOTE (mristin):
     # Analogous to the modulo, we add the helpers only if the meta-model computes

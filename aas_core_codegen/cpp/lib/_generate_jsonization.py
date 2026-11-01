@@ -95,6 +95,69 @@ common::expected<
     return blocks
 
 
+def _generate_json_able_from_definitions(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """Generate the declarations of the public JSON-able de-serialization."""
+    if not intermediate_uses.json_types(symbol_table):
+        return []
+
+    blocks: List[Stripped] = []
+    for name in ("JsonValue", "JsonArray", "JsonObject"):
+        what = name[len("Json") :].lower()
+        blocks.append(
+            Stripped(
+                f"""\
+/**
+ * \\brief Deserialize \\p json as a JSON-able {what}.
+ *
+ * A JSON-able value is, recursively, exactly as JSON itself is defined:
+ * a null, a boolean, a number, a string, an array of JSON-able values or
+ * an object of JSON-able values with string keys. An infinity,
+ * a not-a-number and an integer outside the safe integer range
+ * [-2^53 + 1, 2^53 - 1] are rejected at any depth.
+ *
+ * \\param json value to be de-serialized
+ * \\return a copy of \\p json, or a de-serialization error, if any.
+ */
+common::expected<
+{I}nlohmann::json,
+{I}DeserializationError
+> {name}From(
+{I}const nlohmann::json& json
+);"""
+            )
+        )
+
+    return blocks
+
+
+def _generate_serialize_json_value_definitions(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """Generate the declaration of the public JSON-able serialization."""
+    if not intermediate_uses.json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+/**
+ * \\brief Serialize the JSON-able value \\p value to a JSON value.
+ *
+ * \\param value JSON-able value to be serialized
+ * \\return a copy of \\p value
+ * \\throw \\ref SerializationException if \\p value contains, at any depth,
+ * a binary or a discarded value, an infinity, a not-a-number or an integer
+ * outside the safe integer range [-2^53 + 1, 2^53 - 1]
+ */
+nlohmann::json SerializeJsonValue(
+{I}const nlohmann::json& value
+);"""
+        )
+    ]
+
+
 # fmt: off
 @ensure(
     lambda result:
@@ -265,6 +328,7 @@ struct DeserializationError {{
 }};  // struct DeserializationError"""
         ),
         *_generate_deserialization_definitions(symbol_table=symbol_table),
+        *_generate_json_able_from_definitions(symbol_table=symbol_table),
         Stripped("// endregion Deserialization"),
         Stripped("// region Serialization"),
         Stripped(
@@ -306,6 +370,7 @@ nlohmann::json Serialize(
 {I}const types::IClass& that
 );"""
         ),
+        *_generate_serialize_json_value_definitions(symbol_table=symbol_table),
         Stripped("// endregion Serialization"),
         Stripped(
             f"""\
@@ -683,7 +748,12 @@ std::pair<
 
 
 def _generate_deserialize_int() -> Stripped:
-    """Generate the function to de-serialize an int from a JSON value."""
+    """
+    Generate the function to de-serialize an int from a JSON value.
+
+    We accept a whole floating-point number such as ``5.0``, but refuse any integer
+    outside the safe integer range, as the other readers might quietly round it.
+    """
     return Stripped(
         f"""\
 std::pair<
@@ -692,102 +762,85 @@ std::pair<
 > DeserializeInt64(
 {I}const nlohmann::json& json
 ) {{
-{I}if (!json.is_number()) {{
-{II}std::wstring message = common::Concat(
-{III}L"Expected an integer number, but got a value of type: ",
-{III}common::Utf8ToWstring(json.type_name())
-{II});
-
-{II}return std::make_pair<
-{III}common::optional<int64_t>,
-{III}common::optional<DeserializationError>
-{II}>(
-{III}common::nullopt,
-{III}common::make_optional<DeserializationError>(
-{IIII}message
-{III})
-{II});
-{I}}}
-
 {I}static_assert(
 {II}std::is_same<nlohmann::json::number_integer_t, int64_t>::value,
 {II}"Expected nlohmann::json::number_integer_t to equal int64_t, "
 {II}"but it does not."
 {I});
 
-{I}if (json.is_number_integer()) {{
-{II}return std::make_pair<
-{III}common::optional<int64_t>,
-{III}common::optional<DeserializationError>
-{II}>(
-{III}json.get<int64_t>(),
-{III}common::nullopt
-{II});
+{I}int64_t value = 0;
+{I}common::optional<std::wstring> cause;
+
+{I}switch (json.type()) {{
+{II}case nlohmann::json::value_t::number_integer: {{
+{III}const int64_t integer = json.get<int64_t>();
+{III}if (common::IsSafeInteger(integer)) {{
+{IIII}value = integer;
+{III}}} else {{
+{IIII}cause = verification::impl::DescribeIntegerOutsideSafeRange(
+{IIIII}std::to_wstring(integer)
+{IIII});
+{III}}}
+{III}break;
+{II}}}
+
+{II}case nlohmann::json::value_t::number_unsigned: {{
+{III}const uint64_t integer = json.get<uint64_t>();
+{III}if (common::IsSafeInteger(integer)) {{
+{IIII}value = static_cast<int64_t>(integer);
+{III}}} else {{
+{IIII}cause = verification::impl::DescribeIntegerOutsideSafeRange(
+{IIIII}std::to_wstring(integer)
+{IIII});
+{III}}}
+{III}break;
+{II}}}
+
+{II}case nlohmann::json::value_t::number_float: {{
+{III}const double number = json.get<double>();
+{III}if (!std::isfinite(number) || std::trunc(number) != number) {{
+{IIII}cause = common::Concat(
+{IIIII}L"Expected an integer, but got ",
+{IIIII}std::to_wstring(number),
+{IIIII}L", which is not a whole number"
+{IIII});
+{III}}} else if (common::IsSafeInteger(number)) {{
+{IIII}value = static_cast<int64_t>(number);
+{III}}} else {{
+{IIII}cause = verification::impl::DescribeIntegerOutsideSafeRange(
+{IIIII}std::to_wstring(number)
+{IIII});
+{III}}}
+{III}break;
+{II}}}
+
+{II}default:
+{III}cause = common::Concat(
+{IIII}L"Expected an integer, but got: ",
+{IIII}common::Utf8ToWstring(json.type_name())
+{III});
+{III}break;
 {I}}}
 
-{I}if (json.is_number_unsigned()) {{
-{II}std::wstring message = common::Concat(
-{III}L"Expected a 64-bit integer number, "
-{III}L"but got an unsigned integer number which does not fit in that range: ",
-{III}std::to_wstring(json.get<nlohmann::json::number_unsigned_t>())
-{II});
-
+{I}if (cause.has_value()) {{
 {II}return std::make_pair<
 {III}common::optional<int64_t>,
 {III}common::optional<DeserializationError>
 {II}>(
 {III}common::nullopt,
 {III}common::make_optional<DeserializationError>(
-{IIII}message
+{IIII}std::move(*cause)
 {III})
 {II});
 {I}}}
 
-{I}// NOTE (mristin):
-{I}// We have to check that the number is an integer even though it can
-{I}// not be stored in int64_t in order to give an informative message.
-
-{I}const nlohmann::json::number_float_t number(
-{II}json.get<nlohmann::json::number_float_t>()
+{I}return std::make_pair<
+{II}common::optional<int64_t>,
+{II}common::optional<DeserializationError>
+{I}>(
+{II}value,
+{II}common::nullopt
 {I});
-
-{I}nlohmann::json::number_float_t integer_part;
-{I}const bool is_integer(
-{II}std::modf(number, &integer_part) == 0
-{I});
-{I}if (is_integer) {{
-{II}std::wstring message = common::Concat(
-{III}L"Expected a 64-bit integer number, "
-{III}L"but got an integer number which does not fit in that range: ",
-{III}std::to_wstring(number)
-{II});
-
-{II}return std::make_pair<
-{III}common::optional<int64_t>,
-{III}common::optional<DeserializationError>
-{II}>(
-{III}common::nullopt,
-{III}common::make_optional<DeserializationError>(
-{IIII}message
-{III})
-{II});
-{I}}} else {{
-{II}std::wstring message = common::Concat(
-{III}L"Expected a 64-bit integer number, "
-{III}L"but got a non-integer number: ",
-{III}std::to_wstring(number)
-{II});
-
-{II}return std::make_pair<
-{III}common::optional<int64_t>,
-{III}common::optional<DeserializationError>
-{II}>(
-{III}common::nullopt,
-{III}common::make_optional<DeserializationError>(
-{IIII}message
-{III})
-{II});
-{I}}}
 }}"""
     )
 
@@ -995,15 +1048,75 @@ def _json_serialize_function_for(
 ) -> Stripped:
     """Determine the function to serialize the given JSON-able ``type_anno``."""
     if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
-        return Stripped("SerializeJsonValue")
+        return Stripped("TrySerializeJsonValue")
     elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
-        return Stripped("SerializeJsonArray")
+        return Stripped("TrySerializeJsonArray")
     elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
-        return Stripped("SerializeJsonObject")
+        return Stripped("TrySerializeJsonObject")
     else:
         raise AssertionError(
             f"Expected a JSON-able type annotation, but got: {type_anno}"
         )
+
+
+def _generate_json_able_from(name: str) -> Stripped:
+    """
+    Generate the public de-serialization of the JSON-able ``name``.
+
+    The ``name`` is ``JsonValue``, ``JsonArray`` or ``JsonObject``.
+    """
+    return Stripped(
+        f"""\
+common::expected<
+{I}nlohmann::json,
+{I}DeserializationError
+> {name}From(
+{I}const nlohmann::json& json
+) {{
+{I}common::optional<nlohmann::json> value;
+{I}common::optional<DeserializationError> error;
+
+{I}std::tie(
+{II}value,
+{II}error
+{I}) = Deserialize{name}(json);
+
+{I}if (error.has_value()) {{
+{II}return common::make_unexpected(
+{III}std::move(*error)
+{II});
+{I}}}
+
+{I}return std::move(*value);
+}}"""
+    )
+
+
+def _generate_serialize_json_value_public() -> Stripped:
+    """Generate the public serialization of a JSON-able value."""
+    return Stripped(
+        f"""\
+nlohmann::json SerializeJsonValue(
+{I}const nlohmann::json& value
+) {{
+{I}common::optional<nlohmann::json> result;
+{I}common::optional<SerializationError> error;
+
+{I}std::tie(
+{II}result,
+{II}error
+{I}) = TrySerializeJsonValue(value);
+
+{I}if (error.has_value()) {{
+{II}throw SerializationException(
+{III}std::move(error->cause),
+{III}std::move(error->path)
+{II});
+{I}}}
+
+{I}return std::move(*result);
+}}"""
+    )
 
 
 def _generate_deserialize_json_value() -> Stripped:
@@ -1089,27 +1202,19 @@ std::pair<
 {II}return std::make_pair(std::move(result), common::nullopt);
 {I}}}
 
-{I}// NOTE (mristin):
-{I}// JSON knows neither an infinity nor a not-a-number, so we refuse both
-{I}// instead of silently writing them out as ``null``, mirroring
-{I}// ``DeserializeDouble`` for the floating-point properties of the model.
-{I}// The caller gives us an ``nlohmann::json`` which may well have been
-{I}// constructed programmatically, so a non-finite number can reach us
-{I}// even though no conformant parser would ever produce one.
-{I}if (json.is_number_float() && !std::isfinite(json.get<double>())) {{
-{II}return std::make_pair<
-{III}common::optional<nlohmann::json>,
-{III}common::optional<DeserializationError>
-{II}>(
-{III}common::nullopt,
-{III}common::make_optional<DeserializationError>(
-{IIII}common::Concat(
-{IIIII}L"Expected a JSON-able value, but got the number ",
-{IIIII}std::to_wstring(json.get<double>()),
-{IIIII}L", which is neither finite nor representable in JSON"
+{I}if (json.is_number()) {{
+{II}common::optional<std::wstring> cause = verification::CheckJsonAbleNumber(json);
+{II}if (cause.has_value()) {{
+{III}return std::make_pair<
+{IIII}common::optional<nlohmann::json>,
+{IIII}common::optional<DeserializationError>
+{III}>(
+{IIII}common::nullopt,
+{IIII}common::make_optional<DeserializationError>(
+{IIIII}std::move(*cause)
 {IIII})
-{III})
-{II});
+{III});
+{II}}}
 {I}}}
 
 {I}// NOTE (mristin):
@@ -1195,7 +1300,7 @@ def _generate_serialize_json_value() -> Stripped:
 std::pair<
 {I}common::optional<nlohmann::json>,
 {I}common::optional<SerializationError>
-> SerializeJsonValue(
+> TrySerializeJsonValue(
 {I}const nlohmann::json& value
 ) {{
 {I}if (value.is_binary() || value.is_discarded()) {{
@@ -1219,7 +1324,7 @@ std::pair<
 {II}for (const nlohmann::json& item : value) {{
 {III}common::optional<nlohmann::json> serialized_item;
 {III}common::optional<SerializationError> error;
-{III}std::tie(serialized_item, error) = SerializeJsonValue(item);
+{III}std::tie(serialized_item, error) = TrySerializeJsonValue(item);
 
 {III}if (error.has_value()) {{
 {IIII}error->path.segments.emplace_front(
@@ -1242,7 +1347,7 @@ std::pair<
 {II}for (const auto& item : value.items()) {{
 {III}common::optional<nlohmann::json> serialized_value;
 {III}common::optional<SerializationError> error;
-{III}std::tie(serialized_value, error) = SerializeJsonValue(item.value());
+{III}std::tie(serialized_value, error) = TrySerializeJsonValue(item.value());
 
 {III}if (error.has_value()) {{
 {IIII}error->path.segments.emplace_front(
@@ -1260,27 +1365,19 @@ std::pair<
 {II}return std::make_pair(std::move(result), common::nullopt);
 {I}}}
 
-{I}// NOTE (mristin):
-{I}// JSON knows neither an infinity nor a not-a-number, so we refuse both
-{I}// instead of silently writing them out as ``null``, mirroring
-{I}// ``SerializeDouble`` for the floating-point properties of the model.
-{I}// The caller gives us an ``nlohmann::json`` which may well have been
-{I}// constructed programmatically, so a non-finite number can reach us
-{I}// even though no conformant parser would ever produce one.
-{I}if (value.is_number_float() && !std::isfinite(value.get<double>())) {{
-{II}return std::make_pair<
-{III}common::optional<nlohmann::json>,
-{III}common::optional<SerializationError>
-{II}>(
-{III}common::nullopt,
-{III}common::make_optional<SerializationError>(
-{IIII}common::Concat(
-{IIIII}L"Expected a JSON-able value, but got the number ",
-{IIIII}std::to_wstring(value.get<double>()),
-{IIIII}L", which is neither finite nor representable in JSON"
+{I}if (value.is_number()) {{
+{II}common::optional<std::wstring> cause = verification::CheckJsonAbleNumber(value);
+{II}if (cause.has_value()) {{
+{III}return std::make_pair<
+{IIII}common::optional<nlohmann::json>,
+{IIII}common::optional<SerializationError>
+{III}>(
+{IIII}common::nullopt,
+{IIII}common::make_optional<SerializationError>(
+{IIIII}std::move(*cause)
 {IIII})
-{III})
-{II});
+{III});
+{II}}}
 {I}}}
 
 {I}// NOTE (mristin):
@@ -1298,7 +1395,7 @@ def _generate_serialize_json_array() -> Stripped:
 std::pair<
 {I}common::optional<nlohmann::json>,
 {I}common::optional<SerializationError>
-> SerializeJsonArray(
+> TrySerializeJsonArray(
 {I}const nlohmann::json& value
 ) {{
 {I}if (!value.is_array()) {{
@@ -1313,7 +1410,7 @@ std::pair<
 {II});
 {I}}}
 
-{I}return SerializeJsonValue(value);
+{I}return TrySerializeJsonValue(value);
 }}"""
     )
 
@@ -1325,7 +1422,7 @@ def _generate_serialize_json_object() -> Stripped:
 std::pair<
 {I}common::optional<nlohmann::json>,
 {I}common::optional<SerializationError>
-> SerializeJsonObject(
+> TrySerializeJsonObject(
 {I}const nlohmann::json& value
 ) {{
 {I}if (!value.is_object()) {{
@@ -1340,7 +1437,7 @@ std::pair<
 {II});
 {I}}}
 
-{I}return SerializeJsonValue(value);
+{I}return TrySerializeJsonValue(value);
 }}"""
     )
 
@@ -3941,32 +4038,24 @@ def _generate_serialize_int() -> Stripped:
 /**
  * \\brief Serialize the given number to a JSON value.
  *
- * We verify that the integer is within the range representable by 64-bit floats
- * for interoperability with other de-serializers.
+ * We verify that the integer is within the safe integer range, which 64-bit
+ * floating-point numbers represent exactly, for interoperability with other
+ * de-serializers.
  */
 std::pair<
 {I}common::optional<nlohmann::json>,
 {I}common::optional<SerializationError>
 > SerializeInt64(int64_t value) {{
-{I}if (
-{II}value < -9007199254740991L
-{II}|| value > 9007199254740991L
-{I}) {{
-{II}const std::wstring message = common::Concat(
-{III}L"The integer ",
-{III}std::to_wstring(value),
-{III}L" can not be serialized to JSON "
-{III}L"as it is outside the range [-2^53 + 1, 2^53 - 1] and can not "
-{III}L"be exactly represented as a 64-bit floating point number."
-{II});
-
+{I}if (!common::IsSafeInteger(value)) {{
 {II}return std::make_pair<
 {III}common::optional<nlohmann::json>,
 {III}common::optional<SerializationError>
 {II}>(
 {III}common::nullopt,
 {III}common::make_optional<SerializationError>(
-{IIII}message
+{IIII}verification::impl::DescribeIntegerOutsideSafeRange(
+{IIIII}std::to_wstring(value)
+{IIII})
 {III})
 {II});
 {I}}}
@@ -5784,13 +5873,30 @@ def generate_implementation(
 
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
+    # NOTE (mristin):
+    # The number check of a JSON-able value is shared with the verification, so
+    # that the two agree on what a JSON-able number is.
+    json_value_verification_include = (
+        '\n#include "json_value_verification.hpp"'
+        if intermediate_uses.json_types(symbol_table)
+        else ""
+    )
+
+    # NOTE (mristin):
+    # The integers are checked against the safe integer range with the very same
+    # predicate as in the verification, so that the two agree.
+    uses_integers = intermediate_uses.integers(symbol_table)
+    verification_include = (
+        f'\n#include "{include_prefix_path}/verification.hpp"' if uses_integers else ""
+    )
+
     blocks = [
         cpp_common.WARNING,
         Stripped(
             f"""\
 #include "{include_prefix_path}/jsonization.hpp"
-#include "{include_prefix_path}/stringification.hpp"
-#include "{include_prefix_path}/wstringification.hpp"
+#include "{include_prefix_path}/stringification.hpp"{verification_include}
+#include "{include_prefix_path}/wstringification.hpp"{json_value_verification_include}
 
 #pragma warning(push, 0)
 #include <cmath>
@@ -5808,7 +5914,7 @@ def generate_implementation(
         Stripped("// region De-serialization"),
         *_generate_deserialization_error_implementation(),
         _generate_deserialize_bool(),
-        _generate_deserialize_int(),
+        *([_generate_deserialize_int()] if uses_integers else []),
         _generate_deserialize_float(),
         _generate_deserialize_str(),
         _generate_deserialize_bytearray(),
@@ -5917,6 +6023,15 @@ def generate_implementation(
 
     blocks.append(_generate_deserialize_from())
 
+    if intermediate_uses.json_types(symbol_table):
+        blocks.extend(
+            [
+                _generate_json_able_from("JsonValue"),
+                _generate_json_able_from("JsonArray"),
+                _generate_json_able_from("JsonObject"),
+            ]
+        )
+
     for cls in symbol_table.classes:
         blocks.append(_generate_deserialization_implementation(cls=cls))
 
@@ -5960,7 +6075,7 @@ struct SerializationError {{
             ),
             *_generate_serialization_exception_implementation(),
             _generate_serialize_bool(),
-            _generate_serialize_int(),
+            *([_generate_serialize_int()] if uses_integers else []),
             _generate_serialize_double(),
             _generate_serialize_str(),
             _generate_serialize_bytearray(),
@@ -6091,6 +6206,9 @@ struct SerializationError {{
         )
 
     blocks.append(_generate_serialize_implementation(fallible=iclass_is_fallible))
+
+    if intermediate_uses.json_types(symbol_table):
+        blocks.append(_generate_serialize_json_value_public())
 
     blocks.extend(
         [

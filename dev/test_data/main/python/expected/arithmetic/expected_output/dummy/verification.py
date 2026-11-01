@@ -47,6 +47,7 @@ else:
     from typing_extensions import Final
 
 from dummy import (
+    common as our_common,
     constants as our_constants,
     reporting as our_reporting,
     types as our_types,
@@ -224,6 +225,70 @@ class _Transformer(
             )
             yield error
 
+        for error in _verify_int(that.offset):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'offset'
+                )
+            )
+            yield error
+
+        for error in _verify_int(that.small):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'small'
+                )
+            )
+            yield error
+
+        for error in _verify_int(that.by_negative):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'by_negative'
+                )
+            )
+            yield error
+
+        for error in _verify_int(that.negative):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'negative'
+                )
+            )
+            yield error
+
+        for error in _verify_int(that.deviation):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'deviation'
+                )
+            )
+            yield error
+
+        for error in _verify_int(that.alignment):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'alignment'
+                )
+            )
+            yield error
+
+        if that.optional_number is not None:
+            for error in _verify_int(that.optional_number):
+                error.path._prepend(
+                    PropertySegment(
+                        that,
+                        'optional_number'
+                    )
+                )
+                yield error
+
 
 _TRANSFORMER = _Transformer()
 
@@ -240,10 +305,20 @@ def verify(
     yield from _TRANSFORMER.transform(that)
 
 
+def _verify_int(
+        that: int
+) -> Iterator[Error]:
+    """Verify that :paramref:`that` lies in the safe integer range."""
+    if not our_common.is_safe_integer(that):
+        yield Error(our_common.unsafe_integer_message(that))
+
+
 def verify_even_int(
         that: int
 ) -> Iterator[Error]:
     """Verify the constraints of :paramref:`that`."""
+    yield from _verify_int(that)
+
     if not ((that % 2) == (0)):
         yield Error(
             'Even'

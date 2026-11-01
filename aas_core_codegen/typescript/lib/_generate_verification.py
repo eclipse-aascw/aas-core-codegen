@@ -718,14 +718,22 @@ def _needs_verification(type_annotation: intermediate.TypeAnnotationUnion) -> bo
     """
     Check whether a value of ``type_annotation`` has anything to verify at any depth.
 
-    In TypeScript, we verify the constrained primitives, the instances of our classes
-    and all the JSON-able values. We rely on the TypeScript compiler to spot invalid
-    enumeration literals, so we do not verify the enumerations at all.
+    In TypeScript, we verify the integers, the constrained primitives, the instances
+    of our classes and all the JSON-able values. We rely on the TypeScript compiler
+    to spot invalid enumeration literals, so we do not verify the enumerations at all.
+
+    An integer is a TypeScript ``number``, so we verify that it is a whole number
+    in the safe integer range, which is exactly what its JSON serialization
+    requires.
     """
     return any(
         (
             isinstance(type_anno, intermediate.OurTypeAnnotation)
             and not isinstance(type_anno.our_type, intermediate.Enumeration)
+        )
+        or (
+            isinstance(type_anno, intermediate.PrimitiveTypeAnnotation)
+            and type_anno.a_type is intermediate.PrimitiveType.INT
         )
         or isinstance(
             type_anno,
@@ -877,6 +885,13 @@ def _generate_verify_into(
                 f"{type_anno.our_type}"
             )
             function = "verify"
+
+    elif isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
+        assert type_anno.a_type is intermediate.PrimitiveType.INT, (
+            f"Unexpected primitive type with something to verify: "
+            f"{type_anno.a_type}"
+        )
+        function = "verifyInteger"
 
     elif isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
         function = "verifyJsonValue"
@@ -1075,29 +1090,6 @@ new PropertySegment(
         expr=f"that.{prop_name}", type_anno=type_anno, segments=[property_segment]
     )
 
-    # NOTE (mristin):
-    # A JavaScript number does not distinguish between an integer and
-    # a floating-point number, so we check the integer-ness of the constrained
-    # primitives explicitly.
-    if (
-        isinstance(type_anno, intermediate.OurTypeAnnotation)
-        and isinstance(type_anno.our_type, intermediate.ConstrainedPrimitive)
-        and type_anno.our_type.constrainee is intermediate.PrimitiveType.INT
-    ):
-        block = Stripped(
-            f"""\
-if (!Number.isInteger(that.{prop_name})) {{
-{I}const error = new VerificationError(
-{II}"Expected an integer, but got a floating-point number"
-{I});
-{I}error.path.prepend(
-{II}{indent_but_first_line(property_segment, II)}
-{I});
-{I}yield error;
-}}
-{block}"""
-        )
-
     if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
         block = Stripped(
             f"""\
@@ -1149,8 +1141,8 @@ def _generate_transform_for_class(
     # region Verify the properties
 
     # NOTE (mristin):
-    # The constrained primitives are not included in the recursion, so we verify
-    # the properties of constrained primitives in the non-recursive part as well.
+    # The primitives, constrained or not, are not included in the recursion, so we
+    # verify the properties of primitives in the non-recursive part as well.
     recurse_prop_blocks: List[Stripped] = []
 
     for prop in cls.properties:
@@ -1159,7 +1151,7 @@ def _generate_transform_for_class(
             continue
 
         if (
-            intermediate.try_constrained_primitive(
+            intermediate.try_primitive_type(
                 intermediate.beneath_optional(prop.type_annotation)
             )
             is not None
@@ -1458,6 +1450,21 @@ def _generate_verify_constrained_primitive(
 
     if len(errors) > 0:
         return None, errors
+
+    # NOTE (mristin):
+    # An integer is a TypeScript ``number``, so we check that it is a safe integer
+    # before the invariants, which assume one.
+    if constrained_primitive.constrainee is intermediate.PrimitiveType.INT:
+        blocks.insert(
+            0,
+            Stripped(
+                f"""\
+if (!Number.isSafeInteger(that)) {{
+{I}yield* verifyInteger(that);
+{I}return;
+}}"""
+            ),
+        )
 
     no_verification = False
     if len(blocks) == 0:
@@ -1803,6 +1810,28 @@ export class VerificationError {{
         else:
             # noinspection PyTypeChecker
             assert_never(verification)
+
+    if intermediate_uses.integers(symbol_table):
+        blocks.append(
+            Stripped(
+                f"""\
+/**
+ * Verify that `that` is a safe integer so that it can be serialized to JSON.
+ *
+ * @param that - to be verified
+ * @returns errors, if any
+ */
+export function *verifyInteger(
+{I}that: number
+): IterableIterator<VerificationError> {{
+{I}if (!Number.isInteger(that)) {{
+{II}yield new VerificationError(OurCommon.notWholeIntegerMessage(that));
+{I}}} else if (!Number.isSafeInteger(that)) {{
+{II}yield new VerificationError(OurCommon.unsafeIntegerMessage(that));
+{I}}}
+}}"""
+            )
+        )
 
     blocks.extend(_generate_verify_json_value(symbol_table=symbol_table))
 

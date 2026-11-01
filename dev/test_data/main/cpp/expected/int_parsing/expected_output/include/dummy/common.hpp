@@ -10170,14 +10170,56 @@ std::wstring LStrip(
 );
 
 /**
+ * \brief Check that the integer \p value lies in the safe integer range
+ * [-2^53 + 1, 2^53 - 1].
+ *
+ * JSON knows a single numeric type, which many readers parse into a 64-bit
+ * floating-point number. Outside the safe integer range, such a reader might
+ * quietly get a different integer than the one which was written.
+ *
+ * The verification, the JSON and XML de/serialization and ParseSafeInt all
+ * use this check, so that an instance which passes the verification can be
+ * serialized to JSON.
+ *
+ * \param value to be checked
+ * \return true if \p value lies in the range
+ */
+bool IsSafeInteger(int64_t value);
+
+/**
+ * \brief Check that the unsigned integer \p value lies in the safe integer range
+ * [-2^53 + 1, 2^53 - 1].
+ *
+ * \param value to be checked
+ * \return true if \p value lies in the range
+ */
+bool IsSafeInteger(uint64_t value);
+
+/**
+ * \brief Check that the whole number \p value lies in the safe integer range
+ * [-2^53 + 1, 2^53 - 1].
+ *
+ * We check only the range. The caller has to check that \p value is whole.
+ *
+ * \param value to be checked
+ * \return true if \p value lies in the range, false for a not-a-number
+ */
+bool IsSafeInteger(double value);
+
+/**
  * \brief Parse \p text as a safe integer.
  *
  * The meta-model calls <code>int</code> on strings, and this is its
  * transpilation. We accept only an optional sign followed by the ASCII digits,
  * and only the safe integers, <em>i.e.</em>, the integers within
  * <code>-(2^53 - 1)</code> and <code>2^53 - 1</code>, which a double-precision
- * floating-point number represents exactly. This way, all the SDKs behave
- * the same.
+ * floating-point number represents exactly.
+ *
+ * We check the safe range even though an <code>int64_t</code> could hold
+ * larger integers. TypeScript represents the integers as <code>number</code>,
+ * which holds them exactly only within the safe range, and all the SDKs check
+ * the same range so that the invariants which parse a text behave the same
+ * everywhere.
  *
  * \param text to be parsed
  * \return parsed integer

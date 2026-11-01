@@ -4,6 +4,7 @@
 #include "dummy/jsonization.hpp"
 #include "dummy/stringification.hpp"
 #include "dummy/wstringification.hpp"
+#include "json_value_verification.hpp"
 
 #pragma warning(push, 0)
 #include <cmath>
@@ -300,110 +301,6 @@ std::pair<
     json.get<bool>(),
     common::nullopt
   );
-}
-
-std::pair<
-  common::optional<int64_t>,
-  common::optional<DeserializationError>
-> DeserializeInt64(
-  const nlohmann::json& json
-) {
-  if (!json.is_number()) {
-    std::wstring message = common::Concat(
-      L"Expected an integer number, but got a value of type: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<int64_t>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  static_assert(
-    std::is_same<nlohmann::json::number_integer_t, int64_t>::value,
-    "Expected nlohmann::json::number_integer_t to equal int64_t, "
-    "but it does not."
-  );
-
-  if (json.is_number_integer()) {
-    return std::make_pair<
-      common::optional<int64_t>,
-      common::optional<DeserializationError>
-    >(
-      json.get<int64_t>(),
-      common::nullopt
-    );
-  }
-
-  if (json.is_number_unsigned()) {
-    std::wstring message = common::Concat(
-      L"Expected a 64-bit integer number, "
-      L"but got an unsigned integer number which does not fit in that range: ",
-      std::to_wstring(json.get<nlohmann::json::number_unsigned_t>())
-    );
-
-    return std::make_pair<
-      common::optional<int64_t>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  // NOTE (mristin):
-  // We have to check that the number is an integer even though it can
-  // not be stored in int64_t in order to give an informative message.
-
-  const nlohmann::json::number_float_t number(
-    json.get<nlohmann::json::number_float_t>()
-  );
-
-  nlohmann::json::number_float_t integer_part;
-  const bool is_integer(
-    std::modf(number, &integer_part) == 0
-  );
-  if (is_integer) {
-    std::wstring message = common::Concat(
-      L"Expected a 64-bit integer number, "
-      L"but got an integer number which does not fit in that range: ",
-      std::to_wstring(number)
-    );
-
-    return std::make_pair<
-      common::optional<int64_t>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  } else {
-    std::wstring message = common::Concat(
-      L"Expected a 64-bit integer number, "
-      L"but got a non-integer number: ",
-      std::to_wstring(number)
-    );
-
-    return std::make_pair<
-      common::optional<int64_t>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
 }
 
 std::pair<
@@ -767,27 +664,19 @@ std::pair<
     return std::make_pair(std::move(result), common::nullopt);
   }
 
-  // NOTE (mristin):
-  // JSON knows neither an infinity nor a not-a-number, so we refuse both
-  // instead of silently writing them out as ``null``, mirroring
-  // ``DeserializeDouble`` for the floating-point properties of the model.
-  // The caller gives us an ``nlohmann::json`` which may well have been
-  // constructed programmatically, so a non-finite number can reach us
-  // even though no conformant parser would ever produce one.
-  if (json.is_number_float() && !std::isfinite(json.get<double>())) {
-    return std::make_pair<
-      common::optional<nlohmann::json>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        common::Concat(
-          L"Expected a JSON-able value, but got the number ",
-          std::to_wstring(json.get<double>()),
-          L", which is neither finite nor representable in JSON"
+  if (json.is_number()) {
+    common::optional<std::wstring> cause = verification::CheckJsonAbleNumber(json);
+    if (cause.has_value()) {
+      return std::make_pair<
+        common::optional<nlohmann::json>,
+        common::optional<DeserializationError>
+      >(
+        common::nullopt,
+        common::make_optional<DeserializationError>(
+          std::move(*cause)
         )
-      )
-    );
+      );
+    }
   }
 
   // NOTE (mristin):
@@ -1496,6 +1385,75 @@ common::expected<
 }
 
 common::expected<
+  nlohmann::json,
+  DeserializationError
+> JsonValueFrom(
+  const nlohmann::json& json
+) {
+  common::optional<nlohmann::json> value;
+  common::optional<DeserializationError> error;
+
+  std::tie(
+    value,
+    error
+  ) = DeserializeJsonValue(json);
+
+  if (error.has_value()) {
+    return common::make_unexpected(
+      std::move(*error)
+    );
+  }
+
+  return std::move(*value);
+}
+
+common::expected<
+  nlohmann::json,
+  DeserializationError
+> JsonArrayFrom(
+  const nlohmann::json& json
+) {
+  common::optional<nlohmann::json> value;
+  common::optional<DeserializationError> error;
+
+  std::tie(
+    value,
+    error
+  ) = DeserializeJsonArray(json);
+
+  if (error.has_value()) {
+    return common::make_unexpected(
+      std::move(*error)
+    );
+  }
+
+  return std::move(*value);
+}
+
+common::expected<
+  nlohmann::json,
+  DeserializationError
+> JsonObjectFrom(
+  const nlohmann::json& json
+) {
+  common::optional<nlohmann::json> value;
+  common::optional<DeserializationError> error;
+
+  std::tie(
+    value,
+    error
+  ) = DeserializeJsonObject(json);
+
+  if (error.has_value()) {
+    return common::make_unexpected(
+      std::move(*error)
+    );
+  }
+
+  return std::move(*value);
+}
+
+common::expected<
   std::shared_ptr<types::IItem>,
   DeserializationError
 > ItemFrom(
@@ -1603,48 +1561,6 @@ nlohmann::json SerializeBool(
   bool value
 ) {
   return value;
-}
-
-/**
- * \brief Serialize the given number to a JSON value.
- *
- * We verify that the integer is within the range representable by 64-bit floats
- * for interoperability with other de-serializers.
- */
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeInt64(int64_t value) {
-  if (
-    value < -9007199254740991L
-    || value > 9007199254740991L
-  ) {
-    const std::wstring message = common::Concat(
-      L"The integer ",
-      std::to_wstring(value),
-      L" can not be serialized to JSON "
-      L"as it is outside the range [-2^53 + 1, 2^53 - 1] and can not "
-      L"be exactly represented as a 64-bit floating point number."
-    );
-
-    return std::make_pair<
-      common::optional<nlohmann::json>,
-      common::optional<SerializationError>
-    >(
-      common::nullopt,
-      common::make_optional<SerializationError>(
-        message
-      )
-    );
-  }
-
-  return std::make_pair<
-    common::optional<nlohmann::json>,
-    common::optional<SerializationError>
-  >(
-    common::make_optional<nlohmann::json>(value),
-    common::nullopt
-  );
 }
 
 /**
@@ -1996,7 +1912,7 @@ inline std::pair<
 std::pair<
   common::optional<nlohmann::json>,
   common::optional<SerializationError>
-> SerializeJsonValue(
+> TrySerializeJsonValue(
   const nlohmann::json& value
 ) {
   if (value.is_binary() || value.is_discarded()) {
@@ -2020,7 +1936,7 @@ std::pair<
     for (const nlohmann::json& item : value) {
       common::optional<nlohmann::json> serialized_item;
       common::optional<SerializationError> error;
-      std::tie(serialized_item, error) = SerializeJsonValue(item);
+      std::tie(serialized_item, error) = TrySerializeJsonValue(item);
 
       if (error.has_value()) {
         error->path.segments.emplace_front(
@@ -2043,7 +1959,7 @@ std::pair<
     for (const auto& item : value.items()) {
       common::optional<nlohmann::json> serialized_value;
       common::optional<SerializationError> error;
-      std::tie(serialized_value, error) = SerializeJsonValue(item.value());
+      std::tie(serialized_value, error) = TrySerializeJsonValue(item.value());
 
       if (error.has_value()) {
         error->path.segments.emplace_front(
@@ -2061,27 +1977,19 @@ std::pair<
     return std::make_pair(std::move(result), common::nullopt);
   }
 
-  // NOTE (mristin):
-  // JSON knows neither an infinity nor a not-a-number, so we refuse both
-  // instead of silently writing them out as ``null``, mirroring
-  // ``SerializeDouble`` for the floating-point properties of the model.
-  // The caller gives us an ``nlohmann::json`` which may well have been
-  // constructed programmatically, so a non-finite number can reach us
-  // even though no conformant parser would ever produce one.
-  if (value.is_number_float() && !std::isfinite(value.get<double>())) {
-    return std::make_pair<
-      common::optional<nlohmann::json>,
-      common::optional<SerializationError>
-    >(
-      common::nullopt,
-      common::make_optional<SerializationError>(
-        common::Concat(
-          L"Expected a JSON-able value, but got the number ",
-          std::to_wstring(value.get<double>()),
-          L", which is neither finite nor representable in JSON"
+  if (value.is_number()) {
+    common::optional<std::wstring> cause = verification::CheckJsonAbleNumber(value);
+    if (cause.has_value()) {
+      return std::make_pair<
+        common::optional<nlohmann::json>,
+        common::optional<SerializationError>
+      >(
+        common::nullopt,
+        common::make_optional<SerializationError>(
+          std::move(*cause)
         )
-      )
-    );
+      );
+    }
   }
 
   // NOTE (mristin):
@@ -2093,7 +2001,7 @@ std::pair<
 std::pair<
   common::optional<nlohmann::json>,
   common::optional<SerializationError>
-> SerializeJsonArray(
+> TrySerializeJsonArray(
   const nlohmann::json& value
 ) {
   if (!value.is_array()) {
@@ -2108,13 +2016,13 @@ std::pair<
     );
   }
 
-  return SerializeJsonValue(value);
+  return TrySerializeJsonValue(value);
 }
 
 std::pair<
   common::optional<nlohmann::json>,
   common::optional<SerializationError>
-> SerializeJsonObject(
+> TrySerializeJsonObject(
   const nlohmann::json& value
 ) {
   if (!value.is_object()) {
@@ -2129,7 +2037,7 @@ std::pair<
     );
   }
 
-  return SerializeJsonValue(value);
+  return TrySerializeJsonValue(value);
 }
 
 /**
@@ -2229,7 +2137,7 @@ std::pair<
       iteration::Property::kOptionalValues,
       SerializeListWithFallible(
         *maybe_optional_values,
-        SerializeJsonValue
+        TrySerializeJsonValue
       )
     );
     if (error.has_value()) {
@@ -2290,6 +2198,27 @@ nlohmann::json Serialize(
     result,
     error
   ) = SerializeIClass(that);
+
+  if (error.has_value()) {
+    throw SerializationException(
+      std::move(error->cause),
+      std::move(error->path)
+    );
+  }
+
+  return std::move(*result);
+}
+
+nlohmann::json SerializeJsonValue(
+  const nlohmann::json& value
+) {
+  common::optional<nlohmann::json> result;
+  common::optional<SerializationError> error;
+
+  std::tie(
+    result,
+    error
+  ) = TrySerializeJsonValue(value);
 
   if (error.has_value()) {
     throw SerializationException(

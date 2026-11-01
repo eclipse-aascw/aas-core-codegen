@@ -419,36 +419,6 @@ function booleanFromJsonable(
 }
 
 /**
- * Parse `jsonable` as an integer.
- *
- * @param jsonable - to be parsed
- * @returns parsed integer value, or an error
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function integerFromJsonable(
-  jsonable: JsonValue
-): OurCommon.Either<number, DeserializationError> {
-  if (jsonable === null) {
-    return newDeserializationError<number>(
-      "Expected an integer number, but got null"
-    );
-  }
-  if (typeof jsonable !== "number") {
-    return newDeserializationError<number>(
-      `Expected an integer number, but got: ${typeof jsonable}`
-    );
-  }
-
-  if (!Number.isInteger(jsonable)) {
-    return newDeserializationError<number>(
-      `Expected an integer number, but got: ${jsonable}`
-    );
-  }
-
-  return new OurCommon.Either<number, DeserializationError>(jsonable, null);
-}
-
-/**
  * Parse `jsonable` as a number.
  *
  * @param jsonable - to be parsed
@@ -745,7 +715,7 @@ export class SerializationError extends Error {
  * @param jsonable - to be parsed
  * @returns the parsed value, or an error
  */
-function jsonValueFromJsonable(
+export function jsonValueFromJsonable(
   jsonable: JsonValue
 ): OurCommon.Either<OurTypes.JsonValue, DeserializationError> {
   if (jsonable === null) {
@@ -830,7 +800,7 @@ function jsonValueFromJsonable(
  * @param jsonable - to be parsed
  * @returns the parsed array, or an error
  */
-function jsonArrayFromJsonable(
+export function jsonArrayFromJsonable(
   jsonable: JsonValue
 ): OurCommon.Either<OurTypes.JsonArray, DeserializationError> {
   if (!Array.isArray(jsonable)) {
@@ -857,7 +827,7 @@ function jsonArrayFromJsonable(
  * @param jsonable - to be parsed
  * @returns the parsed object, or an error
  */
-function jsonObjectFromJsonable(
+export function jsonObjectFromJsonable(
   jsonable: JsonValue
 ): OurCommon.Either<OurTypes.JsonObject, DeserializationError> {
   if (
@@ -894,13 +864,13 @@ function jsonObjectFromJsonable(
  * @returns `that`, as a value of a JSON document
  * @throws {@link SerializationError} if `that` is not JSON-able
  */
-function jsonValueToJsonable(that: OurTypes.JsonArray): Array<JsonValue>;
+export function jsonValueToJsonable(that: OurTypes.JsonArray): Array<JsonValue>;
 // NOTE (mristin):
 // The copy keeps the shape of `that`, so we tell the compiler with the overloads.
 // Otherwise, the result could not go into, *e.g.*, an `Array<JsonObject>`.
-function jsonValueToJsonable(that: OurTypes.JsonObject): JsonObject;
-function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue;
-function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue {
+export function jsonValueToJsonable(that: OurTypes.JsonObject): JsonObject;
+export function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue;
+export function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue {
   if (that === null) {
     return null;
   }

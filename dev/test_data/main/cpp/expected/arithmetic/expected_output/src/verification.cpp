@@ -39,6 +39,16 @@ Error::Error(
 
 // endregion struct Error
 
+namespace impl {
+std::wstring DescribeIntegerOutsideSafeRange(const std::wstring& integer) {
+  return common::Concat(
+    L"Expected an integer, but got ",
+    integer,
+    L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+  );
+}
+}  // namespace impl
+
 // region Verification functions
 
 bool HasSmallRemainder(
@@ -102,7 +112,8 @@ namespace {
  */
 enum class Shape : std::uint32_t {
   kEvenInt = 0,
-  kSomething = 1
+  kSomething = 1,
+  kINT64 = 2
 };  // enum class Shape
 
 /**
@@ -265,6 +276,8 @@ bool Something_11(
  * Give out the checks of the values of the \p shape.
  */
 const std::vector<Check>& ChecksOf(Shape shape) {
+  static const std::vector<Check> kNoChecks;
+
   switch (shape) {
     case Shape::kEvenInt: {
       static const std::vector<Check> checks = {
@@ -331,6 +344,10 @@ const std::vector<Check>& ChecksOf(Shape shape) {
       };
       return checks;
     }
+    case Shape::kINT64:
+      // NOTE (mristin):
+      // These values are verified by the nested verification.
+      return kNoChecks;
     default:
       throw std::logic_error(
         common::Concat(
@@ -344,18 +361,80 @@ const std::vector<Check>& ChecksOf(Shape shape) {
 // endregion Checks
 
 /**
+ * \brief Report a single error whose cause depends on the value.
+ *
+ * The path of the error is empty, as \ref ErrorIterator prefixes it with
+ * the path to the value.
+ */
+class SingleErrorVerificator : public impl::IVerificator {
+ public:
+  explicit SingleErrorVerificator(
+    std::wstring cause
+  ) :
+    cause_(std::move(cause)) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    // NOTE (mristin):
+    // We copy the cause as the caller might take over the data members of
+    // the error, and we still need to be able to start again.
+    error_ = Error(cause_);
+  }
+
+  void Next() override {
+    error_ = common::nullopt;
+  }
+
+  bool Done() const override {
+    return !error_.has_value();
+  }
+
+  const Error& Get() const override {
+    return *error_;
+  }
+
+  Error& GetMutable() override {
+    return *error_;
+  }
+
+  long Index() const override {
+    return error_.has_value() ? 0 : -1;
+  }
+
+  std::unique_ptr<impl::IVerificator> Clone() const override {
+    return common::make_unique<SingleErrorVerificator>(*this);
+  }
+
+ private:
+  std::wstring cause_;
+  common::optional<Error> error_;
+};  // class SingleErrorVerificator
+
+/**
  * \brief Create the nested verification of the \p value, if its \p shape has one.
  *
  * \return nullptr if the shape has no nested verification
  */
 std::unique_ptr<impl::IVerificator> NewNestedVerificator(
-  Shape,
-  const void*
+  Shape shape,
+  const void* value
 ) {
-  // NOTE (mristin):
-  // The meta-model uses no JSON-able values, so no value needs a nested
-  // verification.
-  return nullptr;
+  switch (shape) {
+    case Shape::kEvenInt:
+    case Shape::kINT64: {
+      const int64_t integer = *static_cast<const int64_t*>(value);
+      if (common::IsSafeInteger(integer)) {
+        return nullptr;
+      }
+
+      return common::make_unique<SingleErrorVerificator>(
+        impl::DescribeIntegerOutsideSafeRange(std::to_wstring(integer))
+      );
+    }
+    default:
+      return nullptr;
+  }
 }
 
 // region Iteration over the values
@@ -754,6 +833,36 @@ std::unique_ptr<IIterator> Over_Something(
     InProperty(
       iteration::Property::kEven,
       OneByValue(that.even(), Shape::kEvenInt)
+    ),
+    InProperty(
+      iteration::Property::kOffset,
+      OneByValue(that.offset(), Shape::kINT64)
+    ),
+    InProperty(
+      iteration::Property::kSmall,
+      OneByValue(that.small(), Shape::kINT64)
+    ),
+    InProperty(
+      iteration::Property::kByNegative,
+      OneByValue(that.by_negative(), Shape::kINT64)
+    ),
+    InProperty(
+      iteration::Property::kNegative,
+      OneByValue(that.negative(), Shape::kINT64)
+    ),
+    InProperty(
+      iteration::Property::kDeviation,
+      OneByValue(that.deviation(), Shape::kINT64)
+    ),
+    InProperty(
+      iteration::Property::kAlignment,
+      OneByValue(that.alignment(), Shape::kINT64)
+    ),
+    InProperty(
+      iteration::Property::kOptionalNumber,
+      that.optional_number().has_value()
+        ? One(&(*that.optional_number()), Shape::kINT64)
+        : Empty()
     )
   );
 }

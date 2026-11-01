@@ -100,17 +100,13 @@ function parse_int(
 
   // NOTE (mristin):
   // An integer is a ``number`` in TypeScript, and a ``number`` holds only
-  // the integers up to 2^53 - 1 exactly. Beyond that ``Number`` rounds
-  // silently -- 9007199254740993 comes back as 9007199254740992, and
-  // 9223372036854775807 as 9223372036854776000, which is a perfectly
-  // well-formed but *different* xs:long. We refuse instead of corrupting.
-  //
-  // ``Number.isSafeInteger`` covers ``Number.isInteger`` as well, so
-  // a non-integer is refused here too.
+  // the safe integers exactly. Beyond them ``Number`` rounds silently --
+  // 9007199254740993 comes back as 9007199254740992, and 9223372036854775807
+  // as 9223372036854776000, which is a perfectly well-formed but *different*
+  // xs:long. We refuse instead of corrupting, and report the original text.
   if (!Number.isSafeInteger(value)) {
     return newDeserializationError<number>(
-      `Expected an integer within the safe range of a number, `
-        + `but got: ${text}`
+      OurCommon.unsafeIntegerMessage(text)
     );
   }
 
@@ -782,15 +778,14 @@ function write_int(
   value: number
 ): void {
   // NOTE (mristin):
-  // Beyond 2^53 - 1 a ``number`` no longer holds every integer, so the value
-  // we were handed has already lost its identity -- writing it out would
-  // record a different xs:long without a word. ``Number.isSafeInteger``
-  // covers ``Number.isInteger`` as well.
+  // Beyond the safe integers a ``number`` no longer holds every integer, so
+  // the value we were handed has already lost its identity -- writing it out
+  // would record a different xs:long without a word.
+  if (!Number.isInteger(value)) {
+    throw new SerializationError(OurCommon.notWholeIntegerMessage(value));
+  }
   if (!Number.isSafeInteger(value)) {
-    throw new SerializationError(
-      `Expected an integer within the safe range of a number, `
-        + `but got: ${value}`
-    );
+    throw new SerializationError(OurCommon.unsafeIntegerMessage(value));
   }
 
   parts.push(`${value}`);

@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math"
 	b64 "encoding/base64"
+	ourcommon "github.com/dummy-works/dummy/common"
 	ourreporting "github.com/dummy-works/dummy/reporting"
 	ourtypes "github.com/dummy-works/dummy/types"
 )
@@ -120,66 +121,6 @@ func boolFromJsonable(
 			fmt.Sprintf("Expected a boolean, but got %T", jsonable),
 		)
 
-		return
-	}
-
-	return
-}
-
-// Parse `jsonable` as a 64-bit integer, or return an error.
-func int64FromJsonable(
-	jsonable interface{},
-) (result int64, err error) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected an integer number, but got null",
-		)
-		return
-	}
-
-	f, ok := jsonable.(float64)
-	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected an integer number, but got %T",
-				jsonable,
-			),
-		)
-		return
-	}
-
-	if math.IsNaN(f) {
-		err = newDeserializationError(
-			"Expected an integer number, but got a NaN",
-		)
-		return
-	}
-
-	if math.IsInf(f, 0) {
-		err = newDeserializationError(
-			"Expected an integer number, but got an infinity",
-		)
-		return
-	}
-
-	if f != math.Trunc(f) {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected an integer number, but got a non-integer: %v",
-				f,
-			),
-		)
-		return
-	}
-
-	result = int64(f)
-	if f != float64(result) {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected an integer number fitting into int64, but got: %v",
-				jsonable,
-			),
-		)
 		return
 	}
 
@@ -395,6 +336,46 @@ func parseArray[T any](
 		}
 		result[i] = item
 	}
+	return
+}
+
+// Parse `jsonable` as a 64-bit integer, or return an error.
+//
+// A whole float64 such as `5.0` or `1e2` is accepted, but only within
+// the safe integer range [-2^53 + 1, 2^53 - 1], as checked by
+// [ourcommon.IsSafeIntegerFloat64].
+func int64FromJsonable(
+	jsonable interface{},
+) (result int64, err error) {
+	f, ok := jsonable.(float64)
+	if !ok {
+		err = newDeserializationError(
+			fmt.Sprintf(
+				"Expected an integer, but got: %T",
+				jsonable,
+			),
+		)
+		return
+	}
+
+	// NOTE (mristin):
+	// A not-a-number is never equal to its truncation.
+	if math.IsInf(f, 0) || f != math.Trunc(f) {
+		err = newDeserializationError(
+			fmt.Sprintf(
+				"Expected an integer, but got %v, which is not a whole number",
+				f,
+			),
+		)
+		return
+	}
+
+	if !ourcommon.IsSafeIntegerFloat64(f) {
+		err = newDeserializationError(ourcommon.UnsafeIntegerMessage(f))
+		return
+	}
+
+	result = int64(f)
 	return
 }
 
@@ -805,8 +786,9 @@ func mustSerializationError(err error) *SerializationError {
 	return seriaErr
 }
 
-// Try to cast `that` to a float64 and box it as a JSON-able value, or
-// return an error.
+// Cast `that` to a float64 and box it as a JSON-able value, or return
+// an error if `that` is outside the safe integer range, as checked by
+// [ourcommon.IsSafeInteger].
 //
 // The result is returned as `interface{}`, not the more specific
 // `float64`, so that this function itself can be passed on as a bare
@@ -815,17 +797,12 @@ func mustSerializationError(err error) *SerializationError {
 func int64ToJsonable(
 	that int64,
 ) (result interface{}, err error) {
-	if that > 9007199254740991 || that < -9007199254740991 {
-		err = newSerializationError(
-			fmt.Sprintf(
-				"64-bit integer can not be represented as 64-bit float in JSON: %v",
-				that,
-			),
-		)
+	if !ourcommon.IsSafeInteger(that) {
+		err = newSerializationError(ourcommon.UnsafeIntegerMessage(that))
 		return
 	}
 
-	result = float64(that);
+	result = float64(that)
 	return
 }
 

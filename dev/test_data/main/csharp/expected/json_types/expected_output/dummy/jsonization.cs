@@ -93,36 +93,6 @@ namespace dummy
             }
 
             /// <summary>
-            /// Convert <paramref name="node" /> to a 64-bit long integer.
-            /// </summary>
-            /// <param name="node">JSON node to be parsed</param>
-            /// <param name="error">Error, if any, during the deserialization</param>
-            internal static long LongFrom(
-                Nodes.JsonNode? node,
-                out Reporting.Error? error)
-            {
-                error = null;
-
-                Nodes.JsonValue? value = node as Nodes.JsonValue;
-                if (value == null)
-                {
-                    error = new Reporting.Error(
-                        $"Expected a 64-bit long integer, but got {Describe(node)}");
-                    return default!;
-                }
-
-                bool ok = value.TryGetValue<long>(out long result);
-                if (!ok)
-                {
-                    error = new Reporting.Error(
-                        "Expected a 64-bit long integer, but the conversion failed " +
-                        $"from {value.ToJsonString()}");
-                    return default!;
-                }
-                return result;
-            }
-
-            /// <summary>
             /// Convert <paramref name="node" /> to a 64-bit double-precision float.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
@@ -293,18 +263,10 @@ namespace dummy
                         return true;
 
                     case Nodes.JsonValue jsonValue:
-                        // NOTE (mristin):
-                        // JSON knows neither an infinity nor a not-a-number, so neither is
-                        // a JSON-able value. A conformant parser can never produce one, but
-                        // the caller gives us a node which may have been constructed
-                        // programmatically.
-                        if (
-                            jsonValue.TryGetValue<double>(out double number)
-                                && !System.Double.IsFinite(number))
+                        string? cause = JsonValueVerification.CheckJsonAbleNumber(jsonValue);
+                        if (cause != null)
                         {
-                            error = new Reporting.Error(
-                                $"Expected a JSON-able value, but got the number {number}, " +
-                                "which is neither finite nor representable in JSON");
+                            error = new Reporting.Error(cause);
                             return false;
                         }
                         return true;
@@ -600,6 +562,102 @@ namespace dummy
         public static class Deserialize
         {
             /// <summary>
+            /// Deserialize a JSON-able value from <paramref name="node" />.
+            /// </summary>
+            /// <remarks>
+            /// A JSON-able value is, recursively, exactly as JSON itself is defined:
+            /// a <c>null</c> (JSON null), a boolean, a number, a string, an array of
+            /// JSON-able values or an object of JSON-able values with string keys.
+            /// An infinity, a not-a-number and an integer outside the safe integer
+            /// range [-2^53 + 1, 2^53 - 1] are rejected at any depth.
+            ///
+            /// The result is a deep, independent copy of <paramref name="node" />.
+            /// </remarks>
+            /// <param name="node">JSON node to be parsed</param>
+            /// <exception cref="Jsonization.Exception">
+            /// Thrown when <paramref name="node" /> is not a JSON-able
+            /// value.
+            /// </exception>
+            public static Nodes.JsonNode? JsonValueFrom(
+                Nodes.JsonNode? node)
+            {
+                Nodes.JsonNode? result = DeserializeImplementation.JsonValueFrom(
+                    node,
+                    out Reporting.Error? error);
+                if (error != null)
+                {
+                    throw new Jsonization.Exception(
+                        Reporting.GenerateJsonPath(error.PathSegments),
+                        error.Cause);
+                }
+                return result;
+            }
+
+            /// <summary>
+            /// Deserialize a JSON-able array from <paramref name="node" />.
+            /// </summary>
+            /// <remarks>
+            /// A JSON-able value is, recursively, exactly as JSON itself is defined:
+            /// a <c>null</c> (JSON null), a boolean, a number, a string, an array of
+            /// JSON-able values or an object of JSON-able values with string keys.
+            /// An infinity, a not-a-number and an integer outside the safe integer
+            /// range [-2^53 + 1, 2^53 - 1] are rejected at any depth.
+            ///
+            /// The result is a deep, independent copy of <paramref name="node" />.
+            /// </remarks>
+            /// <param name="node">JSON node to be parsed</param>
+            /// <exception cref="Jsonization.Exception">
+            /// Thrown when <paramref name="node" /> is not a JSON-able
+            /// array.
+            /// </exception>
+            public static Nodes.JsonArray JsonArrayFrom(
+                Nodes.JsonNode node)
+            {
+                Nodes.JsonArray result = DeserializeImplementation.JsonArrayFrom(
+                    node,
+                    out Reporting.Error? error);
+                if (error != null)
+                {
+                    throw new Jsonization.Exception(
+                        Reporting.GenerateJsonPath(error.PathSegments),
+                        error.Cause);
+                }
+                return result;
+            }
+
+            /// <summary>
+            /// Deserialize a JSON-able object from <paramref name="node" />.
+            /// </summary>
+            /// <remarks>
+            /// A JSON-able value is, recursively, exactly as JSON itself is defined:
+            /// a <c>null</c> (JSON null), a boolean, a number, a string, an array of
+            /// JSON-able values or an object of JSON-able values with string keys.
+            /// An infinity, a not-a-number and an integer outside the safe integer
+            /// range [-2^53 + 1, 2^53 - 1] are rejected at any depth.
+            ///
+            /// The result is a deep, independent copy of <paramref name="node" />.
+            /// </remarks>
+            /// <param name="node">JSON node to be parsed</param>
+            /// <exception cref="Jsonization.Exception">
+            /// Thrown when <paramref name="node" /> is not a JSON-able
+            /// object.
+            /// </exception>
+            public static Nodes.JsonObject JsonObjectFrom(
+                Nodes.JsonNode node)
+            {
+                Nodes.JsonObject result = DeserializeImplementation.JsonObjectFrom(
+                    node,
+                    out Reporting.Error? error);
+                if (error != null)
+                {
+                    throw new Jsonization.Exception(
+                        Reporting.GenerateJsonPath(error.PathSegments),
+                        error.Cause);
+                }
+                return result;
+            }
+
+            /// <summary>
             /// Deserialize an instance of Something from <paramref name="node" />.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
@@ -650,28 +708,6 @@ namespace dummy
             internal static Nodes.JsonObject TransformIClass(Our.IClass that)
             {
                 return _instance.Transform(that);
-            }
-
-            /// <summary>
-            /// Convert <paramref name="that" /> 64-bit long integer to a JSON value.
-            /// </summary>
-            /// <param name="that">value to be converted</param>
-            /// <exception name="SerializationFailure">
-            /// Thrown if <paramref name="that" /> lies outside the range where it can be
-            /// exactly represented as a 64-bit floating-point number, which is what
-            /// the JSON de-serializers of the other languages read a number into.
-            /// </exception>
-            [CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
-            private static Nodes.JsonValue ToJsonValue(long that)
-            {
-                if (that < -9007199254740991L || that > 9007199254740991L)
-                {
-                    throw new SerializationFailure(
-                        new Reporting.Error(
-                            "The integer can not be serialized to JSON as it is outside " +
-                            $"the range [-2^53 + 1, 2^53 - 1]: {that}"));
-                }
-                return Nodes.JsonValue.Create(that);
             }
 
             /// <summary>
@@ -771,18 +807,10 @@ namespace dummy
                         break;
 
                     case Nodes.JsonValue jsonValue:
-                        // NOTE (mristin):
-                        // JSON knows neither an infinity nor a not-a-number, so neither is
-                        // a JSON-able value, even though Nodes.JsonValue holds one happily
-                        // if it was constructed programmatically.
-                        if (
-                            jsonValue.TryGetValue<double>(out double number)
-                                && !System.Double.IsFinite(number))
+                        string? cause = JsonValueVerification.CheckJsonAbleNumber(jsonValue);
+                        if (cause != null)
                         {
-                            throw new SerializationFailure(
-                                new Reporting.Error(
-                                    $"Expected a JSON-able value, but got the number {number}, " +
-                                    "which is neither finite nor representable in JSON"));
+                            throw new SerializationFailure(new Reporting.Error(cause));
                         }
                         break;
 
@@ -803,7 +831,7 @@ namespace dummy
             /// Thrown if <paramref name="that" /> contains a non-finite number anywhere,
             /// at any depth.
             /// </exception>
-            private static Nodes.JsonNode? SerializeJsonValue(Nodes.JsonNode? that)
+            internal static Nodes.JsonNode? SerializeJsonValue(Nodes.JsonNode? that)
             {
                 if (that == null)
                 {
@@ -982,6 +1010,32 @@ namespace dummy
                 try
                 {
                     return Transformer.TransformIClass(that);
+                }
+                catch (SerializationFailure failure)
+                {
+                    throw new SerializationException(
+                        Reporting.GenerateCSharpPath(failure.Error.PathSegments),
+                        failure.Error.Cause);
+                }
+            }
+
+            /// <summary>
+            /// Serialize the JSON-able value <paramref name="that" /> into a JSON node.
+            /// </summary>
+            /// <remarks>
+            /// The result is a deep, independent copy of <paramref name="that" />.
+            /// A <c>null</c> is a JSON null.
+            /// </remarks>
+            /// <exception cref="SerializationException">
+            /// Thrown when <paramref name="that" /> contains, at any depth, an infinity,
+            /// a not-a-number or an integer outside the safe integer range
+            /// [-2^53 + 1, 2^53 - 1]
+            /// </exception>
+            public static Nodes.JsonNode? JsonValueToJsonNode(Nodes.JsonNode? that)
+            {
+                try
+                {
+                    return Transformer.SerializeJsonValue(that);
                 }
                 catch (SerializationFailure failure)
                 {

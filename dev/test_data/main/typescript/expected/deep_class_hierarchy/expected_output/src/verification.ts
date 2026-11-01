@@ -190,6 +190,22 @@ export class VerificationError {
 }
 
 /**
+ * Verify that `that` is a safe integer so that it can be serialized to JSON.
+ *
+ * @param that - to be verified
+ * @returns errors, if any
+ */
+export function *verifyInteger(
+  that: number
+): IterableIterator<VerificationError> {
+  if (!Number.isInteger(that)) {
+    yield new VerificationError(OurCommon.notWholeIntegerMessage(that));
+  } else if (!Number.isSafeInteger(that)) {
+    yield new VerificationError(OurCommon.unsafeIntegerMessage(that));
+  }
+}
+
+/**
  * Verify an instance of the model recursively or non-recursively (depending on the context).
  */
 class Verifier
@@ -206,21 +222,35 @@ class Verifier
   }
 
   *transformLeafWithContext(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     that: OurTypes.Leaf,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    // No verification has been defined for Leaf.
+    for (const error of verifyInteger(that.value)) {
+      error.path.prepend(
+        new PropertySegment(
+          that,
+          "value"
+        )
+      );
+      yield error;
+    }
   }
 
   *transformBlossomWithContext(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     that: OurTypes.Blossom,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    // No verification has been defined for Blossom.
+    for (const error of verifyInteger(that.value)) {
+      error.path.prepend(
+        new PropertySegment(
+          that,
+          "value"
+        )
+      );
+      yield error;
+    }
   }
 
   *transformPlainMarkerWithContext(

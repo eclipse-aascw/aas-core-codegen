@@ -2,6 +2,7 @@
 // Do NOT edit or append.
 
 #include "dummy/stringification.hpp"
+#include "dummy/verification.hpp"
 #include "dummy/wstringification.hpp"
 #include "dummy/xmlization.hpp"
 
@@ -1422,6 +1423,14 @@ std::pair<
     throw std::logic_error(
       "Neither int nor long nor long long are 8 bytes long, "
       "but this should have been caught earlier in the static assert"
+    );
+  }
+
+  if (!common::IsSafeInteger(*deserialized)) {
+    return NoInstanceAndDeserializationErrorWithCause<int64_t>(
+      verification::impl::DescribeIntegerOutsideSafeRange(
+        std::to_wstring(*deserialized)
+      )
     );
   }
 
@@ -2946,6 +2955,14 @@ common::optional<xml_common::SerializationError> WriteInt64(
   int64_t value,
   xml_common::SelfClosingWriter& writer
 ) {
+  if (!common::IsSafeInteger(value)) {
+    return xml_common::SerializationError(
+      verification::impl::DescribeIntegerOutsideSafeRange(
+        std::to_wstring(value)
+      )
+    );
+  }
+
   writer.SerializeInt64(value);
   if (writer.error().has_value()) {
     return writer.move_error();

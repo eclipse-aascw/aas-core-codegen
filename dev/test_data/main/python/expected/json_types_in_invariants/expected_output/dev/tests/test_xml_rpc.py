@@ -315,9 +315,9 @@ class TestWriting(unittest.TestCase):
     def test_an_integer_too_large_for_a_float_is_not_written(self) -> None:
         # NOTE (mristin):
         # A <double> carries a JSON number, and a JSON number is a ``float``,
-        # so an ``int`` which no ``float`` can hold exactly has no <double>
-        # to be written as.
-        for number in (2 ** 53 + 1, 10 ** 400):
+        # so an ``int`` outside the safe integer range [-2^53 + 1, 2^53 - 1] has
+        # no <double> to be written as.
+        for number in (2 ** 53, -(2 ** 53), 10 ** 400):
             stream = io.StringIO()
             writer = our_xmlcommon.Writer(stream)
 
@@ -327,10 +327,20 @@ class TestWriting(unittest.TestCase):
             ) as context:
                 our_xmlrpc.write_discriminator(number, writer)
 
-            self.assertIn(
-                'not exactly representable as a JSON number',
+            self.assertEqual(
+                f'Expected a JSON-able value, but got the integer {number}, '
+                f'which is outside the safe integer range [-2^53 + 1, 2^53 - 1]',
                 context.exception.cause
             )
+
+    def test_a_safe_integer_is_written(self) -> None:
+        for number in (2 ** 53 - 1, -(2 ** 53 - 1)):
+            stream = io.StringIO()
+            writer = our_xmlcommon.Writer(stream)
+
+            our_xmlrpc.write_discriminator(number, writer)
+
+            self.assertIn(str(number), stream.getvalue())
 
     def test_a_key_which_is_no_string_stops_the_path(self) -> None:
         stream = io.StringIO()

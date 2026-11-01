@@ -203,6 +203,58 @@ namespace dummy
                 return result;
             }
         }  // public static class SetHelpers
+
+        /// <summary>
+        /// Check whether <paramref name="value" /> is a safe integer, <em>i.e.</em>,
+        /// whether it lies in the range [-2^53 + 1, 2^53 - 1].
+        /// </summary>
+        /// <remarks>
+        /// JSON knows a single numeric type, which the SDKs in other languages read
+        /// into a 64-bit floating-point number, so an integer outside this range might
+        /// be read as a different number. The verification, the de/serialization and
+        /// <see cref="ParseSafeInt" /> all use this check, so that an instance which
+        /// passes the verification can always be serialized.
+        /// </remarks>
+        /// <param name="value">integer to be checked</param>
+        /// <returns>true if <paramref name="value" /> is a safe integer</returns>
+        public static bool IsSafeInteger(long value)
+        {
+            return -9007199254740991L <= value && value <= 9007199254740991L;
+        }
+
+        /// <summary>
+        /// Check whether <paramref name="value" /> is a safe integer.
+        /// </summary>
+        /// <remarks>
+        /// See <see cref="IsSafeInteger(long)" /> for what a safe integer is.
+        /// </remarks>
+        /// <param name="value">integer to be checked</param>
+        /// <returns>true if <paramref name="value" /> is a safe integer</returns>
+        public static bool IsSafeInteger(ulong value)
+        {
+            return value <= long.MaxValue && IsSafeInteger((long)value);
+        }
+
+        /// <summary>
+        /// Check whether the whole number <paramref name="value" /> lies in the safe
+        /// integer range.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// See <see cref="IsSafeInteger(long)" /> for what a safe integer is.
+        /// </para>
+        /// <para>
+        /// We check only the range, so the caller has to check first that
+        /// <paramref name="value" /> is a whole number. A not-a-number lies outside
+        /// the range.
+        /// </para>
+        /// </remarks>
+        /// <param name="value">whole number to be checked</param>
+        /// <returns>true if <paramref name="value" /> is a safe integer</returns>
+        public static bool IsSafeInteger(double value)
+        {
+            return -9007199254740991.0 <= value && value <= 9007199254740991.0;
+        }
     }  // public static class Common
 }  // namespace dummy
 

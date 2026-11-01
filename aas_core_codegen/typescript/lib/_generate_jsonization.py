@@ -471,18 +471,31 @@ function integerFromJsonable(
 ): OurCommon.Either<number, DeserializationError> {{
 {I}if (jsonable === null) {{
 {II}return newDeserializationError<number>(
-{III}"Expected an integer number, but got null"
+{III}"Expected an integer, but got: null"
 {II});
 {I}}}
 {I}if (typeof jsonable !== "number") {{
 {II}return newDeserializationError<number>(
-{III}`Expected an integer number, but got: ${{typeof jsonable}}`
+{III}`Expected an integer, but got: ${{typeof jsonable}}`
 {II});
 {I}}}
 
+{I}// NOTE (mristin):
+{I}// ``Number.isInteger`` refuses an infinity and a not-a-number as well, and
+{I}// accepts a whole-valued literal such as ``1e2``.
 {I}if (!Number.isInteger(jsonable)) {{
 {II}return newDeserializationError<number>(
-{III}`Expected an integer number, but got: ${{jsonable}}`
+{III}OurCommon.notWholeIntegerMessage(jsonable)
+{II});
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// ``JSON.parse`` rounds a big integer literal to the nearest double, but
+{I}// the rounded value is still outside the safe integer range, so the check
+{I}// catches it.
+{I}if (!Number.isSafeInteger(jsonable)) {{
+{II}return newDeserializationError<number>(
+{III}OurCommon.unsafeIntegerMessage(jsonable)
 {II});
 {I}}}
 
@@ -1722,7 +1735,7 @@ def _generate_json_able_helpers(
  * @param jsonable - to be parsed
  * @returns the parsed value, or an error
  */
-function jsonValueFromJsonable(
+export function jsonValueFromJsonable(
 {I}jsonable: JsonValue
 ): OurCommon.Either<OurTypes.JsonValue, DeserializationError> {{
 {I}if (jsonable === null) {{
@@ -1809,7 +1822,7 @@ function jsonValueFromJsonable(
  * @param jsonable - to be parsed
  * @returns the parsed array, or an error
  */
-function jsonArrayFromJsonable(
+export function jsonArrayFromJsonable(
 {I}jsonable: JsonValue
 ): OurCommon.Either<OurTypes.JsonArray, DeserializationError> {{
 {I}if (!Array.isArray(jsonable)) {{
@@ -1838,7 +1851,7 @@ function jsonArrayFromJsonable(
  * @param jsonable - to be parsed
  * @returns the parsed object, or an error
  */
-function jsonObjectFromJsonable(
+export function jsonObjectFromJsonable(
 {I}jsonable: JsonValue
 ): OurCommon.Either<OurTypes.JsonObject, DeserializationError> {{
 {I}if (
@@ -1877,13 +1890,13 @@ function jsonObjectFromJsonable(
  * @returns `that`, as a value of a JSON document
  * @throws {{@link SerializationError}} if `that` is not JSON-able
  */
-function jsonValueToJsonable(that: OurTypes.JsonArray): Array<JsonValue>;
+export function jsonValueToJsonable(that: OurTypes.JsonArray): Array<JsonValue>;
 // NOTE (mristin):
 // The copy keeps the shape of `that`, so we tell the compiler with the overloads.
 // Otherwise, the result could not go into, *e.g.*, an `Array<JsonObject>`.
-function jsonValueToJsonable(that: OurTypes.JsonObject): JsonObject;
-function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue;
-function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue {{
+export function jsonValueToJsonable(that: OurTypes.JsonObject): JsonObject;
+export function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue;
+export function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue {{
 {I}if (that === null) {{
 {II}return null;
 {I}}}
@@ -2683,21 +2696,22 @@ def _generate_number_serializers(
 /**
  * Serialize `that` integer to a JSON-able value.
  *
- * Only the integers in the range [-2^53 + 1, 2^53 - 1] are serialized. Outside
- * of it, an integer can not be exactly represented as a 64-bit floating-point
- * number, which is what the JSON de-serializers of the other languages read
- * a number into.
+ * Only the integers in the safe integer range [-2^53 + 1, 2^53 - 1] are
+ * serialized. Outside of it, an integer can not be exactly represented as
+ * a 64-bit floating-point number, which is what the JSON de-serializers of
+ * the other languages read a number into. As a TypeScript `number` holds
+ * a fraction, an infinity and a not-a-number as well, we refuse them, too.
  *
  * @param that - integer to be serialized
  * @returns `that`, unchanged
- * @throws {{@link SerializationError}} if outside the range
+ * @throws {{@link SerializationError}} if not a safe integer
  */
 function integerToJsonable(that: number): number {{
-{I}if (!Number.isFinite(that) || that < -9007199254740991 || that > 9007199254740991) {{
-{II}throw new SerializationError(
-{III}`The integer can not be serialized to JSON as it is outside ` +
-{IIII}`the range [-2^53 + 1, 2^53 - 1]: ${{that}}`
-{II});
+{I}if (!Number.isInteger(that)) {{
+{II}throw new SerializationError(OurCommon.notWholeIntegerMessage(that));
+{I}}}
+{I}if (!Number.isSafeInteger(that)) {{
+{II}throw new SerializationError(OurCommon.unsafeIntegerMessage(that));
 {I}}}
 {I}return that;
 }}"""
@@ -2995,7 +3009,11 @@ function newDeserializationError<T>(
             else []
         ),
         _generate_bool_from_jsonable(),
-        _generate_int_from_jsonable(),
+        *(
+            [_generate_int_from_jsonable()]
+            if intermediate_uses.integers(symbol_table)
+            else []
+        ),
         _generate_float_from_jsonable(),
         _generate_str_from_jsonable(),
         _generate_bytes_from_jsonable(),

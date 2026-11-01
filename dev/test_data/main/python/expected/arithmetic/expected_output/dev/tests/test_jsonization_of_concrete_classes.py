@@ -64,114 +64,6 @@ def _load_the_first_expected(model_type: str) -> Any:
 
 
 class TestSerializationFailures(unittest.TestCase):
-    def test_something_even_out_of_range(self) -> None:
-        for value in [9007199254740992, -9007199254740992]:
-            instance = our_jsonization.something_from_jsonable(
-                _load_the_first_expected('Something')
-            )
-
-            instance.even = value
-
-            with self.assertRaises(
-                our_jsonization.SerializationException
-            ) as context_manager:
-                our_jsonization.to_jsonable(instance)
-
-            self.assertEqual(
-                '.even',
-                context_manager.exception.path
-            )
-
-    def test_something_offset_out_of_range(self) -> None:
-        for value in [9007199254740992, -9007199254740992]:
-            instance = our_jsonization.something_from_jsonable(
-                _load_the_first_expected('Something')
-            )
-
-            instance.offset = value
-
-            with self.assertRaises(
-                our_jsonization.SerializationException
-            ) as context_manager:
-                our_jsonization.to_jsonable(instance)
-
-            self.assertEqual(
-                '.offset',
-                context_manager.exception.path
-            )
-
-    def test_something_small_out_of_range(self) -> None:
-        for value in [9007199254740992, -9007199254740992]:
-            instance = our_jsonization.something_from_jsonable(
-                _load_the_first_expected('Something')
-            )
-
-            instance.small = value
-
-            with self.assertRaises(
-                our_jsonization.SerializationException
-            ) as context_manager:
-                our_jsonization.to_jsonable(instance)
-
-            self.assertEqual(
-                '.small',
-                context_manager.exception.path
-            )
-
-    def test_something_by_negative_out_of_range(self) -> None:
-        for value in [9007199254740992, -9007199254740992]:
-            instance = our_jsonization.something_from_jsonable(
-                _load_the_first_expected('Something')
-            )
-
-            instance.by_negative = value
-
-            with self.assertRaises(
-                our_jsonization.SerializationException
-            ) as context_manager:
-                our_jsonization.to_jsonable(instance)
-
-            self.assertEqual(
-                '.by_negative',
-                context_manager.exception.path
-            )
-
-    def test_something_negative_out_of_range(self) -> None:
-        for value in [9007199254740992, -9007199254740992]:
-            instance = our_jsonization.something_from_jsonable(
-                _load_the_first_expected('Something')
-            )
-
-            instance.negative = value
-
-            with self.assertRaises(
-                our_jsonization.SerializationException
-            ) as context_manager:
-                our_jsonization.to_jsonable(instance)
-
-            self.assertEqual(
-                '.negative',
-                context_manager.exception.path
-            )
-
-    def test_something_deviation_out_of_range(self) -> None:
-        for value in [9007199254740992, -9007199254740992]:
-            instance = our_jsonization.something_from_jsonable(
-                _load_the_first_expected('Something')
-            )
-
-            instance.deviation = value
-
-            with self.assertRaises(
-                our_jsonization.SerializationException
-            ) as context_manager:
-                our_jsonization.to_jsonable(instance)
-
-            self.assertEqual(
-                '.deviation',
-                context_manager.exception.path
-            )
-
     def test_something_ratio_non_finite(self) -> None:
         for value in [math.inf, -math.inf, math.nan]:
             instance = our_jsonization.something_from_jsonable(
@@ -190,22 +82,307 @@ class TestSerializationFailures(unittest.TestCase):
                 context_manager.exception.path
             )
 
-    def test_something_alignment_out_of_range(self) -> None:
-        for value in [9007199254740992, -9007199254740992]:
-            instance = our_jsonization.something_from_jsonable(
-                _load_the_first_expected('Something')
-            )
 
-            instance.alignment = value
+class TestDeserializationOfIntegers(unittest.TestCase):
+    def test_something_even(self) -> None:
+        jsonable = _load_the_first_expected('Something')
+
+        # NOTE (mristin):
+        # JSON has a single number type, so a whole float is an integer.
+        jsonable['even'] = 5.0
+        instance = our_jsonization.something_from_jsonable(jsonable)
+        self.assertIs(int, type(instance.even))
+        self.assertEqual(5, instance.even)
+
+        for value, expected_cause in [
+            ("5", "Expected an integer, but got: <class 'str'>"),
+            (
+                1.5,
+                "Expected an integer, but got 1.5, which is not a whole number"
+            ),
+            (
+                9007199254740992,
+                (
+                    "Expected an integer, but got 9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            ),
+            (
+                -9007199254740992.0,
+                (
+                    "Expected an integer, but got -9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            )
+        ]:
+            jsonable['even'] = value
 
             with self.assertRaises(
-                our_jsonization.SerializationException
+                our_jsonization.DeserializationException
             ) as context_manager:
-                our_jsonization.to_jsonable(instance)
+                our_jsonization.something_from_jsonable(jsonable)
 
             self.assertEqual(
-                '.alignment',
-                context_manager.exception.path
+                expected_cause,
+                context_manager.exception.cause
+            )
+
+    def test_something_offset(self) -> None:
+        jsonable = _load_the_first_expected('Something')
+
+        # NOTE (mristin):
+        # JSON has a single number type, so a whole float is an integer.
+        jsonable['offset'] = 5.0
+        instance = our_jsonization.something_from_jsonable(jsonable)
+        self.assertIs(int, type(instance.offset))
+        self.assertEqual(5, instance.offset)
+
+        for value, expected_cause in [
+            ("5", "Expected an integer, but got: <class 'str'>"),
+            (
+                1.5,
+                "Expected an integer, but got 1.5, which is not a whole number"
+            ),
+            (
+                9007199254740992,
+                (
+                    "Expected an integer, but got 9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            ),
+            (
+                -9007199254740992.0,
+                (
+                    "Expected an integer, but got -9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            )
+        ]:
+            jsonable['offset'] = value
+
+            with self.assertRaises(
+                our_jsonization.DeserializationException
+            ) as context_manager:
+                our_jsonization.something_from_jsonable(jsonable)
+
+            self.assertEqual(
+                expected_cause,
+                context_manager.exception.cause
+            )
+
+    def test_something_small(self) -> None:
+        jsonable = _load_the_first_expected('Something')
+
+        # NOTE (mristin):
+        # JSON has a single number type, so a whole float is an integer.
+        jsonable['small'] = 5.0
+        instance = our_jsonization.something_from_jsonable(jsonable)
+        self.assertIs(int, type(instance.small))
+        self.assertEqual(5, instance.small)
+
+        for value, expected_cause in [
+            ("5", "Expected an integer, but got: <class 'str'>"),
+            (
+                1.5,
+                "Expected an integer, but got 1.5, which is not a whole number"
+            ),
+            (
+                9007199254740992,
+                (
+                    "Expected an integer, but got 9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            ),
+            (
+                -9007199254740992.0,
+                (
+                    "Expected an integer, but got -9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            )
+        ]:
+            jsonable['small'] = value
+
+            with self.assertRaises(
+                our_jsonization.DeserializationException
+            ) as context_manager:
+                our_jsonization.something_from_jsonable(jsonable)
+
+            self.assertEqual(
+                expected_cause,
+                context_manager.exception.cause
+            )
+
+    def test_something_by_negative(self) -> None:
+        jsonable = _load_the_first_expected('Something')
+
+        # NOTE (mristin):
+        # JSON has a single number type, so a whole float is an integer.
+        jsonable['byNegative'] = 5.0
+        instance = our_jsonization.something_from_jsonable(jsonable)
+        self.assertIs(int, type(instance.by_negative))
+        self.assertEqual(5, instance.by_negative)
+
+        for value, expected_cause in [
+            ("5", "Expected an integer, but got: <class 'str'>"),
+            (
+                1.5,
+                "Expected an integer, but got 1.5, which is not a whole number"
+            ),
+            (
+                9007199254740992,
+                (
+                    "Expected an integer, but got 9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            ),
+            (
+                -9007199254740992.0,
+                (
+                    "Expected an integer, but got -9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            )
+        ]:
+            jsonable['byNegative'] = value
+
+            with self.assertRaises(
+                our_jsonization.DeserializationException
+            ) as context_manager:
+                our_jsonization.something_from_jsonable(jsonable)
+
+            self.assertEqual(
+                expected_cause,
+                context_manager.exception.cause
+            )
+
+    def test_something_negative(self) -> None:
+        jsonable = _load_the_first_expected('Something')
+
+        # NOTE (mristin):
+        # JSON has a single number type, so a whole float is an integer.
+        jsonable['negative'] = 5.0
+        instance = our_jsonization.something_from_jsonable(jsonable)
+        self.assertIs(int, type(instance.negative))
+        self.assertEqual(5, instance.negative)
+
+        for value, expected_cause in [
+            ("5", "Expected an integer, but got: <class 'str'>"),
+            (
+                1.5,
+                "Expected an integer, but got 1.5, which is not a whole number"
+            ),
+            (
+                9007199254740992,
+                (
+                    "Expected an integer, but got 9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            ),
+            (
+                -9007199254740992.0,
+                (
+                    "Expected an integer, but got -9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            )
+        ]:
+            jsonable['negative'] = value
+
+            with self.assertRaises(
+                our_jsonization.DeserializationException
+            ) as context_manager:
+                our_jsonization.something_from_jsonable(jsonable)
+
+            self.assertEqual(
+                expected_cause,
+                context_manager.exception.cause
+            )
+
+    def test_something_deviation(self) -> None:
+        jsonable = _load_the_first_expected('Something')
+
+        # NOTE (mristin):
+        # JSON has a single number type, so a whole float is an integer.
+        jsonable['deviation'] = 5.0
+        instance = our_jsonization.something_from_jsonable(jsonable)
+        self.assertIs(int, type(instance.deviation))
+        self.assertEqual(5, instance.deviation)
+
+        for value, expected_cause in [
+            ("5", "Expected an integer, but got: <class 'str'>"),
+            (
+                1.5,
+                "Expected an integer, but got 1.5, which is not a whole number"
+            ),
+            (
+                9007199254740992,
+                (
+                    "Expected an integer, but got 9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            ),
+            (
+                -9007199254740992.0,
+                (
+                    "Expected an integer, but got -9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            )
+        ]:
+            jsonable['deviation'] = value
+
+            with self.assertRaises(
+                our_jsonization.DeserializationException
+            ) as context_manager:
+                our_jsonization.something_from_jsonable(jsonable)
+
+            self.assertEqual(
+                expected_cause,
+                context_manager.exception.cause
+            )
+
+    def test_something_alignment(self) -> None:
+        jsonable = _load_the_first_expected('Something')
+
+        # NOTE (mristin):
+        # JSON has a single number type, so a whole float is an integer.
+        jsonable['alignment'] = 5.0
+        instance = our_jsonization.something_from_jsonable(jsonable)
+        self.assertIs(int, type(instance.alignment))
+        self.assertEqual(5, instance.alignment)
+
+        for value, expected_cause in [
+            ("5", "Expected an integer, but got: <class 'str'>"),
+            (
+                1.5,
+                "Expected an integer, but got 1.5, which is not a whole number"
+            ),
+            (
+                9007199254740992,
+                (
+                    "Expected an integer, but got 9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            ),
+            (
+                -9007199254740992.0,
+                (
+                    "Expected an integer, but got -9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            )
+        ]:
+            jsonable['alignment'] = value
+
+            with self.assertRaises(
+                our_jsonization.DeserializationException
+            ) as context_manager:
+                our_jsonization.something_from_jsonable(jsonable)
+
+            self.assertEqual(
+                expected_cause,
+                context_manager.exception.cause
             )
 
 
