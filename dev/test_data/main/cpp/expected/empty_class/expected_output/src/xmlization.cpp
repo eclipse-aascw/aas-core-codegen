@@ -919,117 +919,6 @@ std::pair<
 }
 
 std::pair<
-  common::optional<int64_t>,
-  common::optional<DeserializationError>
-> DeserializeInt64(
-  xml_common::ReaderMergingText& reader
-) {
-  #ifdef DEBUG
-  if (reader.node().kind() == xml_common::NodeKind::Error) {
-    throw std::logic_error(
-      "Unexpected unhandled XML error in DeserializeInt64. "
-      "DeserializeInt64 expects no error node."
-    );
-  }
-  #endif
-
-  if (reader.node().kind() != xml_common::NodeKind::Text) {
-    return NoInstanceAndDeserializationErrorWithCause<int64_t>(
-      common::Concat(
-        L"Expected to parse an xs:long from XML text, but got ",
-        xml_common::NodeToHumanReadableWstring(reader.node())
-      )
-    );
-  }
-
-  const std::string text(
-    xml_common::CollapseWhitespace(
-      static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const xml_common::TextNode&
-      >(reader.node()).text
-    )
-  );
-
-  // NOTE (mristin):
-  // The lexical form has to be checked before the text is parsed. The std::sto*
-  // family reads far more than XSD admits: it stops at the first character it
-  // can not use and answers with what it has read so far, so "0x10" comes out
-  // as 0, "1abc" as 1, and "5.0" as 5.
-  if (!xml_common::MatchesXsLongNumeral(text)) {
-    return NoInstanceAndDeserializationErrorWithCause<int64_t>(
-      common::Concat(
-        L"Expected to parse an xs:long from text, "
-        L"but got an invalid value: ",
-        common::Utf8ToWstring(text)
-      )
-    );
-  }
-
-  common::optional<int64_t> deserialized;
-
-  static_assert(
-    sizeof(int) == 8
-    || sizeof(long) == 8
-    || sizeof(long long) == 8,
-    "Neither int nor long nor long long are 8 bytes long, "
-    "so we do not know how to parse an xs:long."
-  );
-
-  try {
-    // NOTE (mristin):
-    // We remove the warning C4101 in MSVC with constants.
-    // See: https://stackoverflow.com/questions/25573996/c4127-conditional-expression-is-constant
-    const bool sizeof_int_is_8 = sizeof(int) == 8;
-    const bool sizeof_long_is_8 = sizeof(long) == 8;
-    const bool sizeof_long_long_is_8 = sizeof(long long) == 8;
-
-    if (sizeof_int_is_8) {
-      deserialized = std::stoi(text);
-    } else if (sizeof_long_is_8) {
-      deserialized = std::stol(text);
-    } else if (sizeof_long_long_is_8) {
-      deserialized = std::stoll(text);
-    }
-  } catch (std::invalid_argument&) {
-    return NoInstanceAndDeserializationErrorWithCause<int64_t>(
-      common::Concat(
-        L"Expected to parse an xs:long from text, "
-        L"but got an invalid value: ",
-        common::Utf8ToWstring(text)
-      )
-    );
-  } catch (std::out_of_range&) {
-    return NoInstanceAndDeserializationErrorWithCause<int64_t>(
-      common::Concat(
-        L"Expected to parse an xs:long from text, "
-        L"but got a value out of the xs:long range: ",
-        common::Utf8ToWstring(text)
-      )
-    );
-  }
-
-  if (!deserialized.has_value()) {
-    throw std::logic_error(
-      "Neither int nor long nor long long are 8 bytes long, "
-      "but this should have been caught earlier in the static assert"
-    );
-  }
-
-  // NOTE (mristin):
-  // We consume the text node.
-  reader.Read();
-
-  if (reader.node().kind() == xml_common::NodeKind::Error) {
-    return NoInstanceAndDeserializationErrorFromReader<int64_t>(reader);
-  }
-
-  return std::make_pair(
-    deserialized,
-    common::nullopt
-  );
-}
-
-std::pair<
   common::optional<double>,
   common::optional<DeserializationError>
 > DeserializeDouble(
@@ -1482,18 +1371,6 @@ common::optional<xml_common::SerializationError> WriteBool(
   xml_common::SelfClosingWriter& writer
 ) {
   writer.SerializeBool(value);
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  return common::nullopt;
-}
-
-common::optional<xml_common::SerializationError> WriteInt64(
-  int64_t value,
-  xml_common::SelfClosingWriter& writer
-) {
-  writer.SerializeInt64(value);
   if (writer.error().has_value()) {
     return writer.move_error();
   }

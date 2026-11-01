@@ -94,6 +94,22 @@ func HasRemainderOneByLength(
 	return ourcommon.FloorMod(number, int64(ourcommon.LenStr(text) + 1)) == 1
 }
 
+// Verify that `that` integer lies in the safe integer range of JSON, as
+// checked by [ourcommon.IsSafeInteger] in the serialization as well.
+func verifyInt64(
+	that int64,
+	onError func(*VerificationError) bool,
+) (abort bool) {
+	if !ourcommon.IsSafeInteger(that) {
+		abort = onError(newVerificationError(ourcommon.UnsafeIntegerMessage(that)))
+		if abort {
+			return
+		}
+	}
+
+	return
+}
+
 // Verify `that` instance of [ourtypes.ISomething].
 //
 // You have to supply the callback `onError` to iterate over the errors.
@@ -257,6 +273,113 @@ func VerifySomething(
 		return
 	}
 
+	abort = verifyInt64(
+		that.Offset(),
+		func(err *VerificationError) bool {
+			err.Path.PrependName(
+				&ourreporting.NameSegment{
+					Name: "Offset",
+				},
+			)
+			return onError(err)
+		},
+	)
+	if abort {
+		return
+	}
+
+	abort = verifyInt64(
+		that.Small(),
+		func(err *VerificationError) bool {
+			err.Path.PrependName(
+				&ourreporting.NameSegment{
+					Name: "Small",
+				},
+			)
+			return onError(err)
+		},
+	)
+	if abort {
+		return
+	}
+
+	abort = verifyInt64(
+		that.ByNegative(),
+		func(err *VerificationError) bool {
+			err.Path.PrependName(
+				&ourreporting.NameSegment{
+					Name: "ByNegative",
+				},
+			)
+			return onError(err)
+		},
+	)
+	if abort {
+		return
+	}
+
+	abort = verifyInt64(
+		that.Negative(),
+		func(err *VerificationError) bool {
+			err.Path.PrependName(
+				&ourreporting.NameSegment{
+					Name: "Negative",
+				},
+			)
+			return onError(err)
+		},
+	)
+	if abort {
+		return
+	}
+
+	abort = verifyInt64(
+		that.Deviation(),
+		func(err *VerificationError) bool {
+			err.Path.PrependName(
+				&ourreporting.NameSegment{
+					Name: "Deviation",
+				},
+			)
+			return onError(err)
+		},
+	)
+	if abort {
+		return
+	}
+
+	abort = verifyInt64(
+		that.Alignment(),
+		func(err *VerificationError) bool {
+			err.Path.PrependName(
+				&ourreporting.NameSegment{
+					Name: "Alignment",
+				},
+			)
+			return onError(err)
+		},
+	)
+	if abort {
+		return
+	}
+
+	if that.OptionalNumber() != nil {
+		abort = verifyInt64(
+			*that.OptionalNumber(),
+			func(err *VerificationError) bool {
+				err.Path.PrependName(
+					&ourreporting.NameSegment{
+						Name: "OptionalNumber",
+					},
+				)
+				return onError(err)
+			},
+		)
+		if abort {
+			return
+		}
+	}
+
 	return
 }
 
@@ -271,6 +394,13 @@ func VerifyEvenInt(
 	onError func(*VerificationError) bool,
 ) (abort bool) {
 	abort = false
+
+	if !ourcommon.IsSafeInteger(that) {
+		abort = onError(newVerificationError(ourcommon.UnsafeIntegerMessage(that)))
+		if abort {
+			return
+		}
+	}
 
 	if !(ourcommon.FloorMod(that, 2) == 0) {
 		abort = onError(

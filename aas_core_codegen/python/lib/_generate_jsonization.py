@@ -17,6 +17,7 @@ from typing import (
 from icontract import ensure, require
 
 from aas_core_codegen import intermediate, naming
+from aas_core_codegen.intermediate import uses as intermediate_uses
 from aas_core_codegen.common import (
     Error,
     Stripped,
@@ -78,13 +79,13 @@ def _parser_name(type_annotation: intermediate.TypeAnnotationUnion) -> Identifie
         raise AssertionError("Expected to handle this case before")
 
     elif isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
-        return Identifier("_json_value_from_jsonable")
+        return Identifier("json_value_from_jsonable")
 
     elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
-        return Identifier("_json_array_from_jsonable")
+        return Identifier("json_array_from_jsonable")
 
     elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
-        return Identifier("_json_object_from_jsonable")
+        return Identifier("json_object_from_jsonable")
 
     elif isinstance(type_anno, intermediate.OurTypeAnnotation):
         our_type = type_anno.our_type
@@ -360,9 +361,9 @@ _HELPER_DEPENDENCIES: Mapping[str, Sequence[str]] = {
     "_bytes_from_jsonable": [],
     "_list_from_jsonable": [],
     "_set_from_jsonable": [],
-    "_json_value_from_jsonable": [],
-    "_json_array_from_jsonable": ["_json_value_from_jsonable"],
-    "_json_object_from_jsonable": ["_json_value_from_jsonable"],
+    "json_value_from_jsonable": [],
+    "json_array_from_jsonable": ["json_value_from_jsonable"],
+    "json_object_from_jsonable": ["json_value_from_jsonable"],
 }
 
 
@@ -501,6 +502,13 @@ def _int_from_jsonable(
 {I}"""
 {I}Parse :paramref:`jsonable` as an integer.
 
+{I}A whole float, such as ``5.0`` or ``1e2``, is accepted as well. JSON has
+{I}a single number type, so ``5.0`` is every bit as good an integer as ``5``
+{I}is, and :py:mod:`json` gives us a ``float`` for the former.
+
+{I}Only the integers in the safe integer range [-2^53 + 1, 2^53 - 1] are
+{I}accepted, see :py:func:`.common.is_safe_integer`.
+
 {I}:param jsonable: JSON-able structure to be parsed
 {I}:return: parsed integer
 {I}:raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
@@ -508,11 +516,31 @@ def _int_from_jsonable(
 {I}# NOTE (mristin):
 {I}# ``bool`` is a subclass of ``int`` in Python, so it has to be excluded
 {I}# explicitly. Otherwise ``True`` would be read as ``1``.
-{I}if isinstance(jsonable, bool) or not isinstance(jsonable, int):
+{I}if isinstance(jsonable, bool) or not isinstance(jsonable, (int, float)):
 {II}raise DeserializationException(
-{III}f"Expected an int, but got: {{type(jsonable)}}"
+{III}f"Expected an integer, but got: {{type(jsonable)}}"
 {II})
-{I}return jsonable'''
+
+{I}value: int
+{I}if isinstance(jsonable, float):
+{II}# NOTE (mristin):
+{II}# ``is_integer`` is false for an infinity and a not-a-number as well.
+{II}if not jsonable.is_integer():
+{III}raise DeserializationException(
+{IIII}f"Expected an integer, but got {{jsonable}}, "
+{IIII}f"which is not a whole number"
+{III})
+
+{II}value = int(jsonable)
+{I}else:
+{II}value = jsonable
+
+{I}if not our_common.is_safe_integer(value):
+{II}raise DeserializationException(
+{III}our_common.unsafe_integer_message(value)
+{II})
+
+{I}return value'''
         ),
         "_float_from_jsonable": Stripped(
             f'''\
@@ -672,9 +700,9 @@ def _set_from_jsonable(
 
 {I}return result'''
         ),
-        "_json_value_from_jsonable": Stripped(
+        "json_value_from_jsonable": Stripped(
             f'''\
-def _json_value_from_jsonable(
+def json_value_from_jsonable(
 {I}jsonable: Jsonable
 ) -> our_types.JsonValue:
 {I}"""
@@ -707,14 +735,12 @@ def _json_value_from_jsonable(
 {II}# JSON knows a single numeric type, so :py:mod:`json` giving us
 {II}# an ``int`` says nothing about the document: "1" and "1.0" are
 {II}# the same number, and a JSON-able value holds it as a ``float``.
-{II}number = our_common.try_to_convert_int_to_float(jsonable)
-{II}if number is None:
+{II}if not our_common.is_safe_integer(jsonable):
 {III}raise DeserializationException(
-{IIII}f"Expected a JSON-able value, but got the integer {{jsonable}}, "
-{IIII}f"which is not exactly representable as a JSON number"
+{IIII}our_common.unsafe_json_able_integer_message(jsonable)
 {III})
 
-{II}return number
+{II}return float(jsonable)
 
 {I}if isinstance(jsonable, float):
 {II}# NOTE (mristin):
@@ -742,7 +768,7 @@ def _json_value_from_jsonable(
 {IIII})
 
 {III}try:
-{IIII}mapping[key] = _json_value_from_jsonable(jsonable_value)
+{IIII}mapping[key] = json_value_from_jsonable(jsonable_value)
 {III}except DeserializationException as exception:
 {IIII}exception.path._prepend(KeySegment(jsonable, key))
 {IIII}raise
@@ -755,7 +781,7 @@ def _json_value_from_jsonable(
 {II}items: List[Any] = []
 {II}for i, jsonable_item in enumerate(array_like):
 {III}try:
-{IIII}items.append(_json_value_from_jsonable(jsonable_item))
+{IIII}items.append(json_value_from_jsonable(jsonable_item))
 {III}except DeserializationException as exception:
 {IIII}exception.path._prepend(IndexSegment(array_like, i))
 {IIII}raise
@@ -767,9 +793,9 @@ def _json_value_from_jsonable(
 {II}f"an array or an object), but got: {{type(jsonable)}}"
 {I})'''
         ),
-        "_json_array_from_jsonable": Stripped(
+        "json_array_from_jsonable": Stripped(
             f'''\
-def _json_array_from_jsonable(
+def json_array_from_jsonable(
 {I}jsonable: Jsonable
 ) -> our_types.JsonArray:
 {I}"""
@@ -784,13 +810,13 @@ def _json_array_from_jsonable(
 {III}f"Expected a JSON-able array, but got: {{type(jsonable)}}"
 {II})
 
-{I}result = _json_value_from_jsonable(jsonable)
+{I}result = json_value_from_jsonable(jsonable)
 {I}assert isinstance(result, list)
 {I}return result'''
         ),
-        "_json_object_from_jsonable": Stripped(
+        "json_object_from_jsonable": Stripped(
             f'''\
-def _json_object_from_jsonable(
+def json_object_from_jsonable(
 {I}jsonable: Jsonable
 ) -> our_types.JsonObject:
 {I}"""
@@ -805,7 +831,7 @@ def _json_object_from_jsonable(
 {III}f"Expected a JSON-able object, but got: {{type(jsonable)}}"
 {II})
 
-{I}result = _json_value_from_jsonable(jsonable)
+{I}result = json_value_from_jsonable(jsonable)
 {I}assert isinstance(result, dict)
 {I}return result'''
         ),
@@ -1710,7 +1736,7 @@ def _generate_json_value_to_jsonable() -> Stripped:
     """Generate the function serializing a JSON-able value."""
     return Stripped(
         f'''\
-def _json_value_to_jsonable(
+def json_value_to_jsonable(
 {I}value: our_types.JsonValue
 ) -> MutableJsonable:
 {I}"""
@@ -1740,13 +1766,12 @@ def _json_value_to_jsonable(
 {I}if isinstance(value, int):
 {II}# NOTE (mristin):
 {II}# An ``int`` is written out as it stands. JSON knows a single
-{II}# numeric type, though, so it has to be one which a ``float`` can
-{II}# hold exactly -- otherwise a reader, which reads every number as
-{II}# a ``float``, would get a different number back.
-{II}if our_common.try_to_convert_int_to_float(value) is None:
+{II}# numeric type, though, so it has to lie in the safe integer range
+{II}# [-2^53 + 1, 2^53 - 1] -- otherwise a reader, which reads every number
+{II}# as a ``float``, might get a different number back.
+{II}if not our_common.is_safe_integer(value):
 {III}raise SerializationException(
-{IIII}f"Expected a JSON-able value, but got the integer {{value}}, "
-{IIII}f"which is not exactly representable as a JSON number"
+{IIII}our_common.unsafe_json_able_integer_message(value)
 {III})
 
 {II}return value
@@ -1773,7 +1798,7 @@ def _json_value_to_jsonable(
 {IIII})
 
 {III}try:
-{IIII}mapping[key] = _json_value_to_jsonable(item_value)
+{IIII}mapping[key] = json_value_to_jsonable(item_value)
 {III}except SerializationException as exception:
 {IIII}exception._prepend_key(key)
 {IIII}raise
@@ -1786,7 +1811,7 @@ def _json_value_to_jsonable(
 {II}items: List[Any] = []
 {II}for i, item_value in enumerate(array_like):
 {III}try:
-{IIII}items.append(_json_value_to_jsonable(item_value))
+{IIII}items.append(json_value_to_jsonable(item_value))
 {III}except SerializationException as exception:
 {IIII}exception._prepend_index(i)
 {IIII}raise
@@ -1856,7 +1881,7 @@ def _generate_atomic_serialization(
         # known, and the function gives back whatever it is given.
         return Stripped(
             f"""\
-_json_value_to_jsonable(
+json_value_to_jsonable(
 {I}{access_expression}
 )"""
         )
@@ -2357,20 +2382,18 @@ def _int_to_jsonable(
 {I}"""
 {I}Serialize :paramref:`that` integer to a JSON-able value.
 
-{I}Only the integers in the range :math:`[-2^{{53}} + 1, 2^{{53}} - 1]` are
-{I}serialized. Outside of it, an integer can not be exactly represented as
-{I}a 64-bit floating-point number, which is what the JSON de-serializers of
-{I}the other languages read a number into.
+{I}Only the integers in the safe integer range [-2^53 + 1, 2^53 - 1] are
+{I}serialized, see :py:func:`.common.is_safe_integer`.
 
 {I}:param that: integer to be serialized
 {I}:return: :paramref:`that`, unchanged
 {I}:raise: :py:class:`SerializationException` if outside the range
 {I}"""
-{I}if that < -9007199254740991 or that > 9007199254740991:
+{I}if not our_common.is_safe_integer(that):
 {II}raise SerializationException(
-{III}f"The integer can not be serialized to JSON as it is outside "
-{III}f"the range [-2^53 + 1, 2^53 - 1]: {{that}}"
+{III}our_common.unsafe_integer_message(that)
 {II})
+
 {I}return that'''
         ),
         Stripped(
@@ -2572,6 +2595,17 @@ def generate(
     ):
         registry.note_needed_helper("_dispatch_from_jsonable")
 
+    # NOTE (mristin):
+    # The JSON-able values are de/serialized by public functions, so that the clients
+    # of the SDK can use them as well. Hence we generate all of them as soon as
+    # the meta-model uses any JSON-able type, and not only the ones which
+    # the properties reach.
+    if intermediate_uses.json_types(symbol_table):
+        registry.note_needed_helper("json_value_from_jsonable")
+        registry.note_needed_helper("json_array_from_jsonable")
+        registry.note_needed_helper("json_object_from_jsonable")
+        serializer_registry.note_json_values_are_serialized()
+
     helper_blocks = _generate_deserialization_helpers()
 
     needed_helpers = _collect_needed_helpers(registry.needed_helpers)
@@ -2596,7 +2630,7 @@ def generate(
         if (
             "_float_from_jsonable" in needed_helpers
             or intermediate.PrimitiveType.FLOAT in serializer_registry.checked_numbers
-            or "_json_value_from_jsonable" in needed_helpers
+            or "json_value_from_jsonable" in needed_helpers
             or serializer_registry.json_values_are_serialized
         )
         else ""

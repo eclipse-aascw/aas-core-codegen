@@ -3,6 +3,7 @@
 
 #include "dummy/jsonization.hpp"
 #include "dummy/stringification.hpp"
+#include "dummy/verification.hpp"
 #include "dummy/wstringification.hpp"
 
 #pragma warning(push, 0)
@@ -308,102 +309,85 @@ std::pair<
 > DeserializeInt64(
   const nlohmann::json& json
 ) {
-  if (!json.is_number()) {
-    std::wstring message = common::Concat(
-      L"Expected an integer number, but got a value of type: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<int64_t>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
   static_assert(
     std::is_same<nlohmann::json::number_integer_t, int64_t>::value,
     "Expected nlohmann::json::number_integer_t to equal int64_t, "
     "but it does not."
   );
 
-  if (json.is_number_integer()) {
-    return std::make_pair<
-      common::optional<int64_t>,
-      common::optional<DeserializationError>
-    >(
-      json.get<int64_t>(),
-      common::nullopt
-    );
+  int64_t value = 0;
+  common::optional<std::wstring> cause;
+
+  switch (json.type()) {
+    case nlohmann::json::value_t::number_integer: {
+      const int64_t integer = json.get<int64_t>();
+      if (common::IsSafeInteger(integer)) {
+        value = integer;
+      } else {
+        cause = verification::impl::DescribeIntegerOutsideSafeRange(
+          std::to_wstring(integer)
+        );
+      }
+      break;
+    }
+
+    case nlohmann::json::value_t::number_unsigned: {
+      const uint64_t integer = json.get<uint64_t>();
+      if (common::IsSafeInteger(integer)) {
+        value = static_cast<int64_t>(integer);
+      } else {
+        cause = verification::impl::DescribeIntegerOutsideSafeRange(
+          std::to_wstring(integer)
+        );
+      }
+      break;
+    }
+
+    case nlohmann::json::value_t::number_float: {
+      const double number = json.get<double>();
+      if (!std::isfinite(number) || std::trunc(number) != number) {
+        cause = common::Concat(
+          L"Expected an integer, but got ",
+          std::to_wstring(number),
+          L", which is not a whole number"
+        );
+      } else if (common::IsSafeInteger(number)) {
+        value = static_cast<int64_t>(number);
+      } else {
+        cause = verification::impl::DescribeIntegerOutsideSafeRange(
+          std::to_wstring(number)
+        );
+      }
+      break;
+    }
+
+    default:
+      cause = common::Concat(
+        L"Expected an integer, but got: ",
+        common::Utf8ToWstring(json.type_name())
+      );
+      break;
   }
 
-  if (json.is_number_unsigned()) {
-    std::wstring message = common::Concat(
-      L"Expected a 64-bit integer number, "
-      L"but got an unsigned integer number which does not fit in that range: ",
-      std::to_wstring(json.get<nlohmann::json::number_unsigned_t>())
-    );
-
+  if (cause.has_value()) {
     return std::make_pair<
       common::optional<int64_t>,
       common::optional<DeserializationError>
     >(
       common::nullopt,
       common::make_optional<DeserializationError>(
-        message
+        std::move(*cause)
       )
     );
   }
 
-  // NOTE (mristin):
-  // We have to check that the number is an integer even though it can
-  // not be stored in int64_t in order to give an informative message.
-
-  const nlohmann::json::number_float_t number(
-    json.get<nlohmann::json::number_float_t>()
+  return std::make_pair<
+    common::optional<int64_t>,
+    common::optional<DeserializationError>
+  >(
+    value,
+    common::nullopt
   );
-
-  nlohmann::json::number_float_t integer_part;
-  const bool is_integer(
-    std::modf(number, &integer_part) == 0
-  );
-  if (is_integer) {
-    std::wstring message = common::Concat(
-      L"Expected a 64-bit integer number, "
-      L"but got an integer number which does not fit in that range: ",
-      std::to_wstring(number)
-    );
-
-    return std::make_pair<
-      common::optional<int64_t>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  } else {
-    std::wstring message = common::Concat(
-      L"Expected a 64-bit integer number, "
-      L"but got a non-integer number: ",
-      std::to_wstring(number)
-    );
-
-    return std::make_pair<
-      common::optional<int64_t>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
 }
 
 std::pair<
@@ -1347,32 +1331,24 @@ nlohmann::json SerializeBool(
 /**
  * \brief Serialize the given number to a JSON value.
  *
- * We verify that the integer is within the range representable by 64-bit floats
- * for interoperability with other de-serializers.
+ * We verify that the integer is within the safe integer range, which 64-bit
+ * floating-point numbers represent exactly, for interoperability with other
+ * de-serializers.
  */
 std::pair<
   common::optional<nlohmann::json>,
   common::optional<SerializationError>
 > SerializeInt64(int64_t value) {
-  if (
-    value < -9007199254740991L
-    || value > 9007199254740991L
-  ) {
-    const std::wstring message = common::Concat(
-      L"The integer ",
-      std::to_wstring(value),
-      L" can not be serialized to JSON "
-      L"as it is outside the range [-2^53 + 1, 2^53 - 1] and can not "
-      L"be exactly represented as a 64-bit floating point number."
-    );
-
+  if (!common::IsSafeInteger(value)) {
     return std::make_pair<
       common::optional<nlohmann::json>,
       common::optional<SerializationError>
     >(
       common::nullopt,
       common::make_optional<SerializationError>(
-        message
+        verification::impl::DescribeIntegerOutsideSafeRange(
+          std::to_wstring(value)
+        )
       )
     );
   }

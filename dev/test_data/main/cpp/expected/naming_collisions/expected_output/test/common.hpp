@@ -77,6 +77,13 @@ template<typename T>
 std::string JoinStrings(const T& container, const std::string& delimiter) {
   static_assert(std::is_same<typename T::value_type, std::string>::value);
 
+  // NOTE (mristin):
+  // We have to handle the empty container explicitly, as the computations
+  // below subtract one from its size, which would wrap around.
+  if (container.empty()) {
+    return "";
+  }
+
   size_t size = 0;
   for (const std::string& part : container
     ) {

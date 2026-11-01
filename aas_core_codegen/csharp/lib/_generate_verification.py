@@ -2,6 +2,7 @@
 import io
 import textwrap
 from typing import (
+    Final,
     Tuple,
     Optional,
     List,
@@ -769,12 +770,28 @@ def _generate_verify_method(our_type: intermediate.OurType) -> Stripped:
     raise AssertionError("Unexpected execution path")
 
 
+def _is_int(type_annotation: intermediate.TypeAnnotationUnion) -> bool:
+    """
+    Check whether ``type_annotation`` is the bare primitive ``int``.
+
+    A constrained primitive over ``int`` is not included, as it is verified by
+    its own method, which checks the safe integer range itself.
+    """
+    return (
+        isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation)
+        and type_annotation.a_type is intermediate.PrimitiveType.INT
+    )
+
+
 def _needs_verification(type_annotation: intermediate.TypeAnnotationUnion) -> bool:
     """
     Check whether a value of ``type_annotation`` has anything to verify at any depth.
 
     In C#, we verify all our types, including the enumerations, as any integer
-    can be cast to an enumeration, and all the JSON-able values.
+    can be cast to an enumeration, and all the JSON-able values. We also verify
+    the integers, since a ``long`` outside the safe integer range can not be
+    serialized to JSON, and the verification has to catch whatever
+    the serialization would refuse.
 
     This check is specific to C#, and hence does not live in
     :py:mod:`aas_core_codegen.intermediate`: other targets verify different
@@ -791,6 +808,7 @@ def _needs_verification(type_annotation: intermediate.TypeAnnotationUnion) -> bo
                 intermediate.JsonObjectTypeAnnotation,
             ),
         )
+        or _is_int(type_anno)
         for type_anno in intermediate.over_type_annotation_and_nested_type_annotations(
             type_annotation
         )
@@ -851,6 +869,16 @@ def _verification_moniker(type_anno: intermediate.TypeAnnotationUnion) -> str:
     return csharp_common.leaf_moniker(type_anno)
 
 
+# NOTE (mristin):
+# The verification of a bare ``long`` is named by its moniker just like
+# the verification of a container (*e.g.*, ``Verify_ListOf_long``), so that it
+# can never clash with the verification of a constrained primitive, say,
+# named ``Long``.
+_VERIFY_LONG: Final[Identifier] = Identifier(
+    f"Verify_{csharp_common.PRIMITIVE_TYPE_TO_MONIKER[intermediate.PrimitiveType.INT]}"
+)
+
+
 def _verify_container_name(
     type_anno: intermediate.ContainerTypeAnnotation,
 ) -> Identifier:
@@ -879,6 +907,10 @@ def _generate_verify_into(
 
     if isinstance(type_anno, intermediate.OurTypeAnnotation):
         method = _generate_verify_method(our_type=type_anno.our_type)
+        args = [expr]
+
+    elif _is_int(type_anno):
+        method = f"Verification.{_VERIFY_LONG}"
         args = [expr]
 
     elif isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
@@ -1270,6 +1302,21 @@ def _generate_verify_constrained_primitive(
     if len(errors) > 0:
         return None, errors
 
+    if constrained_primitive.constrainee is intermediate.PrimitiveType.INT:
+        # NOTE (mristin):
+        # The constrainee has to be serializable to JSON, regardless of
+        # the invariants, so we check the safe integer range first.
+        blocks.insert(
+            0,
+            Stripped(
+                f"""\
+foreach (var error in {_VERIFY_LONG}(that))
+{{
+{I}yield return error;
+}}"""
+            ),
+        )
+
     if len(blocks) == 0:
         blocks.append(
             Stripped(
@@ -1513,6 +1560,47 @@ public static IEnumerable<Reporting.Error> Verify(Our.IClass that)
 
     if len(symbol_table.named_unions) > 0:
         verification_blocks.append(_generate_union_verify_helper())
+
+    if intermediate_uses.integers(symbol_table):
+        verification_blocks.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Report that the integer <paramref name="value" /> is not a safe integer.
+/// </summary>
+/// <remarks>
+/// See <see cref="Common.IsSafeInteger(long)" /> for what a safe integer is.
+/// </remarks>
+/// <param name="value">integer outside the safe integer range</param>
+/// <returns>the cause of the error</returns>
+internal static string UnsafeIntegerMessage(System.IFormattable value)
+{{
+{I}return $"Expected an integer, but got {{value}}, " +
+{II}"which is outside the safe integer range [-2^53 + 1, 2^53 - 1]";
+}}"""
+            )
+        )
+
+        verification_blocks.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Verify that <paramref name="that" /> lies in the safe integer range.
+/// </summary>
+/// <remarks>
+/// See <see cref="Common.IsSafeInteger(long)" /> for what a safe integer is.
+/// </remarks>
+private static IEnumerable<Reporting.Error> {_VERIFY_LONG}(
+{I}long that)
+{{
+{I}if (!Common.IsSafeInteger(that))
+{I}{{
+{II}yield return new Reporting.Error(
+{III}UnsafeIntegerMessage(that));
+{I}}}
+}}"""
+            )
+        )
 
     observed_monikers: Set[str] = set()
 

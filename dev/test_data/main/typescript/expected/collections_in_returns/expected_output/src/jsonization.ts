@@ -473,36 +473,6 @@ function booleanFromJsonable(
 }
 
 /**
- * Parse `jsonable` as an integer.
- *
- * @param jsonable - to be parsed
- * @returns parsed integer value, or an error
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function integerFromJsonable(
-  jsonable: JsonValue
-): OurCommon.Either<number, DeserializationError> {
-  if (jsonable === null) {
-    return newDeserializationError<number>(
-      "Expected an integer number, but got null"
-    );
-  }
-  if (typeof jsonable !== "number") {
-    return newDeserializationError<number>(
-      `Expected an integer number, but got: ${typeof jsonable}`
-    );
-  }
-
-  if (!Number.isInteger(jsonable)) {
-    return newDeserializationError<number>(
-      `Expected an integer number, but got: ${jsonable}`
-    );
-  }
-
-  return new OurCommon.Either<number, DeserializationError>(jsonable, null);
-}
-
-/**
  * Parse `jsonable` as a number.
  *
  * @param jsonable - to be parsed

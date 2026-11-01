@@ -265,6 +265,60 @@ export function resetCorner(
 }
 
 /**
+ * Verify that `that` is a safe integer so that it can be serialized to JSON.
+ *
+ * @param that - to be verified
+ * @returns errors, if any
+ */
+export function *verifyInteger(
+  that: number
+): IterableIterator<VerificationError> {
+  if (!Number.isInteger(that)) {
+    yield new VerificationError(OurCommon.notWholeIntegerMessage(that));
+  } else if (!Number.isSafeInteger(that)) {
+    yield new VerificationError(OurCommon.unsafeIntegerMessage(that));
+  }
+}
+
+/**
+ * Verify the items of `that` recursively.
+ */
+function *verify_ListOf_ListOf_int(
+  that: ReadonlyArray<ReadonlyArray<number>>
+): IterableIterator<VerificationError> {
+  for (let i = 0; i < that.length; i++) {
+    for (const error of verify_ListOf_int(that[i])) {
+      error.path.prepend(
+        new IndexSegment(
+          that,
+          i
+        )
+      );
+      yield error;
+    }
+  }
+}
+
+/**
+ * Verify the items of `that` recursively.
+ */
+function *verify_ListOf_int(
+  that: ReadonlyArray<number>
+): IterableIterator<VerificationError> {
+  for (let i = 0; i < that.length; i++) {
+    for (const error of verifyInteger(that[i])) {
+      error.path.prepend(
+        new IndexSegment(
+          that,
+          i
+        )
+      );
+      yield error;
+    }
+  }
+}
+
+/**
  * Verify the items of `that` recursively.
  */
 function *verify_ListOf_ListOf_TupleOf2_PositiveInt_SetOf_str(
@@ -377,6 +431,16 @@ function *verify_ListOf_class(
 function *verify_TupleOf2_int_Code(
   that: readonly [number, string]
 ): IterableIterator<VerificationError> {
+  for (const error of verifyInteger(that[0])) {
+    error.path.prepend(
+      new IndexSegment(
+        that,
+        0
+      )
+    );
+    yield error;
+  }
+
   for (const error of verifyCode(that[1])) {
     error.path.prepend(
       new IndexSegment(
@@ -427,12 +491,19 @@ class Verifier
   }
 
   *transformAnotherItemWithContext(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     that: OurTypes.AnotherItem,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    // No verification has been defined for AnotherItem.
+    for (const error of verifyInteger(that.serialNumber)) {
+      error.path.prepend(
+        new PropertySegment(
+          that,
+          "serialNumber"
+        )
+      );
+      yield error;
+    }
   }
 
   *transformSomethingWithContext(
@@ -527,6 +598,16 @@ class Verifier
     }
 
     if (context === true) {
+      for (const error of verify_ListOf_ListOf_int(that.grid)) {
+        error.path.prepend(
+          new PropertySegment(
+            that,
+            "grid"
+          )
+        );
+        yield error;
+      }
+
       for (const error of verify_ListOf_ListOf_TupleOf2_PositiveInt_SetOf_str(
           that.rowsOfPairs)
       ) {
@@ -603,6 +684,11 @@ export function *verify(
 export function *verifyPositiveInt(
   that: number
 ): IterableIterator<VerificationError> {
+  if (!Number.isSafeInteger(that)) {
+    yield* verifyInteger(that);
+    return;
+  }
+
   if (!(that > 0)) {
     yield new VerificationError(
       "Positive int must be positive."

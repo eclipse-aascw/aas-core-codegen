@@ -214,6 +214,39 @@ export function narrowedPairIsPositive(
 }
 
 /**
+ * Verify that `that` is a safe integer so that it can be serialized to JSON.
+ *
+ * @param that - to be verified
+ * @returns errors, if any
+ */
+export function *verifyInteger(
+  that: number
+): IterableIterator<VerificationError> {
+  if (!Number.isInteger(that)) {
+    yield new VerificationError(OurCommon.notWholeIntegerMessage(that));
+  } else if (!Number.isSafeInteger(that)) {
+    yield new VerificationError(OurCommon.unsafeIntegerMessage(that));
+  }
+}
+
+/**
+ * Verify the items of `that` recursively.
+ */
+function *verify_TupleOf2_str_int(
+  that: readonly [string, number]
+): IterableIterator<VerificationError> {
+  for (const error of verifyInteger(that[1])) {
+    error.path.prepend(
+      new IndexSegment(
+        that,
+        1
+      )
+    );
+    yield error;
+  }
+}
+
+/**
  * Verify the items of `that` recursively.
  */
 function *verify_TupleOf2_class_class(
@@ -253,6 +286,16 @@ function *verify_TupleOf6_int_class_class_class_PositiveInt_Result(
     OurTypes.Result
   ]
 ): IterableIterator<VerificationError> {
+  for (const error of verifyInteger(that[0])) {
+    error.path.prepend(
+      new IndexSegment(
+        that,
+        0
+      )
+    );
+    yield error;
+  }
+
   for (const error of verify(that[1])) {
     error.path.prepend(
       new IndexSegment(
@@ -328,12 +371,19 @@ class Verifier
   }
 
   *transformAnotherItemWithContext(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     that: OurTypes.AnotherItem,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    // No verification has been defined for AnotherItem.
+    for (const error of verifyInteger(that.serialNumber)) {
+      error.path.prepend(
+        new PropertySegment(
+          that,
+          "serialNumber"
+        )
+      );
+      yield error;
+    }
   }
 
   *transformSomethingWithContext(
@@ -362,6 +412,16 @@ class Verifier
     }
 
     if (context === true) {
+      for (const error of verify_TupleOf2_str_int(that.pair)) {
+        error.path.prepend(
+          new PropertySegment(
+            that,
+            "pair"
+          )
+        );
+        yield error;
+      }
+
       for (const error of verify_TupleOf2_class_class(that.items)) {
         error.path.prepend(
           new PropertySegment(
@@ -424,6 +484,11 @@ export function *verify(
 export function *verifyPositiveInt(
   that: number
 ): IterableIterator<VerificationError> {
+  if (!Number.isSafeInteger(that)) {
+    yield* verifyInteger(that);
+    return;
+  }
+
   if (!(that > 0)) {
     yield new VerificationError(
       "Larger than zero"

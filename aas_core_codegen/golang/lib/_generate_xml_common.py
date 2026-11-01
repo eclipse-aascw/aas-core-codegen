@@ -491,6 +491,9 @@ def _generate_read_text_as_long() -> Stripped:
         f"""\
 // Consume the text tokens (char data) as a representation of a `xs:long`.
 //
+// The value has to lie in the safe integer range [-2^53 + 1, 2^53 - 1] as
+// well, see [ourcommon.IsSafeInteger], so that it can be serialized to JSON.
+//
 // Any comment tokens are skipped.
 //
 // The resulting `next` token points to the first token which is neither text
@@ -517,6 +520,12 @@ func ReadTextAs_long(
 {IIII}parseErr.Error(), text,
 {III}),
 {II})
+{II}return
+{I}}}
+
+{I}if !ourcommon.IsSafeInteger(value) {{
+{II}err = NewDeserializationError(ourcommon.UnsafeIntegerMessage(value))
+{II}value = 0
 {II}return
 {I}}}
 
@@ -1173,11 +1182,20 @@ def _generate_write_as_text_long() -> Stripped:
         f"""\
 // Write the `value` as a `xs:long` in a text element.
 //
+// The value has to lie in the safe integer range [-2^53 + 1, 2^53 - 1], see
+// [ourcommon.IsSafeInteger], so that the XML and the JSON agree on what
+// can be serialized.
+//
 // Do not flush.
 func WriteAsText_long(
 {I}encoder *xml.Encoder,
 {I}value int64,
 ) (err error) {{
+{I}if !ourcommon.IsSafeInteger(value) {{
+{II}err = NewSerializationError(ourcommon.UnsafeIntegerMessage(value))
+{II}return
+{I}}}
+
 {I}text := strconv.FormatInt(value, 10)
 {I}err = WriteText(encoder, text)
 {I}return
@@ -1434,7 +1452,6 @@ type Eof struct{}"""
             _generate_skip_empty_text_whitespace_and_comments(),
             _generate_read_text(),
             _generate_read_text_as_bool(),
-            _generate_read_text_as_long(),
             *_generate_is_valid_xs_double(),
             _generate_read_text_as_double(),
             _generate_read_text_as_bytes(),
@@ -1448,13 +1465,18 @@ type Eof struct{}"""
             _generate_write_end_element(),
             _generate_write_text(),
             _generate_write_as_text_bool(),
-            _generate_write_as_text_long(),
             _generate_write_as_text_double(),
             _generate_write_as_text_string(),
             _generate_write_as_text_bytes(),
             _generate_write_element(),
         ]
     )
+
+    # NOTE (mristin):
+    # The integers are checked with ``ourcommon.IsSafeInteger``, which is
+    # generated only if the instances can hold any integers.
+    if intermediate_uses.integers(symbol_table):
+        blocks.extend([_generate_read_text_as_long(), _generate_write_as_text_long()])
 
     if uses_json_types:
         blocks.extend(

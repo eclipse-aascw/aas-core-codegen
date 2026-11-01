@@ -95,6 +95,12 @@ namespace dummy
             /// <summary>
             /// Convert <paramref name="node" /> to a 64-bit long integer.
             /// </summary>
+            /// <remarks>
+            /// A whole number written as a float, such as <c>5.0</c> or <c>1e2</c>, is
+            /// accepted as well. An integer outside the safe integer range
+            /// [-2^53 + 1, 2^53 - 1] is refused, see
+            /// <see cref="Common.IsSafeInteger(long)" />.
+            /// </remarks>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
             internal static long LongFrom(
@@ -103,23 +109,68 @@ namespace dummy
             {
                 error = null;
 
+                // NOTE (mristin):
+                // We can not switch on the kind of the number, since
+                // ``Nodes.JsonValue.GetValueKind`` arrived only in .NET 8, and the generated
+                // code has to build against .NET 6.
                 Nodes.JsonValue? value = node as Nodes.JsonValue;
-                if (value == null)
+                if (value != null)
                 {
-                    error = new Reporting.Error(
-                        $"Expected a 64-bit long integer, but got {Describe(node)}");
-                    return default!;
+                    if (value.TryGetValue<long>(out long integer))
+                    {
+                        if (!Common.IsSafeInteger(integer))
+                        {
+                            error = new Reporting.Error(
+                                Verification.UnsafeIntegerMessage(integer));
+                            return default;
+                        }
+                        return integer;
+                    }
+                    else if (value.TryGetValue<int>(out int smallInteger))
+                    {
+                        // NOTE (mristin):
+                        // Only a node constructed programmatically holds an int, which is
+                        // always a safe integer.
+                        return smallInteger;
+                    }
+                    else if (value.TryGetValue<ulong>(out ulong unsignedInteger))
+                    {
+                        // NOTE (mristin):
+                        // Only a node constructed programmatically holds an ulong, as a parsed
+                        // integer beyond the range of a long is read as a double below.
+                        if (!Common.IsSafeInteger(unsignedInteger))
+                        {
+                            error = new Reporting.Error(
+                                Verification.UnsafeIntegerMessage(unsignedInteger));
+                            return default;
+                        }
+                        return (long)unsignedInteger;
+                    }
+                    else if (value.TryGetValue<double>(out double number))
+                    {
+                        if (!System.Double.IsFinite(number) || System.Math.Truncate(number) != number)
+                        {
+                            error = new Reporting.Error(
+                                $"Expected an integer, but got {number}, which is not a whole number");
+                            return default;
+                        }
+
+                        // NOTE (mristin):
+                        // We have to check the range before the cast, as the cast of a number
+                        // outside the range of a long gives an unspecified value.
+                        if (!Common.IsSafeInteger(number))
+                        {
+                            error = new Reporting.Error(
+                                Verification.UnsafeIntegerMessage(number));
+                            return default;
+                        }
+                        return (long)number;
+                    }
                 }
 
-                bool ok = value.TryGetValue<long>(out long result);
-                if (!ok)
-                {
-                    error = new Reporting.Error(
-                        "Expected a 64-bit long integer, but the conversion failed " +
-                        $"from {value.ToJsonString()}");
-                    return default!;
-                }
-                return result;
+                error = new Reporting.Error(
+                    $"Expected an integer, but got: {Describe(node)}");
+                return default;
             }
 
             /// <summary>
@@ -671,28 +722,6 @@ namespace dummy
             }
 
             /// <summary>
-            /// Convert <paramref name="that" /> 64-bit long integer to a JSON value.
-            /// </summary>
-            /// <param name="that">value to be converted</param>
-            /// <exception name="SerializationFailure">
-            /// Thrown if <paramref name="that" /> lies outside the range where it can be
-            /// exactly represented as a 64-bit floating-point number, which is what
-            /// the JSON de-serializers of the other languages read a number into.
-            /// </exception>
-            [CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
-            private static Nodes.JsonValue ToJsonValue(long that)
-            {
-                if (that < -9007199254740991L || that > 9007199254740991L)
-                {
-                    throw new SerializationFailure(
-                        new Reporting.Error(
-                            "The integer can not be serialized to JSON as it is outside " +
-                            $"the range [-2^53 + 1, 2^53 - 1]: {that}"));
-                }
-                return Nodes.JsonValue.Create(that);
-            }
-
-            /// <summary>
             /// Convert <paramref name="that" /> 64-bit floating-point number to a JSON
             /// value.
             /// </summary>
@@ -713,6 +742,26 @@ namespace dummy
                         new Reporting.Error(
                             "JSON knows neither an infinity nor a not-a-number, so " +
                             $"the value can not be serialized: {that}"));
+                }
+                return Nodes.JsonValue.Create(that);
+            }
+
+            /// <summary>
+            /// Convert <paramref name="that" /> 64-bit long integer to a JSON value.
+            /// </summary>
+            /// <param name="that">value to be converted</param>
+            /// <exception name="SerializationFailure">
+            /// Thrown if <paramref name="that" /> lies outside the safe integer range,
+            /// see <see cref="Common.IsSafeInteger(long)" />.
+            /// </exception>
+            [CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
+            private static Nodes.JsonValue ToJsonValue(long that)
+            {
+                if (!Common.IsSafeInteger(that))
+                {
+                    throw new SerializationFailure(
+                        new Reporting.Error(
+                            Verification.UnsafeIntegerMessage(that)));
                 }
                 return Nodes.JsonValue.Create(that);
             }

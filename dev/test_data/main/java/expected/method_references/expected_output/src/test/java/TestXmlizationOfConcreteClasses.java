@@ -358,6 +358,72 @@ public class TestXmlizationOfConcreteClasses {
           + " is given twice, but got none");
     }
   } // public void testDuplicatePropertyFails
+
+  /**
+   * Read the first recorded example of Box with the content of
+   * the element {@code xmlName} replaced by {@code text}.
+   */
+  private static Box readWith(String xmlName, String text)
+    throws IOException, XMLStreamException {
+    final Path searchPath =
+      Paths.get(Common.TEST_DATA_DIR, "Xml", "Expected", "box");
+    final List<Path> paths = Common.findPaths(searchPath, ".xml");
+
+    if (paths.isEmpty()) {
+      fail(
+        "Expected at least one recorded example of box, but got none");
+    }
+
+    final String original =
+      new String(Files.readAllBytes(paths.get(0)), StandardCharsets.UTF_8);
+
+    final int start = original.indexOf("<" + xmlName + ">") + xmlName.length() + 2;
+    final int end = original.indexOf("</" + xmlName + ">");
+
+    final String patched =
+      original.substring(0, start) + text + original.substring(end);
+
+    final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
+    final XMLEventReader xmlReader =
+      xmlInputFactory.createXMLEventReader(new StringReader(patched));
+
+    return Xmlization.Deserialize.deserializeBox(xmlReader);
+  }
+
+  @Test
+  public void testSizeReadFrom9007199254740991() throws IOException, XMLStreamException {
+    final Box instance =
+      readWith("size", "9007199254740991");
+
+    assertEquals(
+      Long.valueOf(9007199254740991L),
+      instance.getSize());
+  } // public void testSizeReadFrom9007199254740991
+
+  @Test
+  public void testSizeReadFromMinus9007199254740991() throws IOException, XMLStreamException {
+    final Box instance =
+      readWith("size", "-9007199254740991");
+
+    assertEquals(
+      Long.valueOf(-9007199254740991L),
+      instance.getSize());
+  } // public void testSizeReadFromMinus9007199254740991
+
+  @Test
+  public void testSizeReadOutsideTheSafeIntegerRange() throws IOException, XMLStreamException {
+    for (String text : new String[] {"9007199254740992", "-9007199254740992"}) {
+      try {
+        readWith("size", text);
+        fail("Expected the de-serialization of " + text + " to fail, but it succeeded");
+      } catch (XmlCommon.DeserializeException exception) {
+        assertEquals(
+          "Expected an integer, but got " + text
+            + ", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]",
+          exception.getReason().orElse(null));
+      }
+    }
+  } // public void testSizeReadOutsideTheSafeIntegerRange
 } // class TestXmlizationOfConcreteClasses
 
 // package dummy.tests

@@ -139,6 +139,18 @@ class IVerificator {
 }  // namespace impl
 /// \endcond
 
+/// \cond HIDDEN
+namespace impl {
+/**
+ * \brief Describe that the \p integer lies outside the safe integer range.
+ *
+ * \param integer textual representation of the integer
+ * \return the cause of the error
+ */
+std::wstring DescribeIntegerOutsideSafeRange(const std::wstring& integer);
+}  // namespace impl
+/// \endcond
+
 class IVerification {
  public:
   virtual Iterator begin() const = 0;

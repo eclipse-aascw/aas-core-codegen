@@ -3,6 +3,7 @@ import io
 import textwrap
 from typing import (
     Dict,
+    Final,
     Tuple,
     Optional,
     List,
@@ -675,14 +676,19 @@ def _needs_verification(type_annotation: intermediate.TypeAnnotationUnion) -> bo
     """
     Check whether a value of ``type_annotation`` has anything to verify at any depth.
 
-    In Python, we verify the constrained primitives, the instances of our classes
-    and all the JSON-able values. We rely on mypy to spot invalid enumeration
+    In Python, we verify the constrained primitives, the instances of our classes,
+    all the JSON-able values and the integers, which have to lie in the safe integer
+    range to be serializable to JSON. We rely on mypy to spot invalid enumeration
     literals, so we do not verify the enumerations at all.
     """
     return any(
         (
             isinstance(type_anno, intermediate.OurTypeAnnotation)
             and not isinstance(type_anno.our_type, intermediate.Enumeration)
+        )
+        or (
+            isinstance(type_anno, intermediate.PrimitiveTypeAnnotation)
+            and type_anno.a_type is intermediate.PrimitiveType.INT
         )
         or isinstance(
             type_anno,
@@ -785,6 +791,10 @@ Tuple[
     return python_common.generate_type(type_anno, types_module=Identifier("our_types"))
 
 
+#: Name of the module-level function verifying an integer
+_VERIFY_INT: Final[Identifier] = Identifier("_verify_int")
+
+
 def _verify_container_name(
     type_anno: intermediate.ContainerTypeAnnotation,
 ) -> Identifier:
@@ -821,6 +831,13 @@ def _generate_verify_into(
                 f"{type_anno.our_type}"
             )
             function = "verify"
+
+    elif isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
+        assert type_anno.a_type is intermediate.PrimitiveType.INT, (
+            f"Unexpected primitive type with something to verify: "
+            f"{type_anno.a_type}"
+        )
+        function = _VERIFY_INT
 
     elif isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
         function = "our_json_value_verification.verify_json_value"
@@ -1159,6 +1176,12 @@ def _generate_verify_constrained_primitive(
     if len(errors) > 0:
         return None, errors
 
+    # NOTE (mristin):
+    # The constrainee has to be serializable to JSON in the first place, so we
+    # check its range before its invariants.
+    if constrained_primitive.constrainee is intermediate.PrimitiveType.INT:
+        blocks.insert(0, Stripped(f"yield from {_VERIFY_INT}(that)"))
+
     no_verification_specified = False
     if len(blocks) == 0:
         no_verification_specified = True
@@ -1296,7 +1319,9 @@ def generate(
         "reporting as our_reporting",
         "types as our_types",
     ]
-    if intermediate_uses.int_call(symbol_table):
+    if intermediate_uses.int_call(symbol_table) or intermediate_uses.integers(
+        symbol_table
+    ):
         imported_modules.insert(0, "common as our_common")
 
     imported_modules_joined = "\n".join(
@@ -1469,6 +1494,19 @@ def verify(
 {I}yield from _TRANSFORMER.transform(that)"""
         )
     )
+
+    if intermediate_uses.integers(symbol_table):
+        blocks.append(
+            Stripped(
+                f"""\
+def {_VERIFY_INT}(
+{II}that: int
+) -> Iterator[Error]:
+{I}\"\"\"Verify that :paramref:`that` lies in the safe integer range.\"\"\"
+{I}if not our_common.is_safe_integer(that):
+{II}yield Error(our_common.unsafe_integer_message(that))"""
+            )
+        )
 
     blocks.extend(container_blocks_by_name.values())
 

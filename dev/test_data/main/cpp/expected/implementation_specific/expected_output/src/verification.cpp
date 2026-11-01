@@ -230,8 +230,8 @@ std::unique_ptr<impl::IVerificator> NewNestedVerificator(
   const void*
 ) {
   // NOTE (mristin):
-  // The meta-model uses no JSON-able values, so no value needs a nested
-  // verification.
+  // The meta-model uses neither integers nor JSON-able values, so no value
+  // needs a nested verification.
   return nullptr;
 }
 

@@ -182,41 +182,91 @@ def _load_the_first_expected(model_type: str) -> Any:
         return json.load(fid)
 
 
-class TestSerializationFailures(unittest.TestCase):
-    def test_leaf_value_out_of_range(self) -> None:
-        for value in [9007199254740992, -9007199254740992]:
-            instance = our_jsonization.leaf_from_jsonable(
-                _load_the_first_expected('Leaf')
-            )
+class TestDeserializationOfIntegers(unittest.TestCase):
+    def test_leaf_value(self) -> None:
+        jsonable = _load_the_first_expected('Leaf')
 
-            instance.value = value
+        # NOTE (mristin):
+        # JSON has a single number type, so a whole float is an integer.
+        jsonable['value'] = 5.0
+        instance = our_jsonization.leaf_from_jsonable(jsonable)
+        self.assertIs(int, type(instance.value))
+        self.assertEqual(5, instance.value)
+
+        for value, expected_cause in [
+            ("5", "Expected an integer, but got: <class 'str'>"),
+            (
+                1.5,
+                "Expected an integer, but got 1.5, which is not a whole number"
+            ),
+            (
+                9007199254740992,
+                (
+                    "Expected an integer, but got 9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            ),
+            (
+                -9007199254740992.0,
+                (
+                    "Expected an integer, but got -9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            )
+        ]:
+            jsonable['value'] = value
 
             with self.assertRaises(
-                our_jsonization.SerializationException
+                our_jsonization.DeserializationException
             ) as context_manager:
-                our_jsonization.to_jsonable(instance)
+                our_jsonization.leaf_from_jsonable(jsonable)
 
             self.assertEqual(
-                '.value',
-                context_manager.exception.path
+                expected_cause,
+                context_manager.exception.cause
             )
 
-    def test_blossom_value_out_of_range(self) -> None:
-        for value in [9007199254740992, -9007199254740992]:
-            instance = our_jsonization.blossom_from_jsonable(
-                _load_the_first_expected('Blossom')
-            )
+    def test_blossom_value(self) -> None:
+        jsonable = _load_the_first_expected('Blossom')
 
-            instance.value = value
+        # NOTE (mristin):
+        # JSON has a single number type, so a whole float is an integer.
+        jsonable['value'] = 5.0
+        instance = our_jsonization.blossom_from_jsonable(jsonable)
+        self.assertIs(int, type(instance.value))
+        self.assertEqual(5, instance.value)
+
+        for value, expected_cause in [
+            ("5", "Expected an integer, but got: <class 'str'>"),
+            (
+                1.5,
+                "Expected an integer, but got 1.5, which is not a whole number"
+            ),
+            (
+                9007199254740992,
+                (
+                    "Expected an integer, but got 9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            ),
+            (
+                -9007199254740992.0,
+                (
+                    "Expected an integer, but got -9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            )
+        ]:
+            jsonable['value'] = value
 
             with self.assertRaises(
-                our_jsonization.SerializationException
+                our_jsonization.DeserializationException
             ) as context_manager:
-                our_jsonization.to_jsonable(instance)
+                our_jsonization.blossom_from_jsonable(jsonable)
 
             self.assertEqual(
-                '.value',
-                context_manager.exception.path
+                expected_cause,
+                context_manager.exception.cause
             )
 
 

@@ -476,6 +476,41 @@ export function someKindIsNotSpecial(
 }
 
 /**
+ * Verify that `that` is a safe integer so that it can be serialized to JSON.
+ *
+ * @param that - to be verified
+ * @returns errors, if any
+ */
+export function *verifyInteger(
+  that: number
+): IterableIterator<VerificationError> {
+  if (!Number.isInteger(that)) {
+    yield new VerificationError(OurCommon.notWholeIntegerMessage(that));
+  } else if (!Number.isSafeInteger(that)) {
+    yield new VerificationError(OurCommon.unsafeIntegerMessage(that));
+  }
+}
+
+/**
+ * Verify the items of `that` recursively.
+ */
+function *verify_ListOf_int(
+  that: ReadonlyArray<number>
+): IterableIterator<VerificationError> {
+  for (let i = 0; i < that.length; i++) {
+    for (const error of verifyInteger(that[i])) {
+      error.path.prepend(
+        new IndexSegment(
+          that,
+          i
+        )
+      );
+      yield error;
+    }
+  }
+}
+
+/**
  * Verify the items of `that` recursively.
  */
 function *verify_ListOf_Code(
@@ -486,6 +521,26 @@ function *verify_ListOf_Code(
       error.path.prepend(
         new IndexSegment(
           that,
+          i
+        )
+      );
+      yield error;
+    }
+  }
+}
+
+/**
+ * Verify the items of `that` recursively.
+ */
+function *verify_SetOf_int(
+  that: ReadonlySet<number>
+): IterableIterator<VerificationError> {
+  const sortedThat = Array.from(that).sort(OurCommon.compareNumbers);
+  for (let i = 0; i < sortedThat.length; i++) {
+    for (const error of verifyInteger(sortedThat[i])) {
+      error.path.prepend(
+        new IndexSegment(
+          sortedThat,
           i
         )
       );
@@ -637,7 +692,27 @@ class Verifier
       )
     }
 
+    for (const error of verifyInteger(that.number)) {
+      error.path.prepend(
+        new PropertySegment(
+          that,
+          "number"
+        )
+      );
+      yield error;
+    }
+
     if (context === true) {
+      for (const error of verify_ListOf_int(that.numbers)) {
+        error.path.prepend(
+          new PropertySegment(
+            that,
+            "numbers"
+          )
+        );
+        yield error;
+      }
+
       for (const error of verify_ListOf_Code(that.codes)) {
         error.path.prepend(
           new PropertySegment(
@@ -705,6 +780,16 @@ class Verifier
     }
 
     if (context === true) {
+      for (const error of verify_SetOf_int(that.numbers)) {
+        error.path.prepend(
+          new PropertySegment(
+            that,
+            "numbers"
+          )
+        );
+        yield error;
+      }
+
       for (const error of verify_SetOf_Code(that.codes)) {
         error.path.prepend(
           new PropertySegment(

@@ -214,6 +214,41 @@ namespace dummy
             }
 
             /// <summary>
+            /// Refuse an integer read by <paramref name="readInteger" /> if it lies
+            /// outside the safe integer range.
+            /// </summary>
+            /// <remarks>
+            /// The lexical rules of xs:long are left to <paramref name="readInteger" />,
+            /// while the range is checked exactly as in the JSON de-serialization, see
+            /// <see cref="Common.IsSafeInteger(long)" />.
+            /// </remarks>
+            private static ContentReader<long> AsSafeInteger(
+                ContentReader<long> readInteger
+                )
+            {
+                return (
+                    Xml.XmlReader reader,
+                    bool isEmpty,
+                    out Reporting.Error? error
+                ) =>
+                {
+                    long result = readInteger(reader, isEmpty, out error);
+                    if (error != null)
+                    {
+                        return default;
+                    }
+
+                    if (!Common.IsSafeInteger(result))
+                    {
+                        error = new Reporting.Error(
+                            Verification.UnsafeIntegerMessage(result));
+                        return default;
+                    }
+                    return result;
+                };
+            }
+
+            /// <summary>
             /// Bind <paramref name="elementName" /> to <paramref name="readContent" />,
             /// so that the result reads the whole element, tags included.
             /// </summary>
@@ -323,7 +358,8 @@ namespace dummy
                     SomethingFromSequence, "something"));
 
             private static readonly ContentReader<long> Read_long = (
-                AsText<long>(ReadContentAsLong));
+                AsSafeInteger(
+                    AsText<long>(ReadContentAsLong)));
 
             private static readonly ContentReader<string> Read_string = (
                 AsText<string>(ReadContentAsString, ""));
@@ -813,7 +849,16 @@ namespace dummy
             }
 
             private static readonly ContentWriter<long> Write_long = (
-                (that, writer) => writer.WriteValue(that));
+                (that, writer) =>
+                {
+                    if (!Common.IsSafeInteger(that))
+                    {
+                        throw new SerializationFailure(
+                            new Reporting.Error(
+                                Verification.UnsafeIntegerMessage(that)));
+                    }
+                    writer.WriteValue(that);
+                });
 
             private static readonly ContentWriter<string> Write_string = (
                 (that, writer) => writer.WriteValue(that));

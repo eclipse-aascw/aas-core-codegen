@@ -435,40 +435,6 @@ func ReadTextAs_bool(
 	return
 }
 
-// Consume the text tokens (char data) as a representation of a `xs:long`.
-//
-// Any comment tokens are skipped.
-//
-// The resulting `next` token points to the first token which is neither text
-// nor comment.
-//
-// If we reached the end-of-file, `next` is an [Eof] sentinel token.
-func ReadTextAs_long(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (value int64, next xml.Token, err error) {
-	var text string
-	text, next, err = ReadText(decoder, current)
-	if err != nil {
-		return
-	}
-	text = CollapseWhitespace(text)
-
-	var parseErr error
-	value, parseErr = strconv.ParseInt(text, 10, 64)
-	if parseErr != nil {
-		err = NewDeserializationError(
-			fmt.Sprintf(
-				"Expected a value as xs:long, but it could not be parsed: %s: %s",
-				parseErr.Error(), text,
-			),
-		)
-		return
-	}
-
-	return
-}
-
 func constructXsDoubleRe() *regexp.Regexp {
 	// NOTE:
 	// "+INF" is matched although it is written as "INF": XSD 1.1 admits it,
@@ -962,18 +928,6 @@ func WriteAsText_bool(
 	return
 }
 
-// Write the `value` as a `xs:long` in a text element.
-//
-// Do not flush.
-func WriteAsText_long(
-	encoder *xml.Encoder,
-	value int64,
-) (err error) {
-	text := strconv.FormatInt(value, 10)
-	err = WriteText(encoder, text)
-	return
-}
-
 // Write the `value` as a `xs:double` in a text element.
 //
 // Do not flush.
@@ -1055,6 +1009,70 @@ func WriteElement[T any](
 	}
 
 	err = WriteEndElement(encoder, local, false)
+	return
+}
+
+// Consume the text tokens (char data) as a representation of a `xs:long`.
+//
+// The value has to lie in the safe integer range [-2^53 + 1, 2^53 - 1] as
+// well, see [ourcommon.IsSafeInteger], so that it can be serialized to JSON.
+//
+// Any comment tokens are skipped.
+//
+// The resulting `next` token points to the first token which is neither text
+// nor comment.
+//
+// If we reached the end-of-file, `next` is an [Eof] sentinel token.
+func ReadTextAs_long(
+	decoder *xml.Decoder,
+	current xml.Token,
+) (value int64, next xml.Token, err error) {
+	var text string
+	text, next, err = ReadText(decoder, current)
+	if err != nil {
+		return
+	}
+	text = CollapseWhitespace(text)
+
+	var parseErr error
+	value, parseErr = strconv.ParseInt(text, 10, 64)
+	if parseErr != nil {
+		err = NewDeserializationError(
+			fmt.Sprintf(
+				"Expected a value as xs:long, but it could not be parsed: %s: %s",
+				parseErr.Error(), text,
+			),
+		)
+		return
+	}
+
+	if !ourcommon.IsSafeInteger(value) {
+		err = NewDeserializationError(ourcommon.UnsafeIntegerMessage(value))
+		value = 0
+		return
+	}
+
+	return
+}
+
+// Write the `value` as a `xs:long` in a text element.
+//
+// The value has to lie in the safe integer range [-2^53 + 1, 2^53 - 1], see
+// [ourcommon.IsSafeInteger], so that the XML and the JSON agree on what
+// can be serialized.
+//
+// Do not flush.
+func WriteAsText_long(
+	encoder *xml.Encoder,
+	value int64,
+) (err error) {
+	if !ourcommon.IsSafeInteger(value) {
+		err = NewSerializationError(ourcommon.UnsafeIntegerMessage(value))
+		return
+	}
+
+	text := strconv.FormatInt(value, 10)
+	err = WriteText(encoder, text)
 	return
 }
 

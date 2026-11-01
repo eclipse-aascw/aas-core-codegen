@@ -47,6 +47,7 @@ else:
     from typing_extensions import Final
 
 from dummy import (
+    common as our_common,
     constants as our_constants,
     reporting as our_reporting,
     types as our_types,
@@ -296,6 +297,15 @@ class _Transformer(
             )
             yield error
 
+        for error in _verify_int(that.number):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'number'
+                )
+            )
+            yield error
+
 
 _TRANSFORMER = _Transformer()
 
@@ -310,6 +320,14 @@ def verify(
     :yield: constraint violations
     """
     yield from _TRANSFORMER.transform(that)
+
+
+def _verify_int(
+        that: int
+) -> Iterator[Error]:
+    """Verify that :paramref:`that` lies in the safe integer range."""
+    if not our_common.is_safe_integer(that):
+        yield Error(our_common.unsafe_integer_message(that))
 
 
 def verify_non_empty_string(

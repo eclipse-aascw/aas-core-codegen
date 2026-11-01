@@ -2,7 +2,7 @@
 
 import io
 import textwrap
-from typing import Final, List
+from typing import Final, List, Sequence
 
 from aas_core_codegen import intermediate
 from aas_core_codegen.common import Stripped, indent_but_first_line
@@ -546,7 +546,13 @@ PARSE_SAFE_INT = Stripped(
 /// We accept only an optional sign followed by the ASCII digits, and only
 /// the safe integers, <em>i.e.</em>, the integers within <c>-(2^53 - 1)</c>
 /// and <c>2^53 - 1</c>, which a double-precision floating-point number
-/// represents exactly. This way, all the SDKs behave the same.
+/// represents exactly.
+/// </para>
+/// <para>
+/// We check the safe range even though a <c>long</c> could hold larger
+/// integers. TypeScript represents the integers as <c>number</c>, which holds
+/// them exactly only within the safe range, and all the SDKs check the same
+/// range so that the invariants which parse a text behave the same everywhere.
 /// </para>
 /// </remarks>
 /// <param name="text">to be parsed</param>
@@ -586,8 +592,7 @@ public static long ParseSafeInt(string text)
 {II}// overflow a long.
 {II}value = value * 10 + (character - '0');
 
-{II}// NOTE: This is 2^53 - 1.
-{II}if (value > 9007199254740991L)
+{II}if (!IsSafeInteger(value))
 {II}{{
 {III}throw new System.ArgumentException(
 {IIII}$"Expected a safe integer, but got a text out of its range: {{text}}");
@@ -597,6 +602,72 @@ public static long ParseSafeInt(string text)
 {I}return negative ? -value : value;
 }}"""
 )
+
+
+#: Predicates checking the safe integer range [-2^53 + 1, 2^53 - 1]
+#:
+#: The verification, the de/serialization and ``ParseSafeInt`` all call them,
+#: so that each bound is written exactly once in the generated code.
+IS_SAFE_INTEGER: Final[Sequence[Stripped]] = [
+    Stripped(
+        f"""\
+/// <summary>
+/// Check whether <paramref name="value" /> is a safe integer, <em>i.e.</em>,
+/// whether it lies in the range [-2^53 + 1, 2^53 - 1].
+/// </summary>
+/// <remarks>
+/// JSON knows a single numeric type, which the SDKs in other languages read
+/// into a 64-bit floating-point number, so an integer outside this range might
+/// be read as a different number. The verification, the de/serialization and
+/// <see cref="ParseSafeInt" /> all use this check, so that an instance which
+/// passes the verification can always be serialized.
+/// </remarks>
+/// <param name="value">integer to be checked</param>
+/// <returns>true if <paramref name="value" /> is a safe integer</returns>
+public static bool IsSafeInteger(long value)
+{{
+{I}return -9007199254740991L <= value && value <= 9007199254740991L;
+}}"""
+    ),
+    Stripped(
+        f"""\
+/// <summary>
+/// Check whether <paramref name="value" /> is a safe integer.
+/// </summary>
+/// <remarks>
+/// See <see cref="IsSafeInteger(long)" /> for what a safe integer is.
+/// </remarks>
+/// <param name="value">integer to be checked</param>
+/// <returns>true if <paramref name="value" /> is a safe integer</returns>
+public static bool IsSafeInteger(ulong value)
+{{
+{I}return value <= long.MaxValue && IsSafeInteger((long)value);
+}}"""
+    ),
+    Stripped(
+        f"""\
+/// <summary>
+/// Check whether the whole number <paramref name="value" /> lies in the safe
+/// integer range.
+/// </summary>
+/// <remarks>
+/// <para>
+/// See <see cref="IsSafeInteger(long)" /> for what a safe integer is.
+/// </para>
+/// <para>
+/// We check only the range, so the caller has to check first that
+/// <paramref name="value" /> is a whole number. A not-a-number lies outside
+/// the range.
+/// </para>
+/// </remarks>
+/// <param name="value">whole number to be checked</param>
+/// <returns>true if <paramref name="value" /> is a safe integer</returns>
+public static bool IsSafeInteger(double value)
+{{
+{I}return -9007199254740991.0 <= value && value <= 9007199254740991.0;
+}}"""
+    ),
+]
 
 
 def _generate_set_helpers(symbol_table: intermediate.SymbolTable) -> Stripped:
@@ -747,6 +818,12 @@ def generate(
     # rely on it, and so that we can unit-test it.
     if intermediate_uses.modulo(symbol_table):
         blocks.append(FLOOR_MOD)
+
+    # NOTE (mristin):
+    # The predicates are public so that the clients can rely on them, and so that
+    # we can unit-test them.
+    if intermediate_uses.safe_integer_checks(symbol_table):
+        blocks.extend(IS_SAFE_INTEGER)
 
     # NOTE (mristin):
     # We add the helper only if the meta-model calls int so that we do not

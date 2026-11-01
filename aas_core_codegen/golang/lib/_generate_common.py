@@ -6,6 +6,7 @@ from typing import Final, List, Sequence
 from icontract import ensure
 
 from aas_core_codegen import intermediate
+from aas_core_codegen.intermediate import uses as intermediate_uses
 from aas_core_codegen.common import (
     Stripped,
     indent_but_first_line,
@@ -23,7 +24,6 @@ from aas_core_codegen.golang.common import (
 )
 from aas_core_codegen.intermediate import (
     type_inference as intermediate_type_inference,
-    uses as intermediate_uses,
 )
 
 
@@ -258,7 +258,12 @@ PARSE_SAFE_INT = Stripped(
 // The meta-model calls `int` on strings, and this is its transpilation. We accept
 // only an optional sign followed by the ASCII digits, and only the safe integers,
 // i.e., the integers within -(2^53 - 1) and 2^53 - 1, which a double-precision
-// floating-point number represents exactly. This way, all the SDKs behave the same.
+// floating-point number represents exactly.
+//
+// We check the safe range even though an int64 could hold larger integers.
+// TypeScript represents the integers as number, which holds them exactly only
+// within the safe range, and all the SDKs check the same range so that
+// the invariants which parse a text behave the same everywhere.
 //
 // Panics if text is not a safe integer. The meta-model is expected to check
 // the text before it calls `int`, so a panic signals a bug in the meta-model.
@@ -293,8 +298,9 @@ func {golang_transpilation.PARSE_SAFE_INT_FUNCTION_NAME}(text string) int64 {{
 
 {II}value = value*10 + int64(digit-'0')
 
-{II}// NOTE: This is 2^53 - 1.
-{II}if value > 9007199254740991 {{
+{II}// NOTE: The value is never negative here, so only the upper bound
+{II}// matters. We check it on every digit so that the value never overflows.
+{II}if !IsSafeInteger(value) {{
 {III}panic(
 {IIII}fmt.Sprintf(
 {IIIII}"Expected a safe integer, but got a text out of its range: %q",
@@ -331,9 +337,16 @@ def generate(
     uses_slicing = intermediate_uses.string_slicing(type_inference)
     uses_find = intermediate_uses.string_find_call(type_inference)
 
+    uses_json_types = intermediate_uses.json_types(symbol_table)
+    uses_integers = intermediate_uses.integers(symbol_table)
+    uses_int_call = intermediate_uses.int_call(symbol_table)
+
     import_lines: List[str] = []
-    if intermediate_uses.int_call(symbol_table):
+    if uses_int_call or uses_json_types or uses_integers:
         import_lines.append(f'{I}"fmt"')
+
+    if uses_json_types:
+        import_lines.append(f'{I}"math"')
 
     if intermediate_uses.set_properties(symbol_table):
         import_lines.append(f'{I}"sort"')
@@ -647,7 +660,7 @@ func FindStr(text string, sub string, start int64) int64 {{
     if intermediate_uses.abs_call(symbol_table):
         blocks.append(ABS_INT64)
 
-    if intermediate_uses.int_call(symbol_table):
+    if uses_int_call:
         blocks.append(PARSE_SAFE_INT)
 
     if intermediate_uses.sets(symbol_table):
@@ -686,6 +699,95 @@ func CompareBools(that bool, other bool) int {{
 
     if intermediate_uses.set_properties(symbol_table):
         blocks.extend(SORTED_KEYS)
+
+    # NOTE (mristin):
+    # The de-serialization, the serialization and the verification of
+    # the integers and of the JSON-able values all check the range with
+    # the predicates below, so that a verified instance is guaranteed to
+    # serialize. The messages are kept apart from the checks. Parsing a text
+    # as an integer checks the range with the same predicate.
+    if intermediate_uses.safe_integer_checks(symbol_table):
+        blocks.append(
+            Stripped(
+                f"""\
+// Check that `value` lies in the safe integer range [-2^53 + 1, 2^53 - 1].
+//
+// JSON knows a single numeric type, which the SDKs read into a float64.
+// Outside of the range, a float64 can not tell an integer from its neighbour,
+// so a reader might quietly get a different number than the one which was
+// given.
+func IsSafeInteger(value int64) bool {{
+{I}return -9007199254740991 <= value && value <= 9007199254740991
+}}"""
+            )
+        )
+
+    if uses_integers:
+        blocks.extend(
+            [
+                Stripped(
+                    f"""\
+// Check that the whole `value` lies in the safe integer range
+// [-2^53 + 1, 2^53 - 1].
+//
+// This is [IsSafeInteger] for a float64, which might lie beyond the int64
+// range, and hence can not be converted to an int64 first. Both bounds are
+// exact in a float64.
+func IsSafeIntegerFloat64(value float64) bool {{
+{I}return -9007199254740991 <= value && value <= 9007199254740991
+}}"""
+                ),
+                Stripped(
+                    f"""\
+// Describe why the integer `value`, an int64 or a whole float64, can not be
+// serialized to JSON, as it is not a safe integer, see [IsSafeInteger].
+func UnsafeIntegerMessage(value interface{{}}) string {{
+{I}return fmt.Sprintf(
+{II}"Expected an integer, but got %v, "+
+{II}"which is outside the safe integer range [-2^53 + 1, 2^53 - 1]",
+{II}value,
+{I})
+}}"""
+                ),
+            ]
+        )
+
+    if uses_json_types:
+        blocks.extend(
+            [
+                Stripped(
+                    f"""\
+// Describe why the integer `value` is not JSON-able, as it is not a safe
+// integer, see [IsSafeInteger].
+func NotJsonAbleIntegerMessage(value int64) string {{
+{I}return fmt.Sprintf(
+{II}"Expected a JSON-able value, but got the integer %d, "+
+{II}"which is outside the safe integer range [-2^53 + 1, 2^53 - 1]",
+{II}value,
+{I})
+}}"""
+                ),
+                Stripped(
+                    f"""\
+// Check that `value`, a number of a JSON-able value, is finite.
+//
+// JSON knows neither an infinity nor a not-a-number.
+//
+// Return the cause why `value` is not JSON-able, or an empty string if it is.
+func CheckJsonAbleFloat64(value float64) string {{
+{I}if math.IsInf(value, 0) || math.IsNaN(value) {{
+{II}return fmt.Sprintf(
+{III}"Expected a JSON-able value, but got the number %v, "+
+{III}"which is neither finite nor representable in JSON",
+{III}value,
+{II})
+{I}}}
+
+{I}return ""
+}}"""
+                ),
+            ]
+        )
 
     blocks.append(golang_common.WARNING)
 

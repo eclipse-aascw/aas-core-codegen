@@ -45,6 +45,30 @@ def json_types(symbol_table: _types.SymbolTable) -> bool:
     return False
 
 
+def integers(symbol_table: _types.SymbolTable) -> bool:
+    """
+    Check whether an instance of the model can hold an integer.
+
+    This is the case if a property holds an integer at any depth of its type
+    annotation (*e.g.*, ``List[int]``), or if a constrained primitive constrains
+    an integer. Every such integer has to lie in the safe integer range
+    [-2^53 + 1, 2^53 - 1], so that it can be written to JSON, and the SDKs check
+    it on de/serialization and on verification.
+    """
+    return any(
+        constrained_primitive.constrainee is _types.PrimitiveType.INT
+        for constrained_primitive in symbol_table.constrained_primitives
+    ) or any(
+        isinstance(type_anno, _types.PrimitiveTypeAnnotation)
+        and type_anno.a_type is _types.PrimitiveType.INT
+        for cls in symbol_table.classes
+        for prop in cls.properties
+        for type_anno in _types.over_type_annotation_and_nested_type_annotations(
+            prop.type_annotation
+        )
+    )
+
+
 def _over_transpilable_nodes(
     symbol_table: _types.SymbolTable,
 ) -> Iterator[parse_tree.Node]:
@@ -78,6 +102,32 @@ def _over_transpilable_nodes(
         if isinstance(verification, _types.TranspilableVerification):
             for node in verification.parsed.body:
                 yield from parse_tree.over_nodes(node)
+
+
+def int_call(symbol_table: _types.SymbolTable) -> bool:
+    """
+    Check whether the meta-model calls the built-in ``int`` in transpilable code.
+
+    The generators use this function to decide whether they need to generate
+    the helper functions and the tests for parsing the integers.
+    """
+    return any(
+        isinstance(node, parse_tree.FunctionCall) and node.name.identifier == "int"
+        for node in _over_transpilable_nodes(symbol_table)
+    )
+
+
+def safe_integer_checks(symbol_table: _types.SymbolTable) -> bool:
+    """
+    Check whether the SDK needs to check the safe integer range [-2^53 + 1, 2^53 - 1].
+
+    The range applies to the integers of the model (see :py:func:`integers`),
+    the integers in JSON-able values (see :py:func:`json_types`) and the integers
+    parsed by the transpiled built-in ``int`` (see :py:func:`int_call`).
+    The generators use this function to decide whether they need to generate
+    the predicate which checks the range.
+    """
+    return integers(symbol_table) or json_types(symbol_table) or int_call(symbol_table)
 
 
 def modulo(symbol_table: _types.SymbolTable) -> bool:
@@ -344,19 +394,6 @@ def string_operations(
         or rstrip_call(type_inference)
         or startswith_call(type_inference)
         or endswith_call(type_inference)
-    )
-
-
-def int_call(symbol_table: _types.SymbolTable) -> bool:
-    """
-    Check whether the meta-model calls the built-in ``int`` in transpilable code.
-
-    The generators use this function to decide whether they need to generate
-    the helper functions and the tests for parsing the integers.
-    """
-    return any(
-        isinstance(node, parse_tree.FunctionCall) and node.name.identifier == "int"
-        for node in _over_transpilable_nodes(symbol_table)
     )
 
 

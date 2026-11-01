@@ -6,7 +6,7 @@ from typing import List
 from icontract import ensure
 
 from aas_core_codegen import intermediate, naming
-from aas_core_codegen.common import Stripped, Identifier
+from aas_core_codegen.common import Stripped, Identifier, indent_but_first_line
 from aas_core_codegen.typescript import (
     common as typescript_common,
     naming as typescript_naming,
@@ -23,18 +23,23 @@ from aas_core_codegen.typescript.common import (
 def _generate_serialization_failure_tests(
     symbol_table: intermediate.SymbolTable,
 ) -> List[Stripped]:
-    """Generate the tests that a number unrepresentable in JSON is refused."""
+    """
+    Generate the tests that a number unrepresentable in JSON is refused.
+
+    An integer is refused with the very same message by the verification, and
+    the JSON and the XML serialization, so that a verified instance is always
+    serializable. We test the three together, and the safe integers at
+    the bounds of the range as the positive counterpart. The floating-point
+    numbers are not verified, so only their JSON serialization is tested.
+    """
     result: List[Stripped] = []
 
+    has_integers = False
+
     for numeric_place in intermediate.numeric_places(symbol_table):
-        if numeric_place.a_type is intermediate.PrimitiveType.FLOAT:
-            what = "a non-finite number"
-            zero_literal = "0.0"
-            values_literal = "[Infinity, -Infinity, NaN]"
-        else:
-            what = "an integer outside the range representable in JSON"
-            zero_literal = "0"
-            values_literal = "[9007199254740992, -9007199254740992]"
+        zero_literal = (
+            "0.0" if numeric_place.a_type is intermediate.PrimitiveType.FLOAT else "0"
+        )
 
         prop_name = typescript_naming.property_name(numeric_place.prop.name)
 
@@ -82,17 +87,84 @@ def _generate_serialization_failure_tests(
             Identifier(f"{numeric_place.cls.name}_from_jsonable")
         )
 
+        load_instance = f"""\
+const instance = OurJsonization.{deserialization_function}(
+{I}loadTheFirstExpected({typescript_common.string_literal(cls_name_json)})
+).mustValue();"""
+
+        if numeric_place.a_type is intermediate.PrimitiveType.INT:
+            has_integers = True
+
+            result.append(
+                Stripped(
+                    f"""\
+test(
+{I}"{numeric_place.cls.name} refuses an integer outside the safe integer range "
+{I}+ "at {expected_path} in verification and serialization",
+{I}() => {{
+{II}for (const value of [9007199254740992, -9007199254740992]) {{
+{III}{indent_but_first_line(load_instance, III)}
+
+{III}{mutation}
+
+{III}const expected =
+{IIII}`{expected_path}: Expected an integer, but got ${{value}}, ` +
+{IIII}"which is outside the safe integer range [-2^53 + 1, 2^53 - 1]";
+
+{III}expect(verificationErrorsOf(instance)).toContain(expected);
+{III}expect(
+{IIII}serializationErrorOf(() => OurJsonization.toJsonable(instance))
+{III}).toStrictEqual(expected);
+{III}expect(
+{IIII}serializationErrorOf(() => OurXmlization.toXmlString(instance))
+{III}).toStrictEqual(expected);
+{II}}}
+{I}}}
+);"""
+                )
+            )
+
+            result.append(
+                Stripped(
+                    f"""\
+test(
+{I}"{numeric_place.cls.name} accepts the bounds of the safe integer range "
+{I}+ "at {expected_path} in verification and serialization",
+{I}() => {{
+{II}for (const value of [9007199254740991, -9007199254740991]) {{
+{III}{indent_but_first_line(load_instance, III)}
+
+{III}{mutation}
+
+{III}// NOTE (mristin):
+{III}// The invariants might still refuse the value, but not the range check.
+{III}expect(
+{IIII}verificationErrorsOf(instance).filter(
+{IIIII}(error) => error.includes("safe integer range")
+{IIII})
+{III}).toStrictEqual([]);
+{III}expect(
+{IIII}serializationErrorOf(() => OurJsonization.toJsonable(instance))
+{III}).toBeNull();
+{III}expect(
+{IIII}serializationErrorOf(() => OurXmlization.toXmlString(instance))
+{III}).toBeNull();
+{II}}}
+{I}}}
+);"""
+                )
+            )
+            continue
+
         result.append(
             Stripped(
                 f"""\
 test(
-{I}"{numeric_place.cls.name} serialization fails on {what} "
+{I}"{numeric_place.cls.name} serialization fails on a non-finite number "
 {I}+ "at {expected_path}",
 {I}() => {{
-{II}for (const value of {values_literal}) {{
-{III}const instance = OurJsonization.{deserialization_function}(
-{IIII}loadTheFirstExpected({typescript_common.string_literal(cls_name_json)})
-{III}).mustValue();
+{II}for (const value of [Infinity, -Infinity, NaN]) {{
+{III}{indent_but_first_line(load_instance, III)}
 
 {III}{mutation}
 
@@ -115,6 +187,43 @@ test(
 );"""
             )
         )
+
+    if has_integers:
+        result[0:0] = [
+            Stripped(
+                f"""\
+/**
+ * Verify `instance` and render the errors as `path: message`.
+ */
+function verificationErrorsOf(instance: OurTypes.Class): Array<string> {{
+{I}return Array.from(OurVerification.verify(instance)).map(
+{II}(error) => `${{error.path}}: ${{error.message}}`
+{I});
+}}"""
+            ),
+            Stripped(
+                f"""\
+/**
+ * Run `serialize` and render its serialization error as `path: message`.
+ *
+ * @returns the rendered error, or `null` if `serialize` succeeded
+ */
+function serializationErrorOf(serialize: () => unknown): string | null {{
+{I}try {{
+{II}serialize();
+{I}}} catch (error) {{
+{II}if (
+{III}error instanceof OurJsonization.SerializationError
+{III}|| error instanceof OurXmlization.SerializationError
+{II}) {{
+{III}return `${{error.path}}: ${{error.message}}`;
+{II}}}
+{II}throw error;
+{I}}}
+{I}return null;
+}}"""
+            ),
+        ]
 
     if len(result) > 0:
         result.insert(
@@ -160,6 +269,18 @@ function loadTheFirstExpected(modelType: string): OurJsonization.JsonValue {{
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable) -> str:
     """Generate code to test the JSON de/serialization of concrete classes."""
+    # NOTE (mristin):
+    # The tests of the integers serialize to XML as well, see
+    # :py:func:`_generate_serialization_failure_tests`.
+    xmlization_import = (
+        'import * as OurXmlization from "../src/xmlization";\n'
+        if any(
+            numeric_place.a_type is intermediate.PrimitiveType.INT
+            for numeric_place in intermediate.numeric_places(symbol_table)
+        )
+        else ""
+    )
+
     blocks: List[Stripped] = [
         Stripped(
             """\
@@ -169,14 +290,14 @@ def generate(symbol_table: intermediate.SymbolTable) -> str:
         ),
         typescript_common.WARNING,
         Stripped(
-            """\
+            f"""\
 import * as fs from "fs";
 import * as path from "path";
 
 import * as OurJsonization from "../src/jsonization";
 import * as OurTypes from "../src/types";
 import * as OurVerification from "../src/verification";
-
+{xmlization_import}
 import * as TestCommon from "./common";"""
         ),
         Stripped(

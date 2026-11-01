@@ -10,6 +10,7 @@ from aas_core_codegen.cpp.common import (
     INDENT as I,
     INDENT2 as II,
     INDENT3 as III,
+    INDENT4 as IIII,
 )
 
 
@@ -45,7 +46,10 @@ def generate_implementation(library_namespace: Stripped) -> str:
 #include <cmath>
 #include <limits>
 #include <sstream>
+#include <string>
 #include <tuple>
+#include <utility>
+#include <vector>
 #pragma warning(pop)"""
         ),
         Stripped(
@@ -129,6 +133,46 @@ TEST_CASE("Serialize rejects a non-finite number") {{
 {III}xml_rpc::SerializeValue(oss, nlohmann::json(value))
 {II});
 {II}REQUIRE(error.has_value());
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+TEST_CASE("Serialize rejects an integer outside the safe integer range") {{
+{I}// NOTE (mristin):
+{I}// We construct the values programmatically, so that we cover both
+{I}// the signed and the unsigned integers of ``nlohmann::json``.
+{I}const std::vector<std::pair<nlohmann::json, std::wstring> > cases = {{
+{II}{{nlohmann::json(int64_t(9007199254740992LL)), L"9007199254740992"}},
+{II}{{nlohmann::json(int64_t(-9007199254740992LL)), L"-9007199254740992"}},
+{II}{{nlohmann::json(uint64_t(9007199254740992ULL)), L"9007199254740992"}}
+{I}}};
+
+{I}for (const std::pair<nlohmann::json, std::wstring>& a_case : cases) {{
+{II}std::ostringstream oss;
+{II}common::optional<xml_rpc::SerializationError> error(
+{III}xml_rpc::SerializeValue(oss, a_case.first)
+{II});
+{II}REQUIRE(error.has_value());
+{II}REQUIRE(
+{III}error->cause
+{III}== L"Expected a JSON-able value, but got the integer " + a_case.second
+{IIII}+ L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+{II});
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+TEST_CASE("Serialize accepts the integers at the bounds of the safe range") {{
+{I}for (
+{II}const int64_t integer : {{9007199254740991LL, -9007199254740991LL}}
+{I}) {{
+{II}std::ostringstream oss;
+{II}common::optional<xml_rpc::SerializationError> error(
+{III}xml_rpc::SerializeValue(oss, nlohmann::json(integer))
+{II});
+{II}REQUIRE(!error.has_value());
 {I}}}
 }}"""
         ),

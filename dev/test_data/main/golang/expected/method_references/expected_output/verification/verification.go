@@ -54,6 +54,22 @@ func IsDescribed(
 	return ourcommon.LenStr(text) > 0
 }
 
+// Verify that `that` integer lies in the safe integer range of JSON, as
+// checked by [ourcommon.IsSafeInteger] in the serialization as well.
+func verifyInt64(
+	that int64,
+	onError func(*VerificationError) bool,
+) (abort bool) {
+	if !ourcommon.IsSafeInteger(that) {
+		abort = onError(newVerificationError(ourcommon.UnsafeIntegerMessage(that)))
+		if abort {
+			return
+		}
+	}
+
+	return
+}
+
 // Verify `that` instance of [ourtypes.IBox].
 //
 // You have to supply the callback `onError` to iterate over the errors.
@@ -74,6 +90,21 @@ func VerifyBox(
 		if abort {
 			return
 		}
+	}
+
+	abort = verifyInt64(
+		that.Size(),
+		func(err *VerificationError) bool {
+			err.Path.PrependName(
+				&ourreporting.NameSegment{
+					Name: "Size",
+				},
+			)
+			return onError(err)
+		},
+	)
+	if abort {
+		return
 	}
 
 	return

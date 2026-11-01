@@ -325,12 +325,21 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
     # The ``xmlrpc`` package is only needed when the meta-model actually uses
     # a JSON-able type (``JSONValue``, ``JSONArray`` or ``JSONObject[K]``) --
     # unlike the other packages above, which are always generated regardless of
-    # the model.
+    # the model. The same holds for the tests of the JSON-able values.
     if intermediate_uses.json_types(context.symbol_table):
         rel_paths_generators = list(rel_paths_generators) + [
             (
                 base_rel_path / "xmlrpc/xmlrpc.go",
                 lambda: (golang_lib.generate_xml_rpc(repo_url=repo_url), None),
+            ),
+            (
+                base_rel_path / "jsonization/test/json_value_test.go",
+                lambda: (
+                    golang_tests.generate_jsonization_test_json_value_test(
+                        repo_url=repo_url
+                    ),
+                    None,
+                ),
             ),
         ]
 
@@ -379,6 +388,22 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
                 base_rel_path / "common/parse_int_test/parse_int_test.go",
                 lambda: (
                     golang_tests.generate_parse_int_test(
+                        symbol_table=verified_ir_table, repo_url=repo_url
+                    ),
+                    None,
+                ),
+            ),
+        ]
+
+    # NOTE (mristin):
+    # We test the safe integer range whenever the SDK checks it, see
+    # :py:func:`intermediate_uses.safe_integer_checks`.
+    if intermediate_uses.safe_integer_checks(context.symbol_table):
+        rel_paths_generators = list(rel_paths_generators) + [
+            (
+                base_rel_path / "common/safe_integer_test/safe_integer_test.go",
+                lambda: (
+                    golang_tests.generate_safe_integer_test(
                         symbol_table=verified_ir_table, repo_url=repo_url
                     ),
                     None,

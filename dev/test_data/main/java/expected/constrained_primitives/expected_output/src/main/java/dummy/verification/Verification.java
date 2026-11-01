@@ -38,6 +38,71 @@ public class Verification {
 
   private static final _Transformer transformer = new _Transformer();
 
+  /**
+   * Check whether the integer {@code value} lies in the safe integer range
+   * [-2^53 + 1, 2^53 - 1].
+   *
+   * <p>JSON knows a single numeric type, which all the other SDKs read into
+   * a {@code double}. Outside this range, an integer can not be exactly
+   * represented as a {@code double}, so a reader might quietly get
+   * a different number than the one which was written.
+   *
+   * @param value integer to be checked
+   * @return true if {@code value} is a safe integer
+   */
+  public static boolean isSafeInteger(long value) {
+    return -9007199254740991L <= value && value <= 9007199254740991L;
+  }
+
+  /**
+   * Check whether the whole number {@code value} lies in the safe integer
+   * range [-2^53 + 1, 2^53 - 1].
+   *
+   * <p>Only the range is checked here; the caller has to make sure that
+   * {@code value} is a whole number in the first place.
+   *
+   * @param value whole number to be checked
+   * @return true if {@code value} is a safe integer
+   */
+  public static boolean isSafeInteger(double value) {
+    return -9007199254740991.0 <= value && value <= 9007199254740991.0;
+  }
+
+  /**
+   * Check whether the big integer {@code value} lies in the safe integer
+   * range [-2^53 + 1, 2^53 - 1].
+   *
+   * @param value integer to be checked
+   * @return true if {@code value} is a safe integer
+   */
+  public static boolean isSafeInteger(BigInteger value) {
+    // NOTE (mristin):
+    // A bit length below 64 means that the value fits a long, so we can
+    // narrow it without truncating it silently.
+    return value.bitLength() < 64 && isSafeInteger(value.longValue());
+  }
+
+  /**
+   * Explain that the integer {@code value} lies outside the safe integer
+   * range [-2^53 + 1, 2^53 - 1].
+   *
+   * @param value integer, written as it was given
+   * @return the message
+   */
+  public static String integerOutsideSafeRangeMessage(Object value) {
+    return "Expected an integer, but got " + value +
+      ", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]";
+  }
+
+  /**
+   * Verify that the integer {@code that} lies in the safe integer range.
+   */
+  private static Stream<Reporting.Error> verify_long(long that) {
+    return isSafeInteger(that)
+      ? Stream.empty()
+      : Stream.of(new Reporting.Error(integerOutsideSafeRangeMessage(that)));
+  }
+
   private static class _Transformer extends AbstractTransformer<Stream<Reporting.Error>> {
     @Override
     public Stream<Reporting.Error> transformSomething(
@@ -161,7 +226,7 @@ public class Verification {
    */
   public static Stream<Reporting.Error> verifyPositiveint (
     Long that) {
-    Stream<Reporting.Error> errorStream = Stream.empty();
+    Stream<Reporting.Error> errorStream = verify_long(that);
 
     if (!(that > 0)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,

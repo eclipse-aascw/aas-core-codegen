@@ -58,6 +58,14 @@ _LEXICAL_CASES_BY_PRIMITIVE: Mapping[
         ("S G k =", "new byte[] {72, 105}"),
         ("", "new byte[] {}"),
     ],
+    intermediate.PrimitiveType.INT: [
+        # NOTE (mristin):
+        # The bounds of the safe integer range are read as they are. Just
+        # beyond them, the integer is refused, see
+        # :py:func:`_generate_outside_the_safe_integer_range_test`.
+        ("9007199254740991", "Long.valueOf(9007199254740991L)"),
+        ("-9007199254740991", "Long.valueOf(-9007199254740991L)"),
+    ],
     intermediate.PrimitiveType.BOOL: [
         # NOTE (mristin):
         # ``xs:boolean`` spells the two values in four ways, not two.
@@ -90,6 +98,41 @@ def _lexical_test_name_chunk(text: str) -> str:
     return "".join(mapping.get(character, character) for character in text)
 
 
+def _generate_outside_the_safe_integer_range_test(
+    prop: intermediate.Property,
+) -> Stripped:
+    """
+    Generate the test that an integer just outside the safe range is refused.
+
+    The text is a valid ``xs:long``, but the instance could not be written
+    to JSON, so the de-serialization refuses it with the very message of
+    the JSON de-serialization.
+    """
+    prop_xml_name = naming.xml_property(prop.name)
+
+    test_name = java_naming.method_name(
+        Identifier(f"test_{prop.name}_read_outside_the_safe_integer_range")
+    )
+
+    return Stripped(
+        f"""\
+@Test
+public void {test_name}() throws IOException, XMLStreamException {{
+{I}for (String text : new String[] {{"9007199254740992", "-9007199254740992"}}) {{
+{II}try {{
+{III}readWith({java_common.string_literal(prop_xml_name)}, text);
+{III}fail("Expected the de-serialization of " + text + " to fail, but it succeeded");
+{II}}} catch (XmlCommon.DeserializeException exception) {{
+{III}assertEquals(
+{IIII}"Expected an integer, but got " + text
+{IIIII}+ ", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]",
+{IIII}exception.getReason().orElse(null));
+{II}}}
+{I}}}
+}} // public void {test_name}"""
+    )
+
+
 def _generate_lexical_tests(symbol_table: intermediate.SymbolTable) -> List[Stripped]:
     """Generate the tests over the lexical forms which no example can hold."""
     cls = intermediate.first_class_of_only_required_primitives(symbol_table)
@@ -105,6 +148,7 @@ def _generate_lexical_tests(symbol_table: intermediate.SymbolTable) -> List[Stri
         (a_type, prop_by_a_type[a_type])
         for a_type in (
             intermediate.PrimitiveType.FLOAT,
+            intermediate.PrimitiveType.INT,
             intermediate.PrimitiveType.BOOL,
             intermediate.PrimitiveType.BYTEARRAY,
         )
@@ -185,6 +229,9 @@ public void {test_name}() throws IOException, XMLStreamException {{
 }} // public void {test_name}"""
                 )
             )
+
+        if a_type is intermediate.PrimitiveType.INT:
+            result.append(_generate_outside_the_safe_integer_range_test(prop))
 
     return result
 

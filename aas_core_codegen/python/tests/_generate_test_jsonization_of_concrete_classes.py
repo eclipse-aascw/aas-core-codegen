@@ -1,7 +1,7 @@
 """Generate code to test the JSON de/serialization of concrete classes."""
 
 import io
-from typing import List
+from typing import List, Tuple
 
 from icontract import ensure
 
@@ -12,6 +12,7 @@ from aas_core_codegen.python.common import (
     INDENT as I,
     INDENT2 as II,
     INDENT3 as III,
+    INDENT4 as IIII,
 )
 
 
@@ -71,55 +72,74 @@ class TestRoundTrips(unittest.TestCase):
     )
 
 
+def numeric_place_mutation(
+    numeric_place: intermediate.NumericPlace, zero_literal: str
+) -> Tuple[Stripped, str]:
+    """
+    Generate the statement which puts ``value`` at the ``numeric_place`` of ``instance``.
+
+    Return the statement and the subscript, if any, which follows the property in
+    the path to the value.
+
+    :param numeric_place: where the value is put
+    :param zero_literal: to fill the items before the value in a list
+    :return: statement, and subscript of the path (empty if none)
+    """
+    prop_name = python_naming.property_name(numeric_place.prop.name)
+
+    if numeric_place.index is None:
+        return Stripped(f"instance.{prop_name} = value"), ""
+
+    if numeric_place.in_list:
+        # NOTE (mristin):
+        # The value goes to the position indicated by the numeric place so
+        # that a serializer which always reports the index 0 does not pass.
+        items_joined = ", ".join(
+            "value" if i == numeric_place.index else zero_literal
+            for i in range(numeric_place.index + 1)
+        )
+
+        return (
+            Stripped(f"instance.{prop_name} = [{items_joined}]"),
+            f"[{numeric_place.index}]",
+        )
+
+    tuple_type_anno = numeric_place.prop.type_annotation
+    assert isinstance(tuple_type_anno, intermediate.TupleTypeAnnotation), (
+        f"Expected a tuple at the numeric place of "
+        f"{numeric_place.cls.name}.{numeric_place.prop.name}, "
+        f"but got: {tuple_type_anno}"
+    )
+
+    # NOTE (mristin):
+    # A tuple is immutable, so it has to be rebuilt around the value.
+    items_joined = ", ".join(
+        "value" if i == numeric_place.index else f"instance.{prop_name}[{i}]"
+        for i in range(len(tuple_type_anno.items))
+    )
+
+    return (
+        Stripped(f"instance.{prop_name} = ({items_joined})"),
+        f"[{numeric_place.index}]",
+    )
+
+
 def _generate_serialization_failure_test_case(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
-    """Generate the tests that a number unrepresentable in JSON is refused."""
+    """
+    Generate the tests that a number unrepresentable in JSON is refused.
+
+    The integers outside of the safe integer range are tested together with
+    the verification and the XML serialization in ``test_safe_integers.py``, so
+    only the non-finite floats are tested here. The JSON de-serialization of
+    the integers is tested here, though.
+    """
     test_methods: List[Stripped] = []
+    int_parsing_methods: List[Stripped] = []
 
     for numeric_place in intermediate.numeric_places(symbol_table):
-        if numeric_place.a_type is intermediate.PrimitiveType.FLOAT:
-            what = "non_finite"
-            zero_literal = "0.0"
-            values_literal = "[math.inf, -math.inf, math.nan]"
-        else:
-            what = "out_of_range"
-            zero_literal = "0"
-            values_literal = "[9007199254740992, -9007199254740992]"
-
         prop_name = python_naming.property_name(numeric_place.prop.name)
-
-        if numeric_place.index is None:
-            mutation = Stripped(f"instance.{prop_name} = value")
-            expected_path = f".{numeric_place.prop.name}"
-        elif numeric_place.in_list:
-            # NOTE (mristin):
-            # The value goes to the position indicated by the numeric place so
-            # that a serializer which always reports the index 0 does not pass.
-            items_joined = ", ".join(
-                "value" if i == numeric_place.index else zero_literal
-                for i in range(numeric_place.index + 1)
-            )
-
-            mutation = Stripped(f"instance.{prop_name} = [{items_joined}]")
-            expected_path = f".{numeric_place.prop.name}[{numeric_place.index}]"
-        else:
-            tuple_type_anno = numeric_place.prop.type_annotation
-            assert isinstance(tuple_type_anno, intermediate.TupleTypeAnnotation), (
-                f"Expected a tuple at the numeric place of "
-                f"{numeric_place.cls.name}.{numeric_place.prop.name}, "
-                f"but got: {tuple_type_anno}"
-            )
-
-            # NOTE (mristin):
-            # A tuple is immutable, so it has to be rebuilt around the value.
-            items_joined = ", ".join(
-                "value" if i == numeric_place.index else f"instance.{prop_name}[{i}]"
-                for i in range(len(tuple_type_anno.items))
-            )
-
-            mutation = Stripped(f"instance.{prop_name} = ({items_joined})")
-            expected_path = f".{numeric_place.prop.name}[{numeric_place.index}]"
 
         model_type = naming.json_model_type(numeric_place.cls.name)
 
@@ -127,17 +147,24 @@ def _generate_serialization_failure_test_case(
             Identifier(f"{numeric_place.cls.name}_from_jsonable")
         )
 
-        test_method_name = python_naming.method_name(
-            Identifier(
-                f"test_{numeric_place.cls.name}_{numeric_place.prop.name}_{what}"
+        if numeric_place.a_type is intermediate.PrimitiveType.FLOAT:
+            mutation, subscript = numeric_place_mutation(
+                numeric_place=numeric_place, zero_literal="0.0"
             )
-        )
+            expected_path = f".{numeric_place.prop.name}{subscript}"
 
-        test_methods.append(
-            Stripped(
-                f"""\
+            test_method_name = python_naming.method_name(
+                Identifier(
+                    f"test_{numeric_place.cls.name}_{numeric_place.prop.name}"
+                    f"_non_finite"
+                )
+            )
+
+            test_methods.append(
+                Stripped(
+                    f"""\
 def {test_method_name}(self) -> None:
-{I}for value in {values_literal}:
+{I}for value in [math.inf, -math.inf, math.nan]:
 {II}instance = our_jsonization.{from_jsonable}(
 {III}_load_the_first_expected({model_type!r})
 {II})
@@ -153,13 +180,91 @@ def {test_method_name}(self) -> None:
 {III}{expected_path!r},
 {III}context_manager.exception.path
 {II})"""
+                )
             )
-        )
 
-    if len(test_methods) == 0:
+        if (
+            numeric_place.a_type is intermediate.PrimitiveType.INT
+            and numeric_place.index is None
+        ):
+            parsing_method_name = python_naming.method_name(
+                Identifier(f"test_{numeric_place.cls.name}_{numeric_place.prop.name}")
+            )
+
+            json_name_literal = python_common.string_literal(
+                numeric_place.prop.json_name
+            )
+
+            int_parsing_methods.append(
+                Stripped(
+                    f"""\
+def {parsing_method_name}(self) -> None:
+{I}jsonable = _load_the_first_expected({model_type!r})
+
+{I}# NOTE (mristin):
+{I}# JSON has a single number type, so a whole float is an integer.
+{I}jsonable[{json_name_literal}] = 5.0
+{I}instance = our_jsonization.{from_jsonable}(jsonable)
+{I}self.assertIs(int, type(instance.{prop_name}))
+{I}self.assertEqual(5, instance.{prop_name})
+
+{I}for value, expected_cause in [
+{II}("5", "Expected an integer, but got: <class 'str'>"),
+{II}(
+{III}1.5,
+{III}"Expected an integer, but got 1.5, which is not a whole number"
+{II}),
+{II}(
+{III}9007199254740992,
+{III}(
+{IIII}"Expected an integer, but got 9007199254740992, "
+{IIII}"which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+{III})
+{II}),
+{II}(
+{III}-9007199254740992.0,
+{III}(
+{IIII}"Expected an integer, but got -9007199254740992, "
+{IIII}"which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+{III})
+{II})
+{I}]:
+{II}jsonable[{json_name_literal}] = value
+
+{II}with self.assertRaises(
+{III}our_jsonization.DeserializationException
+{II}) as context_manager:
+{III}our_jsonization.{from_jsonable}(jsonable)
+
+{II}self.assertEqual(
+{III}expected_cause,
+{III}context_manager.exception.cause
+{II})"""
+                )
+            )
+
+    if len(test_methods) == 0 and len(int_parsing_methods) == 0:
         return Stripped("")
 
-    body = "\n\n".join(test_methods)
+    blocks: List[str] = []
+
+    if len(test_methods) > 0:
+        body = "\n\n".join(test_methods)
+        blocks.append(
+            f"""\
+class TestSerializationFailures(unittest.TestCase):
+{I}{indent_but_first_line(body, I)}"""
+        )
+
+    if len(int_parsing_methods) > 0:
+        int_parsing_body = "\n\n".join(int_parsing_methods)
+        blocks.append(
+            f"""\
+class TestDeserializationOfIntegers(unittest.TestCase):
+{I}{indent_but_first_line(int_parsing_body, I)}"""
+        )
+
+    blocks_joined = "\n\n\n".join(blocks)
 
     return Stripped(
         f"""\
@@ -182,8 +287,7 @@ def _load_the_first_expected(model_type: str) -> Any:
 {II}return json.load(fid)
 
 
-class TestSerializationFailures(unittest.TestCase):
-{I}{indent_but_first_line(body, I)}"""
+{blocks_joined}"""
     )
 
 

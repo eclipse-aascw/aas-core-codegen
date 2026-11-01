@@ -175,6 +175,24 @@ class TestLexicalForms(unittest.TestCase):
         with self.assertRaises(our_xmlization.DeserializationException):
             self._read_with('someInt', "1" + "0" * 5000)
 
+    def test_some_int_read_at_the_safe_bounds(self) -> None:
+        for value in [2 ** 53 - 1, -(2 ** 53 - 1)]:
+            instance = self._read_with('someInt', str(value))
+            self.assertEqual(value, instance.some_int)
+
+    def test_some_int_read_outside_the_safe_range_fails(self) -> None:
+        for value in [2 ** 53, -(2 ** 53)]:
+            with self.assertRaises(
+                our_xmlization.DeserializationException
+            ) as context_manager:
+                self._read_with('someInt', str(value))
+
+            self.assertEqual(
+                f"Expected an integer, but got {value}, "
+                f"which is outside the safe integer range [-2^53 + 1, 2^53 - 1]",
+                context_manager.exception.cause
+            )
+
 
 class TestDuplicateProperty(unittest.TestCase):
     """Test that a property given more than once is refused."""

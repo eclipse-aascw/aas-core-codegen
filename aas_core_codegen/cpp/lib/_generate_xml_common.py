@@ -1731,8 +1731,8 @@ def _generate_self_closing_writer_declaration(
     )
 
     # NOTE (mristin):
-    # See https://github.com/aas-core-works/aas-core-meta/issues/298 on why we
-    # do not check the range of ``SerializeInt64``.
+    # ``SerializeInt64`` writes any integer. The xmlization checks the safe integer
+    # range of the integers of the model before it writes them.
     return [
         Stripped("// region class SelfClosingWriter"),
         Stripped(

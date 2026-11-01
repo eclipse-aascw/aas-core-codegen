@@ -25,6 +25,7 @@ from aas_core_codegen.java.common import (
     INDENT3 as III,
     INDENT4 as IIII,
     INDENT5 as IIIII,
+    INDENT6 as IIIIII,
 )
 
 #: Maximal length of a generated line before a call is broken over two lines
@@ -1225,9 +1226,74 @@ public static Reporting.Result<{name}> try{name}From(JsonNode node) {{
 # endregion
 
 
-def _generate_primitive_parsers() -> List[Stripped]:
+def _generate_try_long_from() -> Stripped:
+    """
+    Generate the parser of a 64-bit integer.
+
+    The integer has to lie in the safe integer range, as checked by
+    ``Verification.isSafeInteger``, so that the parsed instance can be
+    written back to JSON.
+    """
+    return Stripped(
+        f"""\
+/** Convert {{@code value}} to a long 64-bit integer.
+ *
+ * <p>A whole number such as {{@code 5.0}} or {{@code 1e2}} is accepted as
+ * an integer, since JSON has a single number type. The integer has to lie in
+ * the safe integer range [-2^53 + 1, 2^53 - 1].
+ *
+ * @param node JSON node to be parsed
+ */
+private static Reporting.Result<Long> tryLongFrom(JsonNode value) {{
+{I}if (!value.isNumber()) {{
+{II}final Reporting.Error error = new Reporting.Error(
+{III}"Expected an integer, but got: " + value.getNodeType());
+{II}return Reporting.Result.failure(error);
+{I}}}
+
+{I}switch (value.numberType()) {{
+{II}case INT:
+{II}case LONG: {{
+{III}final long integer = value.longValue();
+{III}if (Verification.isSafeInteger(integer)) {{
+{IIII}return Reporting.Result.success(integer);
+{III}}}
+{III}break;
+{II}}}
+
+{II}case BIG_INTEGER: {{
+{III}final BigInteger integer = value.bigIntegerValue();
+{III}if (Verification.isSafeInteger(integer)) {{
+{IIII}return Reporting.Result.success(integer.longValue());
+{III}}}
+{III}break;
+{II}}}
+
+{II}default: {{
+{III}final double number = value.doubleValue();
+{III}if (!Double.isFinite(number) || Math.rint(number) != number) {{
+{IIII}return Reporting.Result.failure(new Reporting.Error(
+{IIIII}"Expected an integer, but got " + number +
+{IIIIII}", which is not a whole number"));
+{III}}}
+{III}if (Verification.isSafeInteger(number)) {{
+{IIII}return Reporting.Result.success((long) number);
+{III}}}
+{III}break;
+{II}}}
+{I}}}
+
+{I}return Reporting.Result.failure(new Reporting.Error(
+{II}Verification.integerOutsideSafeRangeMessage(value)));
+}}"""
+    )
+
+
+def _generate_primitive_parsers(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
     """Generate the parsers of the primitive JSON values."""
-    return [
+    result: List[Stripped] = [
         Stripped(
             f"""\
 /** Convert {{@code value}} to a string.
@@ -1256,22 +1322,19 @@ private static Reporting.Result<Boolean> tryBooleanFrom(JsonNode value) {{
 {I}return Reporting.Result.success(value.asBoolean());
 }}"""
         ),
-        Stripped(
-            f"""\
-/** Convert {{@code value}} to a long 64-bit integer.
- * @param node JSON node to be parsed
- */
-private static Reporting.Result<Long> tryLongFrom(JsonNode value) {{
-{I}if (!value.isIntegralNumber()) {{
-{II}final Reporting.Error error = new Reporting.Error(
-{III}"Expected a JsonValue of Long, but got " + value.getNodeType());
-{II}return Reporting.Result.failure(error);
-{I}}}
-{I}return Reporting.Result.success(value.asLong());
-}}"""
-        ),
-        Stripped(
-            f"""\
+    ]
+
+    # NOTE (mristin):
+    # The parser of an integer relies on ``Verification.isSafeInteger`` and
+    # ``Verification.integerOutsideSafeRangeMessage``, the latter of which is
+    # only generated if an instance can hold an integer.
+    if intermediate_uses.integers(symbol_table):
+        result.append(_generate_try_long_from())
+
+    result.extend(
+        [
+            Stripped(
+                f"""\
 /** Convert {{@code value}} to a double-precision 64-bit float.
  * @param node JSON node to be parsed
  */
@@ -1300,9 +1363,9 @@ private static Reporting.Result<Double> tryDoubleFrom(JsonNode value) {{
 
 {I}return Reporting.Result.success(asDouble);
 }}"""
-        ),
-        Stripped(
-            f"""\
+            ),
+            Stripped(
+                f"""\
 private static Reporting.Result<byte[]> tryBytesFrom(JsonNode value) {{
 {I}if (!value.isTextual()) {{
 {II}final Reporting.Error error = new Reporting.Error(
@@ -1323,8 +1386,11 @@ private static Reporting.Result<byte[]> tryBytesFrom(JsonNode value) {{
 
 {I}return Reporting.Result.success(decodedData);
 }}"""
-        ),
-    ]
+            ),
+        ]
+    )
+
+    return result
 
 
 def _generate_json_able_helpers(
@@ -1350,21 +1416,21 @@ def _generate_json_able_helpers(
  * <p>A JSON-able value is, recursively, exactly as JSON itself is defined:
  * a null node (JSON null), a boolean, a number, a string, an array of
  * JSON-able values or an object of JSON-able values with string keys.
- * An infinity and a not-a-number are rejected at any depth, as JSON can not
- * represent them at all.
+ * An infinity, a not-a-number and an integer outside the safe integer
+ * range [-2^53 + 1, 2^53 - 1] are rejected at any depth.
  *
  * <p>The result is a deep copy, and never {{@code node}} itself, so that
  * the parsed instance does not share a tree with the document it came from.
  *
+ * <p>The path of an error is relative to {{@code node}}.
+ *
  * @param node to be parsed
- * @param path JSON path to {{@code node}}, written into the messages
  * @return the parsed value, or an error
  */
-private static Reporting.Result<JsonNode> tryJsonValueFromAt(
-{II}JsonNode node, String path) {{
+private static Reporting.Result<JsonNode> tryJsonValueFrom(JsonNode node) {{
 {I}if (node == null || node.isMissingNode()) {{
 {II}return Reporting.Result.failure(new Reporting.Error(
-{III}"Expected a JSON-able value at " + path + ", but got: " + node));
+{III}"Expected a JSON-able value, but got: " + node));
 {I}}}
 
 {I}if (node.isNull()) {{
@@ -1372,15 +1438,9 @@ private static Reporting.Result<JsonNode> tryJsonValueFromAt(
 {I}}}
 
 {I}if (node.isNumber()) {{
-{II}// NOTE (mristin):
-{II}// JSON knows neither an infinity nor a not-a-number. Jackson's own
-{II}// parser never gives us one, but {{@code node}} may well have been
-{II}// put together programmatically.
-{II}final double value = node.doubleValue();
-{II}if (Double.isInfinite(value) || Double.isNaN(value)) {{
-{III}return Reporting.Result.failure(new Reporting.Error(
-{IIII}"Expected a JSON-able value at " + path + ", but got the number " +
-{IIII}value + ", which is neither finite nor representable in JSON"));
+{II}final String cause = Verification.checkJsonAbleNumber(node);
+{II}if (cause != null) {{
+{III}return Reporting.Result.failure(new Reporting.Error(cause));
 {II}}}
 {II}return Reporting.Result.success(node.deepCopy());
 {I}}}
@@ -1393,9 +1453,10 @@ private static Reporting.Result<JsonNode> tryJsonValueFromAt(
 {II}final ArrayNode result = JsonNodeFactory.instance.arrayNode();
 {II}int index = 0;
 {II}for (JsonNode item : node) {{
-{III}final Reporting.Result<JsonNode> itemResult = tryJsonValueFromAt(
-{IIII}item, path + "[" + index + "]");
+{III}final Reporting.Result<JsonNode> itemResult = tryJsonValueFrom(item);
 {III}if (itemResult.isError()) {{
+{IIII}itemResult.getError().prependSegment(
+{IIIII}new Reporting.IndexSegment(index));
 {IIII}return itemResult;
 {III}}}
 {III}result.add(itemResult.getResult());
@@ -1409,9 +1470,11 @@ private static Reporting.Result<JsonNode> tryJsonValueFromAt(
 {II}final Iterator<String> names = node.fieldNames();
 {II}while (names.hasNext()) {{
 {III}final String name = names.next();
-{III}final Reporting.Result<JsonNode> valueResult = tryJsonValueFromAt(
-{IIII}node.get(name), path + "." + name);
+{III}final Reporting.Result<JsonNode> valueResult = tryJsonValueFrom(
+{IIII}node.get(name));
 {III}if (valueResult.isError()) {{
+{IIII}valueResult.getError().prependSegment(
+{IIIII}new Reporting.KeySegment(name));
 {IIII}return valueResult;
 {III}}}
 {III}result.set(name, valueResult.getResult());
@@ -1421,20 +1484,7 @@ private static Reporting.Result<JsonNode> tryJsonValueFromAt(
 
 {I}return Reporting.Result.failure(new Reporting.Error(
 {II}"Expected a JSON-able value (a null, a boolean, a number, a string, " +
-{II}"an array or an object) at " + path + ", but got: " +
-{II}node.getNodeType()));
-}}"""
-        ),
-        Stripped(
-            f"""\
-/**
- * Parse {{@code node}} as a JSON-able value.
- *
- * @param node to be parsed
- * @return the parsed value, or an error
- */
-private static Reporting.Result<JsonNode> tryJsonValueFrom(JsonNode node) {{
-{I}return tryJsonValueFromAt(node, "$");
+{II}"an array or an object), but got: " + node.getNodeType()));
 }}"""
         ),
         Stripped(
@@ -1494,9 +1544,9 @@ def _generate_json_able_serializer(
  * Serialize {{@code that}} as a JSON node.
  *
  * <p>A JSON-able value is almost a JSON node as it comes, but not quite: its
- * type rules out neither a missing node nor a non-finite number, neither of
- * which JSON can represent. Each is refused here, at any depth. A null node
- * is written as a JSON null.
+ * type rules out neither a missing node, a non-finite number nor an integer
+ * outside the safe integer range [-2^53 + 1, 2^53 - 1]. Each is refused
+ * here, at any depth. A null node is written as a JSON null.
  *
  * <p>The result is a deep copy, and never {{@code that}} itself, so that
  * the serialized document does not share a tree with the instance it came
@@ -1517,12 +1567,9 @@ private static JsonNode jsonValueToJsonNode(JsonNode that) {{
 {I}}}
 
 {I}if (that.isNumber()) {{
-{II}final double value = that.doubleValue();
-{II}if (Double.isInfinite(value) || Double.isNaN(value)) {{
-{III}throw new _SerializeFailure(
-{IIII}new Reporting.Error(
-{IIIII}"Expected a JSON-able value, but got the number " + value +
-{IIIII}", which is neither finite nor representable in JSON"));
+{II}final String cause = Verification.checkJsonAbleNumber(that);
+{II}if (cause != null) {{
+{III}throw new _SerializeFailure(new Reporting.Error(cause));
 {II}}}
 {II}return that.deepCopy();
 {I}}}
@@ -1650,7 +1697,7 @@ def _generate_deserialize_impl(
 
     # endregion
 
-    blocks: List[Stripped] = _generate_primitive_parsers()
+    blocks: List[Stripped] = _generate_primitive_parsers(symbol_table)
 
     if needs_prepend_name:
         blocks.append(_generate_prepend_name())
@@ -1794,11 +1841,61 @@ public static {name} deserialize{name}(JsonNode node) {{
     return Stripped(writer.getvalue())
 
 
+def _generate_deserialize_json_able(name: str, result_type: str) -> Stripped:
+    """
+    Generate the facade deserialization method for the JSON-able ``name``.
+
+    The ``name`` is ``JsonValue``, ``JsonArray`` or ``JsonObject``, and
+    the method gives back a node of ``result_type``.
+    """
+    what = name[len("Json") :].lower()
+
+    return Stripped(
+        f"""\
+/**
+ * Deserialize a JSON-able {what} from {{@code node}}.
+ *
+ * <p>A JSON-able value is, recursively, exactly as JSON itself is defined:
+ * a null node (JSON null), a boolean, a number, a string, an array of
+ * JSON-able values or an object of JSON-able values with string keys.
+ * An infinity, a not-a-number and an integer outside the safe integer
+ * range [-2^53 + 1, 2^53 - 1] are rejected at any depth.
+ *
+ * <p>The result is a deep copy, and never {{@code node}} itself.
+ *
+ * @param node JSON node to be parsed
+ * @throws DeserializeException if {{@code node}} is not a JSON-able {what}
+ */
+public static {result_type} deserialize{name}(JsonNode node) {{
+{I}final Reporting.Result<{result_type}> result =
+{II}_DeserializeImplementation.try{name}From(
+{III}node);
+
+{I}return result.onError(error -> {{
+{II}throw new DeserializeException(
+{III}Reporting.generateJsonPath(error.getPathSegments()),
+{III}error.getCause());
+{I}}});
+}}"""
+    )
+
+
 def _generate_deserialize(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the deserializer with a deserialization method for each class."""
     blocks: List[Stripped] = []
+
+    if intermediate_uses.json_types(symbol_table):
+        blocks.append(
+            _generate_deserialize_json_able(name="JsonValue", result_type="JsonNode")
+        )
+        blocks.append(
+            _generate_deserialize_json_able(name="JsonArray", result_type="ArrayNode")
+        )
+        blocks.append(
+            _generate_deserialize_json_able(name="JsonObject", result_type="ObjectNode")
+        )
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
             blocks.append(
@@ -2695,18 +2792,13 @@ def _generate_long_to_json_node_helper() -> Stripped:
  * @param that value to be converted
  */
 private static JsonNode longToJsonNode(Long that) {{
-{I}// NOTE (mristin):
-{I}// Outside this range an integer can not be exactly represented as a 64-bit
-{I}// floating-point number, which is what the JSON de-serializers of the other
-{I}// languages read a number into.
 {I}final long primitiveThat = that.longValue();
-{I}if (primitiveThat < -9007199254740991L || primitiveThat > 9007199254740991L) {{
+{I}if (!Verification.isSafeInteger(primitiveThat)) {{
 {II}throw new _SerializeFailure(
 {III}new Reporting.Error(
-{IIII}"The integer can not be serialized to JSON as it is outside "
-{IIIII}+ "the range [-2^53 + 1, 2^53 - 1]: " + that));
+{IIII}Verification.integerOutsideSafeRangeMessage(primitiveThat)));
 {I}}}
-{I}return JsonNodeFactory.instance.numberNode(that);
+{I}return JsonNodeFactory.instance.numberNode(primitiveThat);
 }}"""
     )
 
@@ -2877,6 +2969,33 @@ public static JsonNode toJsonObject(IClass that) {{
         ),
     ]
 
+    if intermediate_uses.json_types(symbol_table):
+        blocks.append(
+            Stripped(
+                f"""\
+/**
+ * Serialize the JSON-able value {{@code that}} into a JSON node.
+ *
+ * <p>The result is a deep copy, and never {{@code that}} itself. A null node
+ * is written as a JSON null.
+ *
+ * @throws SerializeException if {{@code that}} contains, at any depth,
+ * a missing node, an infinity, a not-a-number or an integer outside
+ * the safe integer range [-2^53 + 1, 2^53 - 1]
+ */
+public static JsonNode jsonValueToJsonNode(JsonNode that) {{
+{I}try {{
+{II}return _Transformer.jsonValueToJsonNode(that);
+{I}}} catch (_SerializeFailure failure) {{
+{II}final Reporting.Error error = failure.getError();
+{II}throw new SerializeException(
+{III}Reporting.generateJavaPath(error.getPathSegments()),
+{III}error.getCause());
+{I}}}
+}}"""
+            )
+        )
+
     if len(symbol_table.enumerations) > 0:
         # NOTE (mristin):
         # A literal carries its own text, so a single non-generic method
@@ -3032,6 +3151,19 @@ def generate(
         [
             Stripped("import com.fasterxml.jackson.databind.node.JsonNodeFactory;"),
             Stripped("import com.fasterxml.jackson.databind.node.ObjectNode;"),
+        ]
+    )
+
+    if intermediate_uses.json_types(symbol_table) or intermediate_uses.integers(
+        symbol_table
+    ):
+        imports.append(Stripped(f"import {package}.verification.Verification;"))
+
+    if intermediate_uses.integers(symbol_table):
+        imports.append(Stripped("import java.math.BigInteger;"))
+
+    imports.extend(
+        [
             Stripped("import java.util.ArrayList;"),
             Stripped("import java.util.Base64;"),
             Stripped("import java.util.HashSet;"),

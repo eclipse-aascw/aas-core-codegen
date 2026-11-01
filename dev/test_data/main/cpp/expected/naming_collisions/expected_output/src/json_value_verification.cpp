@@ -14,6 +14,80 @@ namespace dummy {
 namespace verification {
 
 namespace {
+/**
+ * \brief Describe that the \p integer of a JSON-able value lies outside
+ * the safe integer range.
+ *
+ * \param integer textual representation of the integer
+ * \return the cause of the error
+ */
+std::wstring DescribeJsonAbleIntegerOutsideSafeRange(
+  const std::wstring& integer
+) {
+  return common::Concat(
+    L"Expected a JSON-able value, but got the integer ",
+    integer,
+    L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+  );
+}
+}  // namespace
+
+/**
+ * \brief Check that the number \p json is a number of a JSON-able value.
+ *
+ * JSON knows a single numeric type, which all the other SDKs read into
+ * a 64-bit floating-point number. Hence a JSON-able number has to be finite,
+ * and an integer has to lie in the safe integer range [-2^53 + 1, 2^53 - 1],
+ * as for the integer properties of the model -- otherwise a reader might
+ * quietly get a different number than the one which was given.
+ *
+ * \param json number to be checked
+ * \return the cause why \p json is not JSON-able, if it is not
+ */
+common::optional<std::wstring> CheckJsonAbleNumber(
+  const nlohmann::json& json
+) {
+  switch (json.type()) {
+    case nlohmann::json::value_t::number_integer: {
+      const int64_t integer = json.get<int64_t>();
+      if (!common::IsSafeInteger(integer)) {
+        return DescribeJsonAbleIntegerOutsideSafeRange(std::to_wstring(integer));
+      }
+      return common::nullopt;
+    }
+
+    case nlohmann::json::value_t::number_unsigned: {
+      const uint64_t integer = json.get<uint64_t>();
+      if (!common::IsSafeInteger(integer)) {
+        return DescribeJsonAbleIntegerOutsideSafeRange(std::to_wstring(integer));
+      }
+      return common::nullopt;
+    }
+
+    case nlohmann::json::value_t::number_float: {
+      // NOTE (mristin):
+      // JSON knows neither an infinity nor a not-a-number, so we refuse both
+      // instead of silently writing them out as ``null``. The caller gives us
+      // an ``nlohmann::json`` which may well have been constructed
+      // programmatically, so a non-finite number can reach us even though no
+      // conformant parser would ever produce one.
+      const double number = json.get<double>();
+      if (!std::isfinite(number)) {
+        return common::Concat(
+          L"Expected a JSON-able value, but got the number ",
+          std::to_wstring(number),
+          L", which is neither finite nor representable in JSON"
+        );
+      }
+      return common::nullopt;
+    }
+
+    default:
+      return common::nullopt;
+  }
+}
+
+namespace {
 
 /**
  * \brief Check the shape of \p value itself, disregarding the nested values.
@@ -34,19 +108,8 @@ common::optional<std::wstring> CheckShallowly(
     );
   }
 
-  // NOTE (mristin):
-  // JSON knows neither an infinity nor a not-a-number, so neither is
-  // a JSON-able value, even though ``nlohmann::json`` will happily hold
-  // one if it was constructed programmatically. This mirrors what the
-  // jsonization refuses to serialize.
-  if (value.is_number_float() && !std::isfinite(value.get<double>())) {
-    return common::make_optional<std::wstring>(
-      common::Concat(
-        L"Expected a JSON-able value, but got the number ",
-        std::to_wstring(value.get<double>()),
-        L", which is neither finite nor representable in JSON"
-      )
-    );
+  if (value.is_number()) {
+    return CheckJsonAbleNumber(value);
   }
 
   return common::nullopt;

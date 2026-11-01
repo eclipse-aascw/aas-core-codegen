@@ -12,7 +12,6 @@ package verification
 
 import (
 	"fmt"
-	"math"
 	"sort"
 	ourcommon "github.com/dummy-works/dummy/common"
 	ourreporting "github.com/dummy-works/dummy/reporting"
@@ -70,6 +69,13 @@ func verifyJsonValue(
 		return false
 	}
 
+	// NOTE (mristin):
+	// An int is widened to an int64 first, so that a single case below
+	// handles both, as in the de/serialization.
+	if integer, ok := value.(int); ok {
+		value = int64(integer)
+	}
+
 	switch casted := value.(type) {
 		case bool:
 			return false
@@ -77,20 +83,17 @@ func verifyJsonValue(
 		case string:
 			return false
 
-		case float64:
-			// NOTE (mristin):
-			// JSON knows neither an infinity nor a not-a-number, so neither is
-			// a JSON-able value, even though a float64 holds either.
-			if math.IsInf(casted, 0) || math.IsNaN(casted) {
+		case int64:
+			if !ourcommon.IsSafeInteger(casted) {
 				return onError(
-					newVerificationError(
-						fmt.Sprintf(
-							"Expected a JSON-able value, but got the number %v, "+
-							"which is neither finite nor representable in JSON",
-							casted,
-						),
-					),
+					newVerificationError(ourcommon.NotJsonAbleIntegerMessage(casted)),
 				)
+			}
+			return false
+
+		case float64:
+			if cause := ourcommon.CheckJsonAbleFloat64(casted); cause != "" {
+				return onError(newVerificationError(cause))
 			}
 			return false
 
@@ -138,8 +141,8 @@ func verifyJsonValue(
 			return onError(
 				newVerificationError(
 					fmt.Sprintf(
-						"Expected a JSON-able value (a bool, a float64, a string, "+
-						"a JsonArray or a JsonObject), but got: %T",
+						"Expected a JSON-able value (a bool, a float64, an int, an int64, "+
+						"a string, a JsonArray or a JsonObject), but got: %T",
 						value,
 					),
 				),

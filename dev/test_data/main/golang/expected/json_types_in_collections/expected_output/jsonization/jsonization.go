@@ -127,66 +127,6 @@ func boolFromJsonable(
 	return
 }
 
-// Parse `jsonable` as a 64-bit integer, or return an error.
-func int64FromJsonable(
-	jsonable interface{},
-) (result int64, err error) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected an integer number, but got null",
-		)
-		return
-	}
-
-	f, ok := jsonable.(float64)
-	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected an integer number, but got %T",
-				jsonable,
-			),
-		)
-		return
-	}
-
-	if math.IsNaN(f) {
-		err = newDeserializationError(
-			"Expected an integer number, but got a NaN",
-		)
-		return
-	}
-
-	if math.IsInf(f, 0) {
-		err = newDeserializationError(
-			"Expected an integer number, but got an infinity",
-		)
-		return
-	}
-
-	if f != math.Trunc(f) {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected an integer number, but got a non-integer: %v",
-				f,
-			),
-		)
-		return
-	}
-
-	result = int64(f)
-	if f != float64(result) {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected an integer number fitting into int64, but got: %v",
-				jsonable,
-			),
-		)
-		return
-	}
-
-	return
-}
-
 // Parse `jsonable` as a 64-bit float, or return an error.
 func float64FromJsonable(
 	jsonable interface{},
@@ -503,24 +443,24 @@ func somethingFromMapWithoutDispatch(
 	for k, v := range m {
 		switch k {
 		case "values":
-			theValues, err = parseArray(v, jsonValueFromJsonable)
+			theValues, err = parseArray(v, JsonValueFromJsonable)
 			foundValues = true
 
 		case "tupleWithJson":
 			theTupleWithJson, err = parseTuple4(
 				v,
 				stringFromJsonable,
-				jsonValueFromJsonable,
-				jsonArrayFromJsonable,
-				jsonObjectFromJsonable,
+				JsonValueFromJsonable,
+				JsonArrayFromJsonable,
+				JsonObjectFromJsonable,
 			)
 			foundTupleWithJson = true
 
 		case "optionalObjects":
-			theOptionalObjects, err = parseArray(v, jsonObjectFromJsonable)
+			theOptionalObjects, err = parseArray(v, JsonObjectFromJsonable)
 
 		case "optionalObject":
-			theOptionalObject, err = jsonObjectFromJsonable(v)
+			theOptionalObject, err = JsonObjectFromJsonable(v)
 
 		default:
 			err = newDeserializationError(
@@ -650,30 +590,6 @@ func mustSerializationError(err error) *SerializationError {
 	return seriaErr
 }
 
-// Try to cast `that` to a float64 and box it as a JSON-able value, or
-// return an error.
-//
-// The result is returned as `interface{}`, not the more specific
-// `float64`, so that this function itself can be passed on as a bare
-// reference wherever a `func(int64) (interface{}, error)` is expected,
-// e.g. as an item (de)serializer in a list or a tuple.
-func int64ToJsonable(
-	that int64,
-) (result interface{}, err error) {
-	if that > 9007199254740991 || that < -9007199254740991 {
-		err = newSerializationError(
-			fmt.Sprintf(
-				"64-bit integer can not be represented as 64-bit float in JSON: %v",
-				that,
-			),
-		)
-		return
-	}
-
-	result = float64(that);
-	return
-}
-
 // Box `that` as a JSON-able value, or return an error.
 //
 // JSON knows neither an infinity nor a not-a-number, so we refuse to
@@ -755,13 +671,13 @@ func directToJsonable[T any](item T) (interface{}, error) {
 
 // Serialize the JSON-able `item` as a JSON-able value.
 //
-// ``jsonValueToJsonable`` takes an ``ourtypes.JsonValue``, so a *function*
+// ``JsonValueToJsonable`` takes an ``ourtypes.JsonValue``, so a *function*
 // which takes an ``ourtypes.JsonArray`` or an ``ourtypes.JsonObject`` is
 // a different type altogether, even though either value is assignable to
 // an ``ourtypes.JsonValue``. This wrapper gives the one signature which
 // ``serializeArray``/``serializeTupleN`` expect for every shape.
 func jsonAbleToJsonable[T any](item T) (interface{}, error) {
-	return jsonValueToJsonable(item)
+	return JsonValueToJsonable(item)
 }
 
 // Parse `jsonable` as a JSON-able value.
@@ -772,16 +688,26 @@ func jsonAbleToJsonable[T any](item T) (interface{}, error) {
 // a not-a-number are rejected at any depth, as JSON can not represent them
 // at all.
 //
+// An int or an int64, as it might come from a value put together
+// programmatically, is accepted as well, and parsed as a float64, provided
+// that it lies in the safe integer range [-2^53 + 1, 2^53 - 1].
+//
 // The result is a new structure, and never `jsonable` itself, so that
 // the parsed instance does not alias the document it came from.
 //
-// The path of an error is relative to `jsonable`, and the caller is expected
-// to prepend the way to it.
-func jsonValueFromJsonable(
+// The path of an error is relative to `jsonable`.
+func JsonValueFromJsonable(
 	jsonable interface{},
 ) (result ourtypes.JsonValue, err error) {
 	if jsonable == nil {
 		return
+	}
+
+	// NOTE (mristin):
+	// An int is widened to an int64 first, so that a single case below
+	// handles both.
+	if integer, ok := jsonable.(int); ok {
+		jsonable = int64(integer)
 	}
 
 	switch casted := jsonable.(type) {
@@ -793,19 +719,23 @@ func jsonValueFromJsonable(
 			result = casted
 			return
 
+		case int64:
+			if !ourcommon.IsSafeInteger(casted) {
+				err = newDeserializationError(
+					ourcommon.NotJsonAbleIntegerMessage(casted),
+				)
+				return
+			}
+			result = float64(casted)
+			return
+
 		case float64:
 			// NOTE (mristin):
 			// JSON knows neither an infinity nor a not-a-number. encoding/json
 			// never gives us one, but `jsonable` may well have been put together
 			// programmatically.
-			if math.IsInf(casted, 0) || math.IsNaN(casted) {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a JSON-able value, but got the number %v, "+
-						"which is neither finite nor representable in JSON",
-						casted,
-					),
-				)
+			if cause := ourcommon.CheckJsonAbleFloat64(casted); cause != "" {
+				err = newDeserializationError(cause)
 				return
 			}
 			result = casted
@@ -815,7 +745,7 @@ func jsonValueFromJsonable(
 			items := make(ourtypes.JsonArray, 0, len(casted))
 			for i, item := range casted {
 				var parsed ourtypes.JsonValue
-				parsed, err = jsonValueFromJsonable(item)
+				parsed, err = JsonValueFromJsonable(item)
 				if err != nil {
 					mustDeserializationError(err).prependIndex(i)
 					return
@@ -829,7 +759,7 @@ func jsonValueFromJsonable(
 			members := make(ourtypes.JsonObject, len(casted))
 			for key, value := range casted {
 				var parsed ourtypes.JsonValue
-				parsed, err = jsonValueFromJsonable(value)
+				parsed, err = JsonValueFromJsonable(value)
 				if err != nil {
 					mustDeserializationError(err).prependKey(key)
 					return
@@ -842,8 +772,8 @@ func jsonValueFromJsonable(
 		default:
 			err = newDeserializationError(
 				fmt.Sprintf(
-					"Expected a JSON-able value (a bool, a float64, a string, "+
-					"an array or an object), but got: %T",
+					"Expected a JSON-able value (a bool, a float64, an int, an int64, "+
+					"a string, an array or an object), but got: %T",
 					jsonable,
 				),
 			)
@@ -852,7 +782,7 @@ func jsonValueFromJsonable(
 }
 
 // Parse `jsonable` as a JSON-able array.
-func jsonArrayFromJsonable(
+func JsonArrayFromJsonable(
 	jsonable interface{},
 ) (result ourtypes.JsonArray, err error) {
 	if _, ok := jsonable.([]interface{}); !ok {
@@ -863,7 +793,7 @@ func jsonArrayFromJsonable(
 	}
 
 	var value ourtypes.JsonValue
-	value, err = jsonValueFromJsonable(jsonable)
+	value, err = JsonValueFromJsonable(jsonable)
 	if err != nil {
 		return
 	}
@@ -873,7 +803,7 @@ func jsonArrayFromJsonable(
 }
 
 // Parse `jsonable` as a JSON-able object.
-func jsonObjectFromJsonable(
+func JsonObjectFromJsonable(
 	jsonable interface{},
 ) (result ourtypes.JsonObject, err error) {
 	if _, ok := jsonable.(map[string]interface{}); !ok {
@@ -884,7 +814,7 @@ func jsonObjectFromJsonable(
 	}
 
 	var value ourtypes.JsonValue
-	value, err = jsonValueFromJsonable(jsonable)
+	value, err = JsonValueFromJsonable(jsonable)
 	if err != nil {
 		return
 	}
@@ -900,13 +830,23 @@ func jsonObjectFromJsonable(
 // represent. It is refused here, at any depth. A nil is written as
 // a JSON null.
 //
+// An int or an int64 is accepted as well, and written as a float64, provided
+// that it lies in the safe integer range [-2^53 + 1, 2^53 - 1].
+//
 // The result is a new structure, and never `value` itself, so that
 // the serialized document does not alias the instance it came from.
-func jsonValueToJsonable(
+func JsonValueToJsonable(
 	value ourtypes.JsonValue,
 ) (result interface{}, err error) {
 	if value == nil {
 		return
+	}
+
+	// NOTE (mristin):
+	// An int is widened to an int64 first, so that a single case below
+	// handles both.
+	if integer, ok := value.(int); ok {
+		value = int64(integer)
 	}
 
 	switch casted := value.(type) {
@@ -918,15 +858,19 @@ func jsonValueToJsonable(
 			result = casted
 			return
 
-		case float64:
-			if math.IsInf(casted, 0) || math.IsNaN(casted) {
+		case int64:
+			if !ourcommon.IsSafeInteger(casted) {
 				err = newSerializationError(
-					fmt.Sprintf(
-						"Expected a JSON-able value, but got the number %v, which "+
-						"is neither finite nor representable in JSON",
-						casted,
-					),
+					ourcommon.NotJsonAbleIntegerMessage(casted),
 				)
+				return
+			}
+			result = float64(casted)
+			return
+
+		case float64:
+			if cause := ourcommon.CheckJsonAbleFloat64(casted); cause != "" {
+				err = newSerializationError(cause)
 				return
 			}
 			result = casted
@@ -936,7 +880,7 @@ func jsonValueToJsonable(
 			items := make([]interface{}, 0, len(casted))
 			for i, item := range casted {
 				var serialized interface{}
-				serialized, err = jsonValueToJsonable(item)
+				serialized, err = JsonValueToJsonable(item)
 				if err != nil {
 					mustSerializationError(err).prependIndex(i)
 					return
@@ -950,7 +894,7 @@ func jsonValueToJsonable(
 			members := make(map[string]interface{}, len(casted))
 			for key, item := range casted {
 				var serialized interface{}
-				serialized, err = jsonValueToJsonable(item)
+				serialized, err = JsonValueToJsonable(item)
 				if err != nil {
 					mustSerializationError(err).prependKey(key)
 					return
@@ -963,8 +907,8 @@ func jsonValueToJsonable(
 		default:
 			err = newSerializationError(
 				fmt.Sprintf(
-					"Expected a JSON-able value (a bool, a float64, a string, "+
-					"a JsonArray or a JsonObject), but got: %T",
+					"Expected a JSON-able value (a bool, a float64, an int, an int64, "+
+					"a string, a JsonArray or a JsonObject), but got: %T",
 					value,
 				),
 			)
@@ -1052,7 +996,7 @@ func somethingToMap(
 	}
 
 	if that.OptionalObject() != nil {
-		result["optionalObject"], err = jsonValueToJsonable(that.OptionalObject())
+		result["optionalObject"], err = JsonValueToJsonable(that.OptionalObject())
 		if err != nil {
 			mustSerializationError(err).prependName("OptionalObject()")
 			return

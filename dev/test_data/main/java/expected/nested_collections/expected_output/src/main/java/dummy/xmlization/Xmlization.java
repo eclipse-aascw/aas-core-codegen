@@ -26,6 +26,7 @@ import dummy.visitation.*;
 import dummy.xmlcommon.XmlCommon;
 import java.util.HashSet;
 import java.util.Set;
+import dummy.verification.Verification;
 
 /**
  * Provide de/serialization of meta-model classes to/from XML.
@@ -411,11 +412,18 @@ public class Xmlization {
 
     private static Reporting.Result<Long> readTextAs_long(
       XMLEventReader reader, boolean isEmpty) {
-      return readText(
+      final Reporting.Result<Long> result = readText(
         reader,
         isEmpty,
         _DeserializeImplementation::readContentAsLong,
         "Long");
+
+      if (result.isError() || Verification.isSafeInteger(result.getResult())) {
+        return result;
+      }
+
+      return Reporting.Result.failure(new Reporting.Error(
+        Verification.integerOutsideSafeRangeMessage(result.getResult())));
     }
 
     private static Reporting.Result<List<Long>> readListOf_long(
@@ -1373,6 +1381,26 @@ public class Xmlization {
     }
 
     /**
+     * Write {@code that} as XML content, provided that it is a safe integer.
+     *
+     * <p>This is the {@link ContentWriter} of every {@code long}-typed
+     * value, be it a property, a list item or a tuple item. An integer outside
+     * the safe integer range [-2^53 + 1, 2^53 - 1] is refused, exactly as in
+     * the JSON serialization, so that what XML holds JSON can hold as well.
+     */
+    private static void writeLongContent(
+      Long that,
+      XMLStreamWriter writer) throws XMLStreamException {
+      final long primitiveThat = that.longValue();
+      if (!Verification.isSafeInteger(primitiveThat)) {
+        throw new XmlCommon.SerializeFailure(
+          new Reporting.Error(
+            Verification.integerOutsideSafeRangeMessage(primitiveThat)));
+      }
+      writer.writeCharacters(Long.toString(primitiveThat));
+    }
+
+    /**
      * Write the text of {@code that} as XML content.
      *
      * <p>This is the {@link ContentWriter} of every enumeration-typed value, be
@@ -1387,13 +1415,13 @@ public class Xmlization {
       writer.writeCharacters(that.literalText());
     }
 
-    private static void writeListOf_ListOf_stringified(
-      List<? extends List<?>> that,
+    private static void writeListOf_ListOf_long(
+      List<? extends List<? extends Long>> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
-        for (List<?> item : that) {
-          writeAtV_ListOf_stringified(item, writer);
+        for (List<? extends Long> item : that) {
+          writeAtV_ListOf_long(item, writer);
           index++;
         }
       } catch (XmlCommon.SerializeFailure failure) {
@@ -1403,13 +1431,13 @@ public class Xmlization {
       }
     }
 
-    private static void writeListOf_stringified(
-      List<?> that,
+    private static void writeListOf_long(
+      List<? extends Long> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
-        for (Object item : that) {
-          writeAtV_stringified(item, writer);
+        for (Long item : that) {
+          writeAtV_long(item, writer);
           index++;
         }
       } catch (XmlCommon.SerializeFailure failure) {
@@ -1419,13 +1447,13 @@ public class Xmlization {
       }
     }
 
-    private static void writeListOf_ListOf_TupleOf2_stringified_SetOf_string(
-      List<? extends List<? extends Tuple2<?, ? extends Set<String>>>> that,
+    private static void writeListOf_ListOf_TupleOf2_long_SetOf_string(
+      List<? extends List<? extends Tuple2<? extends Long, ? extends Set<String>>>> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
-        for (List<? extends Tuple2<?, ? extends Set<String>>> item : that) {
-          writeAtV_ListOf_TupleOf2_stringified_SetOf_string(item, writer);
+        for (List<? extends Tuple2<? extends Long, ? extends Set<String>>> item : that) {
+          writeAtV_ListOf_TupleOf2_long_SetOf_string(item, writer);
           index++;
         }
       } catch (XmlCommon.SerializeFailure failure) {
@@ -1435,13 +1463,13 @@ public class Xmlization {
       }
     }
 
-    private static void writeListOf_TupleOf2_stringified_SetOf_string(
-      List<? extends Tuple2<?, ? extends Set<String>>> that,
+    private static void writeListOf_TupleOf2_long_SetOf_string(
+      List<? extends Tuple2<? extends Long, ? extends Set<String>>> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
-        for (Tuple2<?, ? extends Set<String>> item : that) {
-          writeAtV_TupleOf2_stringified_SetOf_string(item, writer);
+        for (Tuple2<? extends Long, ? extends Set<String>> item : that) {
+          writeAtV_TupleOf2_long_SetOf_string(item, writer);
           index++;
         }
       } catch (XmlCommon.SerializeFailure failure) {
@@ -1451,12 +1479,12 @@ public class Xmlization {
       }
     }
 
-    private static void writeTupleOf2_stringified_SetOf_string(
-      Tuple2<?, ? extends Set<String>> that,
+    private static void writeTupleOf2_long_SetOf_string(
+      Tuple2<? extends Long, ? extends Set<String>> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
-        writeAtV1_stringified(that.item1(), writer);
+        writeAtV1_long(that.item1(), writer);
         index = 1;
         writeAtV2_SetOf_string(that.item2(), writer);
       } catch (XmlCommon.SerializeFailure failure) {
@@ -1482,11 +1510,11 @@ public class Xmlization {
       }
     }
 
-    private static void writeTupleOf3_ListOf_IClass_SetOf_Color_TupleOf2_stringified_stringified(
+    private static void writeTupleOf3_ListOf_IClass_SetOf_Color_TupleOf2_long_stringified(
       Tuple3<
         ? extends List<? extends IClass>,
         ? extends Set<Color>,
-        ? extends Tuple2<?, ?>> that,
+        ? extends Tuple2<? extends Long, ?>> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
@@ -1494,7 +1522,7 @@ public class Xmlization {
         index = 1;
         writeAtV2_SetOf_Color(that.item2(), writer);
         index = 2;
-        writeAtV3_TupleOf2_stringified_stringified(that.item3(), writer);
+        writeAtV3_TupleOf2_long_stringified(that.item3(), writer);
       } catch (XmlCommon.SerializeFailure failure) {
         failure.getError().prependSegment(
           new Reporting.IndexSegment(index));
@@ -1534,12 +1562,12 @@ public class Xmlization {
       }
     }
 
-    private static void writeTupleOf2_stringified_stringified(
-      Tuple2<?, ?> that,
+    private static void writeTupleOf2_long_stringified(
+      Tuple2<? extends Long, ?> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
-        writeAtV1_stringified(that.item1(), writer);
+        writeAtV1_long(that.item1(), writer);
         index = 1;
         writeAtV2_stringified(that.item2(), writer);
       } catch (XmlCommon.SerializeFailure failure) {
@@ -1613,31 +1641,41 @@ public class Xmlization {
       }
     }
 
+    private static void writeAtV_long(
+      Long that,
+      XMLStreamWriter writer) {
+      XmlCommon.writeElement(
+        "v",
+        that,
+        writer,
+        _VisitorWithWriter::writeLongContent);
+    }
+
+    private static void writeAtV_ListOf_long(
+      List<? extends Long> that,
+      XMLStreamWriter writer) {
+      XmlCommon.writeElement(
+        "v",
+        that,
+        writer,
+        _VisitorWithWriter::writeListOf_long);
+    }
+
+    private static void writeAtV1_long(
+      Long that,
+      XMLStreamWriter writer) {
+      XmlCommon.writeElement(
+        "v1",
+        that,
+        writer,
+        _VisitorWithWriter::writeLongContent);
+    }
+
     private static void writeAtV_stringified(
       Object that,
       XMLStreamWriter writer) {
       XmlCommon.writeElement(
         "v",
-        that,
-        writer,
-        XmlCommon::writeStringifiedContent);
-    }
-
-    private static void writeAtV_ListOf_stringified(
-      List<?> that,
-      XMLStreamWriter writer) {
-      XmlCommon.writeElement(
-        "v",
-        that,
-        writer,
-        _VisitorWithWriter::writeListOf_stringified);
-    }
-
-    private static void writeAtV1_stringified(
-      Object that,
-      XMLStreamWriter writer) {
-      XmlCommon.writeElement(
-        "v1",
         that,
         writer,
         XmlCommon::writeStringifiedContent);
@@ -1653,24 +1691,24 @@ public class Xmlization {
         _VisitorWithWriter::writeSetOf_string);
     }
 
-    private static void writeAtV_TupleOf2_stringified_SetOf_string(
-      Tuple2<?, ? extends Set<String>> that,
+    private static void writeAtV_TupleOf2_long_SetOf_string(
+      Tuple2<? extends Long, ? extends Set<String>> that,
       XMLStreamWriter writer) {
       XmlCommon.writeElement(
         "v",
         that,
         writer,
-        _VisitorWithWriter::writeTupleOf2_stringified_SetOf_string);
+        _VisitorWithWriter::writeTupleOf2_long_SetOf_string);
     }
 
-    private static void writeAtV_ListOf_TupleOf2_stringified_SetOf_string(
-      List<? extends Tuple2<?, ? extends Set<String>>> that,
+    private static void writeAtV_ListOf_TupleOf2_long_SetOf_string(
+      List<? extends Tuple2<? extends Long, ? extends Set<String>>> that,
       XMLStreamWriter writer) {
       XmlCommon.writeElement(
         "v",
         that,
         writer,
-        _VisitorWithWriter::writeListOf_TupleOf2_stringified_SetOf_string);
+        _VisitorWithWriter::writeListOf_TupleOf2_long_SetOf_string);
     }
 
     private static void writeAtV1_ListOf_IClass(
@@ -1713,14 +1751,14 @@ public class Xmlization {
         XmlCommon::writeStringifiedContent);
     }
 
-    private static void writeAtV3_TupleOf2_stringified_stringified(
-      Tuple2<?, ?> that,
+    private static void writeAtV3_TupleOf2_long_stringified(
+      Tuple2<? extends Long, ?> that,
       XMLStreamWriter writer) {
       XmlCommon.writeElement(
         "v3",
         that,
         writer,
-        _VisitorWithWriter::writeTupleOf2_stringified_stringified);
+        _VisitorWithWriter::writeTupleOf2_long_stringified);
     }
 
     private static void writeAtV_SetOf_Color(
@@ -1784,7 +1822,7 @@ public class Xmlization {
         "getSerialNumber()",
         that.getSerialNumber(),
         writer,
-        XmlCommon::writeStringifiedContent);
+        _VisitorWithWriter::writeLongContent);
     }
 
     @Override
@@ -1807,21 +1845,21 @@ public class Xmlization {
         "getGrid()",
         that.getGrid(),
         writer,
-        _VisitorWithWriter::writeListOf_ListOf_stringified);
+        _VisitorWithWriter::writeListOf_ListOf_long);
 
       writeProperty(
         "rowsOfPairs",
         "getRowsOfPairs()",
         that.getRowsOfPairs(),
         writer,
-        _VisitorWithWriter::writeListOf_ListOf_TupleOf2_stringified_SetOf_string);
+        _VisitorWithWriter::writeListOf_ListOf_TupleOf2_long_SetOf_string);
 
       writeProperty(
         "mixed",
         "getMixed()",
         that.getMixed(),
         writer,
-        _VisitorWithWriter::writeTupleOf3_ListOf_IClass_SetOf_Color_TupleOf2_stringified_stringified);
+        _VisitorWithWriter::writeTupleOf3_ListOf_IClass_SetOf_Color_TupleOf2_long_stringified);
 
       writeProperty(
         "setsOfColors",

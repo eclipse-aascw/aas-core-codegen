@@ -6,6 +6,9 @@
 package dummy.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import dummy.jsonization.Jsonization;
@@ -16,19 +19,29 @@ import dummy.common.*;
 import dummy.types.enums.*;
 import dummy.types.model.*;
 import dummy.verification.Verification;
+import dummy.xmlcommon.XmlCommon;
+import dummy.xmlization.Xmlization;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.StringWriter;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
+import javax.xml.stream.XMLOutputFactory;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamWriter;
 import org.junit.jupiter.api.Test;
 
 public class TestJsonizationOfConcreteClasses {
@@ -198,6 +211,85 @@ public class TestJsonizationOfConcreteClasses {
     return CommonJson.readFromFile(paths.get(0));
   }
 
+  /**
+   * Render the verification errors of {@code instance} as
+   * {@code "path: cause"}.
+   */
+  private static List<String> verificationErrors(IClass instance) {
+    final List<String> result = new ArrayList<>();
+    for (Reporting.Error error : Verification.verify(instance)) {
+      result.add(
+        Reporting.generateJsonPath(error.getPathSegments())
+          + ": " + error.getCause());
+    }
+    return result;
+  }
+
+  /**
+   * Serialize {@code instance} to JSON, and give the reason why it failed,
+   * or null if it did not.
+   */
+  private static String jsonSerializationFailure(IClass instance) {
+    try {
+      Jsonization.Serialize.toJsonObject(instance);
+      return null;
+    } catch (Jsonization.SerializeException exception) {
+      return exception.getReason().orElse(null);
+    }
+  }
+
+  /**
+   * Serialize {@code instance} to XML, and give the reason why it failed,
+   * or null if it did not.
+   */
+  private static String xmlSerializationFailure(IClass instance)
+    throws XMLStreamException {
+    final XMLStreamWriter writer =
+      XMLOutputFactory.newFactory().createXMLStreamWriter(new StringWriter());
+    try {
+      Xmlization.Serialize.to(instance, writer);
+      return null;
+    } catch (XmlCommon.SerializeException exception) {
+      return exception.getReason().orElse(null);
+    }
+  }
+
+  /**
+   * Assert that neither the verification nor the serializations refuse
+   * an integer of {@code instance} as outside the safe integer range.
+   */
+  private static void assertNoSafeIntegerError(IClass instance)
+    throws XMLStreamException {
+    for (String error : verificationErrors(instance)) {
+      if (error.contains("outside the safe integer range")) {
+        fail("Expected no safe integer error, but got: " + error);
+      }
+    }
+
+    assertNull(jsonSerializationFailure(instance));
+    assertNull(xmlSerializationFailure(instance));
+  }
+
+  @Test
+  public void testIsSafeInteger() {
+    assertTrue(Verification.isSafeInteger(9007199254740991L));
+    assertTrue(Verification.isSafeInteger(-9007199254740991L));
+    assertFalse(Verification.isSafeInteger(9007199254740992L));
+    assertFalse(Verification.isSafeInteger(-9007199254740992L));
+
+    assertTrue(Verification.isSafeInteger(9007199254740991.0));
+    assertTrue(Verification.isSafeInteger(-9007199254740991.0));
+    assertFalse(Verification.isSafeInteger(9007199254740992.0));
+    assertFalse(Verification.isSafeInteger(-9007199254740992.0));
+
+    assertTrue(Verification.isSafeInteger(BigInteger.valueOf(9007199254740991L)));
+    assertTrue(Verification.isSafeInteger(BigInteger.valueOf(-9007199254740991L)));
+    assertFalse(Verification.isSafeInteger(BigInteger.valueOf(9007199254740992L)));
+    assertFalse(Verification.isSafeInteger(BigInteger.valueOf(-9007199254740992L)));
+    assertFalse(Verification.isSafeInteger(BigInteger.ONE.shiftLeft(64)));
+    assertFalse(Verification.isSafeInteger(BigInteger.ONE.shiftLeft(64).negate()));
+  } // public void testIsSafeInteger
+
   @Test
   public void testSomethingSomeIntSerializationOutofrange() throws IOException {
     for (long value : new long[] {9007199254740992L, -9007199254740992L}) {
@@ -220,6 +312,42 @@ public class TestJsonizationOfConcreteClasses {
       }
     }
   } // public void testSomethingSomeIntSerializationOutofrange
+
+  @Test
+  public void testSomethingSomeIntOutsideTheSafeIntegerRange() throws IOException, XMLStreamException {
+    for (long value : new long[] {9007199254740992L, -9007199254740992L}) {
+      final Something instance =
+        Jsonization.Deserialize.deserializeSomething(
+          loadTheFirstExpected("Something"));
+
+      instance.setSomeInt(value);
+
+      final String expected =
+        "Expected an integer, but got " + value
+          + ", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]";
+
+      final List<String> errors = verificationErrors(instance);
+      if (!errors.contains("someInt: " + expected)) {
+        fail("Expected the verification error " + expected + ", but got: " + errors);
+      }
+
+      assertEquals(expected, jsonSerializationFailure(instance));
+      assertEquals(expected, xmlSerializationFailure(instance));
+    }
+  } // public void testSomethingSomeIntOutsideTheSafeIntegerRange
+
+  @Test
+  public void testSomethingSomeIntAtTheSafeIntegerBounds() throws IOException, XMLStreamException {
+    for (long value : new long[] {9007199254740991L, -9007199254740991L}) {
+      final Something instance =
+        Jsonization.Deserialize.deserializeSomething(
+          loadTheFirstExpected("Something"));
+
+      instance.setSomeInt(value);
+
+      assertNoSafeIntegerError(instance);
+    }
+  } // public void testSomethingSomeIntAtTheSafeIntegerBounds
 
   @Test
   public void testSomethingSomeFloatSerializationNonfinite() throws IOException {

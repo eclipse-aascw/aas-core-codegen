@@ -480,13 +480,12 @@ def write_discriminator(
 {II}# NOTE (mristin):
 {II}# An ``int`` is written out as it stands, free of the fraction which
 {II}# a ``float`` carries. JSON knows a single numeric type, though, so
-{II}# it has to be one which a ``float`` can hold exactly -- otherwise
-{II}# a reader, which reads every <double> as a ``float``, would get
+{II}# it has to lie in the safe integer range [-2^53 + 1, 2^53 - 1] -- otherwise
+{II}# a reader, which reads every <double> as a ``float``, might get
 {II}# a different number back.
-{II}if our_common.try_to_convert_int_to_float(value) is None:
+{II}if not our_common.is_safe_integer(value):
 {III}raise SerializationException(
-{IIII}f"Expected a JSON-able value, but got the integer {{value}}, "
-{IIII}f"which is not exactly representable as a JSON number"
+{IIII}our_common.unsafe_json_able_integer_message(value)
 {III})
 
 {II}writer.write_start_element_in_no_namespace('double')

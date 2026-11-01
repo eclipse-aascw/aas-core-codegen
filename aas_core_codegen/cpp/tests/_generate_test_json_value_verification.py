@@ -10,6 +10,7 @@ from aas_core_codegen.cpp.common import (
     INDENT as I,
     INDENT2 as II,
     INDENT3 as III,
+    INDENT4 as IIII,
 )
 
 
@@ -36,6 +37,7 @@ def generate_implementation(library_namespace: Stripped) -> str:
         ),
         Stripped(
             f"""\
+#include "{include_prefix_path}/jsonization.hpp"
 #include "{include_prefix_path}/verification.hpp"
 #include "json_value_verification.hpp"
 
@@ -44,6 +46,7 @@ def generate_implementation(library_namespace: Stripped) -> str:
 
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 #pragma warning(pop)"""
         ),
@@ -299,6 +302,62 @@ TEST_CASE("Reject a value whose top-level shape does not match kObject") {{
 
 {I}const std::vector<verification::Error> errors(CollectErrors(verificator));
 {I}REQUIRE(errors.size() == 1);
+}}"""
+        ),
+        Stripped(
+            f"""\
+TEST_CASE("Reject an integer just outside the safe integer range") {{
+{I}// NOTE (mristin):
+{I}// We construct the values programmatically, so that we cover both
+{I}// the signed and the unsigned integers of ``nlohmann::json``.
+{I}const std::vector<std::pair<nlohmann::json, std::wstring> > cases = {{
+{II}{{nlohmann::json(int64_t(9007199254740992LL)), L"9007199254740992"}},
+{II}{{nlohmann::json(int64_t(-9007199254740992LL)), L"-9007199254740992"}},
+{II}{{nlohmann::json(uint64_t(9007199254740992ULL)), L"9007199254740992"}}
+{I}}};
+
+{I}for (const std::pair<nlohmann::json, std::wstring>& a_case : cases) {{
+{II}const nlohmann::json& value = a_case.first;
+
+{II}verification::JsonValueVerificator verificator(
+{III}value, verification::JsonValueShape::kAny
+{II});
+
+{II}const std::vector<verification::Error> errors(CollectErrors(verificator));
+{II}REQUIRE(errors.size() == 1);
+{II}REQUIRE(
+{III}errors[0].cause
+{III}== L"Expected a JSON-able value, but got the integer " + a_case.second
+{IIII}+ L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+{II});
+
+{II}REQUIRE(!our::jsonization::JsonValueFrom(value).has_value());
+
+{II}REQUIRE_THROWS_AS(
+{III}our::jsonization::SerializeJsonValue(value),
+{III}our::jsonization::SerializationException
+{II});
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+TEST_CASE("Accept the integers at the bounds of the safe integer range") {{
+{I}for (
+{II}const int64_t integer : {{9007199254740991LL, -9007199254740991LL}}
+{I}) {{
+{II}const nlohmann::json value(integer);
+
+{II}verification::JsonValueVerificator verificator(
+{III}value, verification::JsonValueShape::kAny
+{II});
+
+{II}REQUIRE(CollectErrors(verificator).empty());
+
+{II}REQUIRE(our::jsonization::JsonValueFrom(value).has_value());
+
+{II}REQUIRE(our::jsonization::SerializeJsonValue(value) == value);
+{I}}}
 }}"""
         ),
         cpp_common.WARNING,

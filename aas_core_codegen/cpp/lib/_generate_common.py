@@ -834,6 +834,85 @@ int64_t FloorMod(int64_t dividend, int64_t divisor) {{
 # the methods of the types can use it. It is public so that the clients can rely
 # on it, and so that we can unit-test it.
 
+
+#: Declarations of the predicates checking the safe integer range
+IS_SAFE_INTEGER_DECLARATIONS: Final[Sequence[Stripped]] = [
+    Stripped(
+        """\
+/**
+ * \\brief Check that the integer \\p value lies in the safe integer range
+ * [-2^53 + 1, 2^53 - 1].
+ *
+ * JSON knows a single numeric type, which many readers parse into a 64-bit
+ * floating-point number. Outside the safe integer range, such a reader might
+ * quietly get a different integer than the one which was written.
+ *
+ * The verification, the JSON and XML de/serialization and ParseSafeInt all
+ * use this check, so that an instance which passes the verification can be
+ * serialized to JSON.
+ *
+ * \\param value to be checked
+ * \\return true if \\p value lies in the range
+ */
+bool IsSafeInteger(int64_t value);"""
+    ),
+    Stripped(
+        """\
+/**
+ * \\brief Check that the unsigned integer \\p value lies in the safe integer range
+ * [-2^53 + 1, 2^53 - 1].
+ *
+ * \\param value to be checked
+ * \\return true if \\p value lies in the range
+ */
+bool IsSafeInteger(uint64_t value);"""
+    ),
+    Stripped(
+        """\
+/**
+ * \\brief Check that the whole number \\p value lies in the safe integer range
+ * [-2^53 + 1, 2^53 - 1].
+ *
+ * We check only the range. The caller has to check that \\p value is whole.
+ *
+ * \\param value to be checked
+ * \\return true if \\p value lies in the range, false for a not-a-number
+ */
+bool IsSafeInteger(double value);"""
+    ),
+]
+
+#: Definitions of the predicates checking the safe integer range
+IS_SAFE_INTEGER_DEFINITIONS: Final[Sequence[Stripped]] = [
+    Stripped(
+        f"""\
+bool IsSafeInteger(int64_t value) {{
+{I}return (
+{II}-9007199254740991LL <= value
+{II}&& value <= 9007199254740991LL
+{I});
+}}"""
+    ),
+    Stripped(
+        f"""\
+bool IsSafeInteger(uint64_t value) {{
+{I}return value <= 9007199254740991ULL;
+}}"""
+    ),
+    Stripped(
+        f"""\
+bool IsSafeInteger(double value) {{
+{I}// NOTE (mristin):
+{I}// A not-a-number fails both comparisons, so it lies outside the range.
+{I}return (
+{II}-9007199254740991.0 <= value
+{II}&& value <= 9007199254740991.0
+{I});
+}}"""
+    ),
+]
+
+
 #: Name of the helper function to parse the safe integers
 PARSE_SAFE_INT_NAME: Final[Identifier] = Identifier("ParseSafeInt")
 
@@ -847,8 +926,13 @@ PARSE_SAFE_INT_DECLARATION = Stripped(
  * transpilation. We accept only an optional sign followed by the ASCII digits,
  * and only the safe integers, <em>i.e.</em>, the integers within
  * <code>-(2^53 - 1)</code> and <code>2^53 - 1</code>, which a double-precision
- * floating-point number represents exactly. This way, all the SDKs behave
- * the same.
+ * floating-point number represents exactly.
+ *
+ * We check the safe range even though an <code>int64_t</code> could hold
+ * larger integers. TypeScript represents the integers as <code>number</code>,
+ * which holds them exactly only within the safe range, and all the SDKs check
+ * the same range so that the invariants which parse a text behave the same
+ * everywhere.
  *
  * \\param text to be parsed
  * \\return parsed integer
@@ -862,9 +946,6 @@ int64_t ParseSafeInt(const std::wstring& text);"""
 PARSE_SAFE_INT_DEFINITION = Stripped(
     f"""\
 int64_t ParseSafeInt(const std::wstring& text) {{
-{I}// NOTE: This is 2^53 - 1.
-{I}const int64_t kMaxSafeInteger = 9007199254740991LL;
-
 {I}size_t offset = 0;
 {I}bool negative = false;
 {I}if (!text.empty() && (text[0] == L'-' || text[0] == L'+')) {{
@@ -892,7 +973,7 @@ int64_t ParseSafeInt(const std::wstring& text) {{
 {II}// NOTE: The value never overflows as we check it after each digit, and
 {II}// ten times the largest safe integer fits into int64_t.
 {II}value = value * 10 + static_cast<int64_t>(character - L'0');
-{II}if (value > kMaxSafeInteger) {{
+{II}if (!IsSafeInteger(value)) {{
 {III}throw std::invalid_argument(
 {IIII}"Expected a safe integer, but got a text out of its range: "
 {IIII}+ WstringToUtf8(text)
@@ -1346,7 +1427,7 @@ std::unique_ptr<T> make_unique(
         or intermediate_uses.string_slicing(type_inference)
         or intermediate_uses.string_find_call(type_inference)
         or intermediate_uses.modulo(symbol_table)
-        or intermediate_uses.int_call(symbol_table)
+        or intermediate_uses.safe_integer_checks(symbol_table)
     ):
         extra_std_includes.append("#include <cstdint>")
 
@@ -1646,6 +1727,11 @@ size_t LenTuple(const std::tuple<T...>&) {
             *(
                 [FLOOR_MOD_DECLARATION]
                 if intermediate_uses.modulo(symbol_table)
+                else []
+            ),
+            *(
+                IS_SAFE_INTEGER_DECLARATIONS
+                if intermediate_uses.safe_integer_checks(symbol_table)
                 else []
             ),
             *(
@@ -1956,6 +2042,11 @@ std::wstring Utf8ToWstring(const std::string& utf8_text) {{
             else []
         ),
         *([FLOOR_MOD_DEFINITION] if intermediate_uses.modulo(symbol_table) else []),
+        *(
+            IS_SAFE_INTEGER_DEFINITIONS
+            if intermediate_uses.safe_integer_checks(symbol_table)
+            else []
+        ),
         *(
             [PARSE_SAFE_INT_DEFINITION]
             if intermediate_uses.int_call(symbol_table)

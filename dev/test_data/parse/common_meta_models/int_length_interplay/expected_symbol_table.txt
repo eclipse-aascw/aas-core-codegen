@@ -779,6 +779,54 @@ UnverifiedSymbolTable(
       non_mutating=False,
       body=[
         textwrap.dedent("""\
+          If(
+            branches=[
+              IfBranch(
+                condition=Comparison(
+                  left=Name(
+                    identifier='start',
+                    original_node=...),
+                  op='LT',
+                  right=Constant(
+                    value=0,
+                    original_node=...),
+                  original_node=...),
+                body=[
+                  Return(
+                    value=Constant(
+                      value=False,
+                      original_node=...),
+                    original_node=...)],
+                original_node=...)],
+            default=None,
+            original_node=...)"""),
+        textwrap.dedent("""\
+          If(
+            branches=[
+              IfBranch(
+                condition=Comparison(
+                  left=Name(
+                    identifier='start',
+                    original_node=...),
+                  op='GE',
+                  right=FunctionCall(
+                    name='len',
+                    args=[
+                      Name(
+                        identifier='numbers',
+                        original_node=...)],
+                    original_node=...),
+                  original_node=...),
+                body=[
+                  Return(
+                    value=Constant(
+                      value=True,
+                      original_node=...),
+                    original_node=...)],
+                original_node=...)],
+            default=None,
+            original_node=...)"""),
+        textwrap.dedent("""\
           For(
             generator=ForRange(
               variable=Name(

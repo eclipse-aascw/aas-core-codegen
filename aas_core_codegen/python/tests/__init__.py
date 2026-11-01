@@ -10,6 +10,7 @@ from aas_core_codegen.python.tests import (
     _generate_test_json_value_verification,
     _generate_test_string_helpers,
     _generate_test_parse_int,
+    _generate_test_safe_integers,
     _generate_test_jsonization_of_classes_with_descendants,
     _generate_test_jsonization_of_concrete_classes,
     _generate_test_jsonization_of_enums,
@@ -32,6 +33,7 @@ generate_test_descend_once = _generate_test_descend_once.generate
 generate_test_json_value_verification = _generate_test_json_value_verification.generate
 generate_test_string_helpers = _generate_test_string_helpers.generate
 generate_test_parse_int = _generate_test_parse_int.generate
+generate_test_safe_integers = _generate_test_safe_integers.generate
 generate_test_jsonization_of_classes_with_descendants = (
     _generate_test_jsonization_of_classes_with_descendants.generate
 )

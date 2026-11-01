@@ -103,6 +103,7 @@ if sys.version_info >= (3, 8):
 else:
     from typing_extensions import Final
 
+import dummy.common as our_common
 import dummy.stringification as our_stringification
 import dummy.types as our_types
 import dummy.xmlcommon as our_xmlcommon
@@ -871,7 +872,8 @@ def _read_int_from_element_text(
         ``events=["start", "end"]``
     :raise:
         :py:class:`DeserializationException` if unexpected input, including
-        a value outside of the 64-bit range of ``xs:long``
+        a value outside of the 64-bit range of ``xs:long`` and outside of
+        the safe integer range, see :py:func:`.common.is_safe_integer`
     :return: parsed value
     """
     text = collapse_whitespace(
@@ -920,6 +922,15 @@ def _read_int_from_element_text(
         raise DeserializationException(
             f"Expected a value as xs:long, "
             f"but got an element with text out of its range: {text!r}"
+        )
+
+    # NOTE (mristin):
+    # A valid ``xs:long`` is not necessarily serializable to JSON, so we refuse
+    # the values outside of the safe integer range, as the JSON de-serialization
+    # and the verification do.
+    if not our_common.is_safe_integer(value):
+        raise DeserializationException(
+            our_common.unsafe_integer_message(value)
         )
 
     return value
@@ -1336,6 +1347,14 @@ def _write_int_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
+        # NOTE (mristin):
+        # We refuse the values outside of the safe integer range, as the JSON
+        # serialization and the verification do.
+        if not our_common.is_safe_integer(value):
+            raise SerializationException(
+                our_common.unsafe_integer_message(value)
+            )
+
         serializer.writer.write_start_element(name)
         serializer.writer.stream.write(str(value))
         serializer.writer.write_end_element(name)

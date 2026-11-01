@@ -207,6 +207,22 @@ export function resetAndCheck(
 }
 
 /**
+ * Verify that `that` is a safe integer so that it can be serialized to JSON.
+ *
+ * @param that - to be verified
+ * @returns errors, if any
+ */
+export function *verifyInteger(
+  that: number
+): IterableIterator<VerificationError> {
+  if (!Number.isInteger(that)) {
+    yield new VerificationError(OurCommon.notWholeIntegerMessage(that));
+  } else if (!Number.isSafeInteger(that)) {
+    yield new VerificationError(OurCommon.unsafeIntegerMessage(that));
+  }
+}
+
+/**
  * Verify an instance of the model recursively or non-recursively (depending on the context).
  */
 class Verifier
@@ -240,6 +256,16 @@ class Verifier
       yield new VerificationError(
         "Parity is either zero or one."
       )
+    }
+
+    for (const error of verifyInteger(that.count)) {
+      error.path.prepend(
+        new PropertySegment(
+          that,
+          "count"
+        )
+      );
+      yield error;
     }
   }
 
@@ -276,6 +302,16 @@ class Verifier
       yield new VerificationError(
         "Prefix is at most three long."
       )
+    }
+
+    for (const error of verifyInteger(that.count)) {
+      error.path.prepend(
+        new PropertySegment(
+          that,
+          "count"
+        )
+      );
+      yield error;
     }
   }
 }

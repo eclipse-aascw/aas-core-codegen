@@ -48,6 +48,7 @@ else:
     from typing_extensions import Final
 
 from dummy import (
+    common as our_common,
     constants as our_constants,
     reporting as our_reporting,
     types as our_types,
@@ -419,6 +420,24 @@ class _Transformer(
                 'Texts must be unique.'
             )
 
+        for error in _verify_int(that.number):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'number'
+                )
+            )
+            yield error
+
+        for error in _verify_list_of__int(that.numbers):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'numbers'
+                )
+            )
+            yield error
+
         for error in _verify_list_of__code(that.codes):
             error.path._prepend(
                 PropertySegment(
@@ -476,6 +495,15 @@ class _Transformer(
                 'Texts must not contain the forbidden text.'
             )
 
+        for error in _verify_set_of__int(that.numbers):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'numbers'
+                )
+            )
+            yield error
+
         for error in _verify_set_of__code(that.codes):
             error.path._prepend(
                 PropertySegment(
@@ -501,6 +529,29 @@ def verify(
     yield from _TRANSFORMER.transform(that)
 
 
+def _verify_int(
+        that: int
+) -> Iterator[Error]:
+    """Verify that :paramref:`that` lies in the safe integer range."""
+    if not our_common.is_safe_integer(that):
+        yield Error(our_common.unsafe_integer_message(that))
+
+
+def _verify_list_of__int(
+        that: Sequence[int]
+) -> Iterator[Error]:
+    """Verify the items of :paramref:`that` recursively."""
+    for i, item in enumerate(that):
+        for error in _verify_int(item):
+            error.path._prepend(
+                IndexSegment(
+                    that,
+                    i
+                )
+            )
+            yield error
+
+
 def _verify_list_of__code(
         that: Sequence[str]
 ) -> Iterator[Error]:
@@ -510,6 +561,22 @@ def _verify_list_of__code(
             error.path._prepend(
                 IndexSegment(
                     that,
+                    i
+                )
+            )
+            yield error
+
+
+def _verify_set_of__int(
+        that: AbstractSet[int]
+) -> Iterator[Error]:
+    """Verify the items of :paramref:`that` recursively."""
+    sorted_that = sorted(that)
+    for i, item in enumerate(sorted_that):
+        for error in _verify_int(item):
+            error.path._prepend(
+                IndexSegment(
+                    sorted_that,
                     i
                 )
             )

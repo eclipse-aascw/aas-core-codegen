@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import dummy.verification.Verification;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashSet;
@@ -77,18 +78,6 @@ public class Jsonization {
           return Reporting.Result.failure(error);
         }
         return Reporting.Result.success(value.asBoolean());
-      }
-
-      /** Convert {@code value} to a long 64-bit integer.
-       * @param node JSON node to be parsed
-       */
-      private static Reporting.Result<Long> tryLongFrom(JsonNode value) {
-        if (!value.isIntegralNumber()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonValue of Long, but got " + value.getNodeType());
-          return Reporting.Result.failure(error);
-        }
-        return Reporting.Result.success(value.asLong());
       }
 
       /** Convert {@code value} to a double-precision 64-bit float.
@@ -291,21 +280,21 @@ public class Jsonization {
        * <p>A JSON-able value is, recursively, exactly as JSON itself is defined:
        * a null node (JSON null), a boolean, a number, a string, an array of
        * JSON-able values or an object of JSON-able values with string keys.
-       * An infinity and a not-a-number are rejected at any depth, as JSON can not
-       * represent them at all.
+       * An infinity, a not-a-number and an integer outside the safe integer
+       * range [-2^53 + 1, 2^53 - 1] are rejected at any depth.
        *
        * <p>The result is a deep copy, and never {@code node} itself, so that
        * the parsed instance does not share a tree with the document it came from.
        *
+       * <p>The path of an error is relative to {@code node}.
+       *
        * @param node to be parsed
-       * @param path JSON path to {@code node}, written into the messages
        * @return the parsed value, or an error
        */
-      private static Reporting.Result<JsonNode> tryJsonValueFromAt(
-          JsonNode node, String path) {
+      private static Reporting.Result<JsonNode> tryJsonValueFrom(JsonNode node) {
         if (node == null || node.isMissingNode()) {
           return Reporting.Result.failure(new Reporting.Error(
-            "Expected a JSON-able value at " + path + ", but got: " + node));
+            "Expected a JSON-able value, but got: " + node));
         }
 
         if (node.isNull()) {
@@ -313,15 +302,9 @@ public class Jsonization {
         }
 
         if (node.isNumber()) {
-          // NOTE (mristin):
-          // JSON knows neither an infinity nor a not-a-number. Jackson's own
-          // parser never gives us one, but {@code node} may well have been
-          // put together programmatically.
-          final double value = node.doubleValue();
-          if (Double.isInfinite(value) || Double.isNaN(value)) {
-            return Reporting.Result.failure(new Reporting.Error(
-              "Expected a JSON-able value at " + path + ", but got the number " +
-              value + ", which is neither finite nor representable in JSON"));
+          final String cause = Verification.checkJsonAbleNumber(node);
+          if (cause != null) {
+            return Reporting.Result.failure(new Reporting.Error(cause));
           }
           return Reporting.Result.success(node.deepCopy());
         }
@@ -334,9 +317,10 @@ public class Jsonization {
           final ArrayNode result = JsonNodeFactory.instance.arrayNode();
           int index = 0;
           for (JsonNode item : node) {
-            final Reporting.Result<JsonNode> itemResult = tryJsonValueFromAt(
-              item, path + "[" + index + "]");
+            final Reporting.Result<JsonNode> itemResult = tryJsonValueFrom(item);
             if (itemResult.isError()) {
+              itemResult.getError().prependSegment(
+                new Reporting.IndexSegment(index));
               return itemResult;
             }
             result.add(itemResult.getResult());
@@ -350,9 +334,11 @@ public class Jsonization {
           final Iterator<String> names = node.fieldNames();
           while (names.hasNext()) {
             final String name = names.next();
-            final Reporting.Result<JsonNode> valueResult = tryJsonValueFromAt(
-              node.get(name), path + "." + name);
+            final Reporting.Result<JsonNode> valueResult = tryJsonValueFrom(
+              node.get(name));
             if (valueResult.isError()) {
+              valueResult.getError().prependSegment(
+                new Reporting.KeySegment(name));
               return valueResult;
             }
             result.set(name, valueResult.getResult());
@@ -362,18 +348,7 @@ public class Jsonization {
 
         return Reporting.Result.failure(new Reporting.Error(
           "Expected a JSON-able value (a null, a boolean, a number, a string, " +
-          "an array or an object) at " + path + ", but got: " +
-          node.getNodeType()));
-      }
-
-      /**
-       * Parse {@code node} as a JSON-able value.
-       *
-       * @param node to be parsed
-       * @return the parsed value, or an error
-       */
-      private static Reporting.Result<JsonNode> tryJsonValueFrom(JsonNode node) {
-        return tryJsonValueFromAt(node, "$");
+          "an array or an object), but got: " + node.getNodeType()));
       }
 
       /**
@@ -604,6 +579,84 @@ public class Jsonization {
     public static class Deserialize
     {
       /**
+       * Deserialize a JSON-able value from {@code node}.
+       *
+       * <p>A JSON-able value is, recursively, exactly as JSON itself is defined:
+       * a null node (JSON null), a boolean, a number, a string, an array of
+       * JSON-able values or an object of JSON-able values with string keys.
+       * An infinity, a not-a-number and an integer outside the safe integer
+       * range [-2^53 + 1, 2^53 - 1] are rejected at any depth.
+       *
+       * <p>The result is a deep copy, and never {@code node} itself.
+       *
+       * @param node JSON node to be parsed
+       * @throws DeserializeException if {@code node} is not a JSON-able value
+       */
+      public static JsonNode deserializeJsonValue(JsonNode node) {
+        final Reporting.Result<JsonNode> result =
+          _DeserializeImplementation.tryJsonValueFrom(
+            node);
+
+        return result.onError(error -> {
+          throw new DeserializeException(
+            Reporting.generateJsonPath(error.getPathSegments()),
+            error.getCause());
+        });
+      }
+
+      /**
+       * Deserialize a JSON-able array from {@code node}.
+       *
+       * <p>A JSON-able value is, recursively, exactly as JSON itself is defined:
+       * a null node (JSON null), a boolean, a number, a string, an array of
+       * JSON-able values or an object of JSON-able values with string keys.
+       * An infinity, a not-a-number and an integer outside the safe integer
+       * range [-2^53 + 1, 2^53 - 1] are rejected at any depth.
+       *
+       * <p>The result is a deep copy, and never {@code node} itself.
+       *
+       * @param node JSON node to be parsed
+       * @throws DeserializeException if {@code node} is not a JSON-able array
+       */
+      public static ArrayNode deserializeJsonArray(JsonNode node) {
+        final Reporting.Result<ArrayNode> result =
+          _DeserializeImplementation.tryJsonArrayFrom(
+            node);
+
+        return result.onError(error -> {
+          throw new DeserializeException(
+            Reporting.generateJsonPath(error.getPathSegments()),
+            error.getCause());
+        });
+      }
+
+      /**
+       * Deserialize a JSON-able object from {@code node}.
+       *
+       * <p>A JSON-able value is, recursively, exactly as JSON itself is defined:
+       * a null node (JSON null), a boolean, a number, a string, an array of
+       * JSON-able values or an object of JSON-able values with string keys.
+       * An infinity, a not-a-number and an integer outside the safe integer
+       * range [-2^53 + 1, 2^53 - 1] are rejected at any depth.
+       *
+       * <p>The result is a deep copy, and never {@code node} itself.
+       *
+       * @param node JSON node to be parsed
+       * @throws DeserializeException if {@code node} is not a JSON-able object
+       */
+      public static ObjectNode deserializeJsonObject(JsonNode node) {
+        final Reporting.Result<ObjectNode> result =
+          _DeserializeImplementation.tryJsonObjectFrom(
+            node);
+
+        return result.onError(error -> {
+          throw new DeserializeException(
+            Reporting.generateJsonPath(error.getPathSegments()),
+            error.getCause());
+        });
+      }
+
+      /**
        * Deserialize an instance of Something from {@code node}.
        *
        * @param node JSON node to be parsed
@@ -715,9 +768,9 @@ public class Jsonization {
        * Serialize {@code that} as a JSON node.
        *
        * <p>A JSON-able value is almost a JSON node as it comes, but not quite: its
-       * type rules out neither a missing node nor a non-finite number, neither of
-       * which JSON can represent. Each is refused here, at any depth. A null node
-       * is written as a JSON null.
+       * type rules out neither a missing node, a non-finite number nor an integer
+       * outside the safe integer range [-2^53 + 1, 2^53 - 1]. Each is refused
+       * here, at any depth. A null node is written as a JSON null.
        *
        * <p>The result is a deep copy, and never {@code that} itself, so that
        * the serialized document does not share a tree with the instance it came
@@ -738,12 +791,9 @@ public class Jsonization {
         }
 
         if (that.isNumber()) {
-          final double value = that.doubleValue();
-          if (Double.isInfinite(value) || Double.isNaN(value)) {
-            throw new _SerializeFailure(
-              new Reporting.Error(
-                "Expected a JSON-able value, but got the number " + value +
-                ", which is neither finite nor representable in JSON"));
+          final String cause = Verification.checkJsonAbleNumber(that);
+          if (cause != null) {
+            throw new _SerializeFailure(new Reporting.Error(cause));
           }
           return that.deepCopy();
         }
@@ -907,6 +957,27 @@ public class Jsonization {
       public static JsonNode toJsonObject(IClass that) {
         try {
           return _Transformer.transformClass(that);
+        } catch (_SerializeFailure failure) {
+          final Reporting.Error error = failure.getError();
+          throw new SerializeException(
+            Reporting.generateJavaPath(error.getPathSegments()),
+            error.getCause());
+        }
+      }
+
+      /**
+       * Serialize the JSON-able value {@code that} into a JSON node.
+       *
+       * <p>The result is a deep copy, and never {@code that} itself. A null node
+       * is written as a JSON null.
+       *
+       * @throws SerializeException if {@code that} contains, at any depth,
+       * a missing node, an infinity, a not-a-number or an integer outside
+       * the safe integer range [-2^53 + 1, 2^53 - 1]
+       */
+      public static JsonNode jsonValueToJsonNode(JsonNode that) {
+        try {
+          return _Transformer.jsonValueToJsonNode(that);
         } catch (_SerializeFailure failure) {
           final Reporting.Error error = failure.getError();
           throw new SerializeException(

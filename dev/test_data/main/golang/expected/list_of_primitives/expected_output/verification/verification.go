@@ -180,6 +180,22 @@ func ContainsDot(
 		)
 }
 
+// Verify that `that` integer lies in the safe integer range of JSON, as
+// checked by [ourcommon.IsSafeInteger] in the serialization as well.
+func verifyInt64(
+	that int64,
+	onError func(*VerificationError) bool,
+) (abort bool) {
+	if !ourcommon.IsSafeInteger(that) {
+		abort = onError(newVerificationError(ourcommon.UnsafeIntegerMessage(that)))
+		if abort {
+			return
+		}
+	}
+
+	return
+}
+
 // Verify `that` instance of [ourtypes.ISomething].
 //
 // You have to supply the callback `onError` to iterate over the errors.
@@ -370,6 +386,21 @@ func VerifySomething(
 		if abort {
 			return
 		}
+	} else {
+		abort = verifyListOf_long(
+			that.SomeInts(),
+			func(err *VerificationError) bool {
+				err.Path.PrependName(
+					&ourreporting.NameSegment{
+						Name: "SomeInts",
+					},
+				)
+				return onError(err)
+			},
+		)
+		if abort {
+			return
+		}
 	}
 
 	if that.SomeFloats() == nil {
@@ -399,6 +430,31 @@ func VerifySomething(
 			newVerificationError(
 				"Required property not set: SomeBytes",
 			),
+		)
+		if abort {
+			return
+		}
+	}
+
+	return
+}
+
+// Verify the items of `that` recursively.
+func verifyListOf_long(
+	that []int64,
+	onError func(*VerificationError) bool,
+) (abort bool) {
+	for i, item := range that {
+		abort = verifyInt64(
+			item,
+			func(err *VerificationError) bool {
+				err.Path.PrependIndex(
+					&ourreporting.IndexSegment{
+						Index: i,
+					},
+				)
+				return onError(err)
+			},
 		)
 		if abort {
 			return

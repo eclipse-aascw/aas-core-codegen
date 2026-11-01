@@ -64,24 +64,6 @@ def _load_the_first_expected(model_type: str) -> Any:
 
 
 class TestSerializationFailures(unittest.TestCase):
-    def test_something_count_out_of_range(self) -> None:
-        for value in [9007199254740992, -9007199254740992]:
-            instance = our_jsonization.something_from_jsonable(
-                _load_the_first_expected('Something')
-            )
-
-            instance.count = value
-
-            with self.assertRaises(
-                our_jsonization.SerializationException
-            ) as context_manager:
-                our_jsonization.to_jsonable(instance)
-
-            self.assertEqual(
-                '.count',
-                context_manager.exception.path
-            )
-
     def test_something_ratio_non_finite(self) -> None:
         for value in [math.inf, -math.inf, math.nan]:
             instance = our_jsonization.something_from_jsonable(
@@ -98,6 +80,51 @@ class TestSerializationFailures(unittest.TestCase):
             self.assertEqual(
                 '.ratio',
                 context_manager.exception.path
+            )
+
+
+class TestDeserializationOfIntegers(unittest.TestCase):
+    def test_something_count(self) -> None:
+        jsonable = _load_the_first_expected('Something')
+
+        # NOTE (mristin):
+        # JSON has a single number type, so a whole float is an integer.
+        jsonable['count'] = 5.0
+        instance = our_jsonization.something_from_jsonable(jsonable)
+        self.assertIs(int, type(instance.count))
+        self.assertEqual(5, instance.count)
+
+        for value, expected_cause in [
+            ("5", "Expected an integer, but got: <class 'str'>"),
+            (
+                1.5,
+                "Expected an integer, but got 1.5, which is not a whole number"
+            ),
+            (
+                9007199254740992,
+                (
+                    "Expected an integer, but got 9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            ),
+            (
+                -9007199254740992.0,
+                (
+                    "Expected an integer, but got -9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            )
+        ]:
+            jsonable['count'] = value
+
+            with self.assertRaises(
+                our_jsonization.DeserializationException
+            ) as context_manager:
+                our_jsonization.something_from_jsonable(jsonable)
+
+            self.assertEqual(
+                expected_cause,
+                context_manager.exception.cause
             )
 
 

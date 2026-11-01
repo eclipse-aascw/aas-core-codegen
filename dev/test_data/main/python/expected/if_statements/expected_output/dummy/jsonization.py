@@ -349,6 +349,13 @@ def _int_from_jsonable(
     """
     Parse :paramref:`jsonable` as an integer.
 
+    A whole float, such as ``5.0`` or ``1e2``, is accepted as well. JSON has
+    a single number type, so ``5.0`` is every bit as good an integer as ``5``
+    is, and :py:mod:`json` gives us a ``float`` for the former.
+
+    Only the integers in the safe integer range [-2^53 + 1, 2^53 - 1] are
+    accepted, see :py:func:`.common.is_safe_integer`.
+
     :param jsonable: JSON-able structure to be parsed
     :return: parsed integer
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
@@ -356,11 +363,31 @@ def _int_from_jsonable(
     # NOTE (mristin):
     # ``bool`` is a subclass of ``int`` in Python, so it has to be excluded
     # explicitly. Otherwise ``True`` would be read as ``1``.
-    if isinstance(jsonable, bool) or not isinstance(jsonable, int):
+    if isinstance(jsonable, bool) or not isinstance(jsonable, (int, float)):
         raise DeserializationException(
-            f"Expected an int, but got: {type(jsonable)}"
+            f"Expected an integer, but got: {type(jsonable)}"
         )
-    return jsonable
+
+    value: int
+    if isinstance(jsonable, float):
+        # NOTE (mristin):
+        # ``is_integer`` is false for an infinity and a not-a-number as well.
+        if not jsonable.is_integer():
+            raise DeserializationException(
+                f"Expected an integer, but got {jsonable}, "
+                f"which is not a whole number"
+            )
+
+        value = int(jsonable)
+    else:
+        value = jsonable
+
+    if not our_common.is_safe_integer(value):
+        raise DeserializationException(
+            our_common.unsafe_integer_message(value)
+        )
+
+    return value
 
 
 def _str_from_jsonable(
@@ -891,20 +918,18 @@ def _int_to_jsonable(
     """
     Serialize :paramref:`that` integer to a JSON-able value.
 
-    Only the integers in the range :math:`[-2^{53} + 1, 2^{53} - 1]` are
-    serialized. Outside of it, an integer can not be exactly represented as
-    a 64-bit floating-point number, which is what the JSON de-serializers of
-    the other languages read a number into.
+    Only the integers in the safe integer range [-2^53 + 1, 2^53 - 1] are
+    serialized, see :py:func:`.common.is_safe_integer`.
 
     :param that: integer to be serialized
     :return: :paramref:`that`, unchanged
     :raise: :py:class:`SerializationException` if outside the range
     """
-    if that < -9007199254740991 or that > 9007199254740991:
+    if not our_common.is_safe_integer(that):
         raise SerializationException(
-            f"The integer can not be serialized to JSON as it is outside "
-            f"the range [-2^53 + 1, 2^53 - 1]: {that}"
+            our_common.unsafe_integer_message(that)
         )
+
     return that
 
 

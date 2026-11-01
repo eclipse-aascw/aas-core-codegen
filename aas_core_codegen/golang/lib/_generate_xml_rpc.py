@@ -545,6 +545,13 @@ func writeValueContent(
 {II}return
 {I}}}
 
+{I}// NOTE (mristin):
+{I}// An int is widened to an int64 first, so that a single case below
+{I}// handles both, as in the JSON de/serialization and the verification.
+{I}if integer, ok := value.(int); ok {{
+{II}value = int64(integer)
+{I}}}
+
 {I}switch casted := value.(type) {{
 {II}case bool:
 {III}// NOTE (mristin):
@@ -561,6 +568,23 @@ func writeValueContent(
 {IIII}func(anEncoder *xml.Encoder, aValue string) error {{
 {IIIII}return xmlcommon.WriteText(anEncoder, aValue)
 {IIII}}},
+{III})
+{III}return
+
+{II}case int64:
+{III}// NOTE (mristin):
+{III}// An integer is written as a `<double>`, just as JSON knows a single
+{III}// numeric type, and hence has to lie in the safe integer range.
+{III}if !ourcommon.IsSafeInteger(casted) {{
+{IIII}err = xmlcommon.NewSerializationError(
+{IIIII}ourcommon.NotJsonAbleIntegerMessage(casted),
+{IIII})
+{IIII}return
+{III}}}
+{III}err = xmlcommon.WriteElementInNoNamespace(
+{IIII}encoder, "double", undeclareNamespace,
+{IIII}float64(casted),
+{IIII}xmlcommon.WriteAsText_double,
 {III})
 {III}return
 
@@ -613,8 +637,8 @@ func writeValueContent(
 {II}default:
 {III}err = xmlcommon.NewSerializationError(
 {IIII}fmt.Sprintf(
-{IIIII}"Expected a JSON-able value (a bool, a float64, a string, "+
-{IIIII}"a JsonArray or a JsonObject), but got: %T",
+{IIIII}"Expected a JSON-able value (a bool, a float64, an int, an int64, "+
+{IIIII}"a string, a JsonArray or a JsonObject), but got: %T",
 {IIIII}value,
 {IIII}),
 {III})
@@ -767,6 +791,8 @@ def generate(repo_url: Stripped) -> str:
     """
     ourtypes_url_literal = golang_common.string_literal(f"{repo_url}/types")
 
+    ourcommon_url_literal = golang_common.string_literal(f"{repo_url}/common")
+
     xmlcommon_url_literal = golang_common.string_literal(
         f"{repo_url}/internal/xmlcommon"
     )
@@ -798,6 +824,7 @@ import (
 {I}"regexp"
 {I}"sort"
 {I}"strconv"
+{I}ourcommon {ourcommon_url_literal}
 {I}xmlcommon {xmlcommon_url_literal}
 {I}ourtypes {ourtypes_url_literal}
 )"""

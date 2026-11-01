@@ -158,59 +158,134 @@ def _load_the_first_expected(model_type: str) -> Any:
         return json.load(fid)
 
 
-class TestSerializationFailures(unittest.TestCase):
-    def test_child_a_a_only_out_of_range(self) -> None:
-        for value in [9007199254740992, -9007199254740992]:
-            instance = our_jsonization.child_a_from_jsonable(
-                _load_the_first_expected('ChildA')
-            )
+class TestDeserializationOfIntegers(unittest.TestCase):
+    def test_child_a_a_only(self) -> None:
+        jsonable = _load_the_first_expected('ChildA')
 
-            instance.a_only = value
+        # NOTE (mristin):
+        # JSON has a single number type, so a whole float is an integer.
+        jsonable['aOnly'] = 5.0
+        instance = our_jsonization.child_a_from_jsonable(jsonable)
+        self.assertIs(int, type(instance.a_only))
+        self.assertEqual(5, instance.a_only)
+
+        for value, expected_cause in [
+            ("5", "Expected an integer, but got: <class 'str'>"),
+            (
+                1.5,
+                "Expected an integer, but got 1.5, which is not a whole number"
+            ),
+            (
+                9007199254740992,
+                (
+                    "Expected an integer, but got 9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            ),
+            (
+                -9007199254740992.0,
+                (
+                    "Expected an integer, but got -9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            )
+        ]:
+            jsonable['aOnly'] = value
 
             with self.assertRaises(
-                our_jsonization.SerializationException
+                our_jsonization.DeserializationException
             ) as context_manager:
-                our_jsonization.to_jsonable(instance)
+                our_jsonization.child_a_from_jsonable(jsonable)
 
             self.assertEqual(
-                '.a_only',
-                context_manager.exception.path
+                expected_cause,
+                context_manager.exception.cause
             )
 
-    def test_child_b_b_only_out_of_range(self) -> None:
-        for value in [9007199254740992, -9007199254740992]:
-            instance = our_jsonization.child_b_from_jsonable(
-                _load_the_first_expected('ChildB')
-            )
+    def test_child_b_b_only(self) -> None:
+        jsonable = _load_the_first_expected('ChildB')
 
-            instance.b_only = value
+        # NOTE (mristin):
+        # JSON has a single number type, so a whole float is an integer.
+        jsonable['bOnly'] = 5.0
+        instance = our_jsonization.child_b_from_jsonable(jsonable)
+        self.assertIs(int, type(instance.b_only))
+        self.assertEqual(5, instance.b_only)
+
+        for value, expected_cause in [
+            ("5", "Expected an integer, but got: <class 'str'>"),
+            (
+                1.5,
+                "Expected an integer, but got 1.5, which is not a whole number"
+            ),
+            (
+                9007199254740992,
+                (
+                    "Expected an integer, but got 9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            ),
+            (
+                -9007199254740992.0,
+                (
+                    "Expected an integer, but got -9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            )
+        ]:
+            jsonable['bOnly'] = value
 
             with self.assertRaises(
-                our_jsonization.SerializationException
+                our_jsonization.DeserializationException
             ) as context_manager:
-                our_jsonization.to_jsonable(instance)
+                our_jsonization.child_b_from_jsonable(jsonable)
 
             self.assertEqual(
-                '.b_only',
-                context_manager.exception.path
+                expected_cause,
+                context_manager.exception.cause
             )
 
-    def test_something_number_out_of_range(self) -> None:
-        for value in [9007199254740992, -9007199254740992]:
-            instance = our_jsonization.something_from_jsonable(
-                _load_the_first_expected('Something')
-            )
+    def test_something_number(self) -> None:
+        jsonable = _load_the_first_expected('Something')
 
-            instance.number = value
+        # NOTE (mristin):
+        # JSON has a single number type, so a whole float is an integer.
+        jsonable['number'] = 5.0
+        instance = our_jsonization.something_from_jsonable(jsonable)
+        self.assertIs(int, type(instance.number))
+        self.assertEqual(5, instance.number)
+
+        for value, expected_cause in [
+            ("5", "Expected an integer, but got: <class 'str'>"),
+            (
+                1.5,
+                "Expected an integer, but got 1.5, which is not a whole number"
+            ),
+            (
+                9007199254740992,
+                (
+                    "Expected an integer, but got 9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            ),
+            (
+                -9007199254740992.0,
+                (
+                    "Expected an integer, but got -9007199254740992, "
+                    "which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+                )
+            )
+        ]:
+            jsonable['number'] = value
 
             with self.assertRaises(
-                our_jsonization.SerializationException
+                our_jsonization.DeserializationException
             ) as context_manager:
-                our_jsonization.to_jsonable(instance)
+                our_jsonization.something_from_jsonable(jsonable)
 
             self.assertEqual(
-                '.number',
-                context_manager.exception.path
+                expected_cause,
+                context_manager.exception.cause
             )
 
 

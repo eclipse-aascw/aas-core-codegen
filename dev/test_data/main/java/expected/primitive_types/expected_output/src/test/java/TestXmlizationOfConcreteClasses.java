@@ -451,6 +451,41 @@ public class TestXmlizationOfConcreteClasses {
   } // public void testSomeFloatReadFromMinusinf
 
   @Test
+  public void testSomeIntReadFrom9007199254740991() throws IOException, XMLStreamException {
+    final Something instance =
+      readWith("someInt", "9007199254740991");
+
+    assertEquals(
+      Long.valueOf(9007199254740991L),
+      instance.getSomeInt());
+  } // public void testSomeIntReadFrom9007199254740991
+
+  @Test
+  public void testSomeIntReadFromMinus9007199254740991() throws IOException, XMLStreamException {
+    final Something instance =
+      readWith("someInt", "-9007199254740991");
+
+    assertEquals(
+      Long.valueOf(-9007199254740991L),
+      instance.getSomeInt());
+  } // public void testSomeIntReadFromMinus9007199254740991
+
+  @Test
+  public void testSomeIntReadOutsideTheSafeIntegerRange() throws IOException, XMLStreamException {
+    for (String text : new String[] {"9007199254740992", "-9007199254740992"}) {
+      try {
+        readWith("someInt", text);
+        fail("Expected the de-serialization of " + text + " to fail, but it succeeded");
+      } catch (XmlCommon.DeserializeException exception) {
+        assertEquals(
+          "Expected an integer, but got " + text
+            + ", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]",
+          exception.getReason().orElse(null));
+      }
+    }
+  } // public void testSomeIntReadOutsideTheSafeIntegerRange
+
+  @Test
   public void testSomeBoolReadFrom1() throws IOException, XMLStreamException {
     final Something instance =
       readWith("someBool", "1");

@@ -42,7 +42,20 @@ def no_number_is_seven(numbers: Sequence[int], count: int) -> bool:
 
 @verification
 def no_seven_from(numbers: Sequence[int], start: int) -> bool:
-    """Check the ranges over the integers with a length as a bound."""
+    """
+    Check the ranges over the integers with a length as a bound.
+
+    The ``start`` is checked against the bounds before it is used as an index,
+    so that the invariant holds up even against integers as large as
+    ``2 ** 53``. A negative ``start`` is refused, while a ``start`` beyond
+    the numbers leaves nothing to check.
+    """
+    if start < 0:
+        return False
+
+    if start >= len(numbers):
+        return True
+
     for i in range(start, len(numbers)):
         number = numbers[i]
         if number == 7:

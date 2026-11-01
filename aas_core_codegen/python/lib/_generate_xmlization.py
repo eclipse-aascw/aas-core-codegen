@@ -3379,7 +3379,8 @@ def _read_int_from_element_text(
 {II}``events=["start", "end"]``
 {I}:raise:
 {II}:py:class:`DeserializationException` if unexpected input, including
-{II}a value outside of the 64-bit range of ``xs:long``
+{II}a value outside of the 64-bit range of ``xs:long`` and outside of
+{II}the safe integer range, see :py:func:`.common.is_safe_integer`
 {I}:return: parsed value
 {I}\"\"\"
 {I}text = collapse_whitespace(
@@ -3428,6 +3429,15 @@ def _read_int_from_element_text(
 {II}raise DeserializationException(
 {III}f"Expected a value as xs:long, "
 {III}f"but got an element with text out of its range: {{text!r}}"
+{II})
+
+{I}# NOTE (mristin):
+{I}# A valid ``xs:long`` is not necessarily serializable to JSON, so we refuse
+{I}# the values outside of the safe integer range, as the JSON de-serialization
+{I}# and the verification do.
+{I}if not our_common.is_safe_integer(value):
+{II}raise DeserializationException(
+{III}our_common.unsafe_integer_message(value)
 {II})
 
 {I}return value"""
@@ -3730,6 +3740,14 @@ def _write_int_as_element(
 {I}:raise: :py:class:`SerializationException` if the value could not be written
 {I}\"\"\"
 {I}try:
+{II}# NOTE (mristin):
+{II}# We refuse the values outside of the safe integer range, as the JSON
+{II}# serialization and the verification do.
+{II}if not our_common.is_safe_integer(value):
+{III}raise SerializationException(
+{IIII}our_common.unsafe_integer_message(value)
+{III})
+
 {II}serializer.writer.write_start_element(name)
 {II}serializer.writer.stream.write(str(value))
 {II}serializer.writer.write_end_element(name)
@@ -4162,6 +4180,24 @@ def generate(
     )
 
     # NOTE (mristin):
+    # The integers are checked against the safe integer range by the common
+    # module. We import it only if a property reaches an integer, which is
+    # exactly when the integers are read and written, so that the import is
+    # never unused.
+    common_import = (
+        f"import {qualified_module_name}.common as our_common\n"
+        if any(
+            intermediate.try_primitive_type(type_anno) is intermediate.PrimitiveType.INT
+            for cls in symbol_table.concrete_classes
+            for prop in cls.properties
+            for type_anno in intermediate.over_type_annotation_and_nested_type_annotations(
+                prop.type_annotation
+            )
+        )
+        else ""
+    )
+
+    # NOTE (mristin):
     # We import ``Set`` only for the sets in the properties so that the import is
     # never unused.
     uses_set_properties = intermediate_uses.set_properties(symbol_table)
@@ -4204,7 +4240,7 @@ if sys.version_info >= (3, 8):
 else:
 {I}from typing_extensions import Final
 
-import {qualified_module_name}.stringification as our_stringification
+{common_import}import {qualified_module_name}.stringification as our_stringification
 import {qualified_module_name}.types as our_types
 import {qualified_module_name}.xmlcommon as our_xmlcommon
 {xmlrpc_import}from {qualified_module_name}.xmlcommon import (

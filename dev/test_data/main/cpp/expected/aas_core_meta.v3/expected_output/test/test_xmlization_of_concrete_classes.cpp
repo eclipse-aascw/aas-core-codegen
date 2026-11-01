@@ -2080,10 +2080,10 @@ TEST_CASE("Test the de-serialization failure on a duplicate property") {
 }
 
 /**
- * \brief Read the first recorded example of ILevelType with the content
- * of the element \p xml_name replaced by \p text.
+ * \brief Patch the first recorded example of ILevelType so that
+ * the content of the element \p xml_name is replaced by \p text.
  */
-std::shared_ptr<our::types::ILevelType> ReadWith(
+std::string PatchTheFirstExample(
   const std::string& xml_name,
   const std::string& text
 ) {
@@ -2111,9 +2111,18 @@ std::shared_ptr<our::types::ILevelType> ReadWith(
     original.find(our::common::Concat("</", xml_name, ">"))
   );
 
-  const std::string patched(
-    original.substr(0, start) + text + original.substr(end)
-  );
+  return original.substr(0, start) + text + original.substr(end);
+}
+
+/**
+ * \brief Read the first recorded example of ILevelType with the content
+ * of the element \p xml_name replaced by \p text.
+ */
+std::shared_ptr<our::types::ILevelType> ReadWith(
+  const std::string& xml_name,
+  const std::string& text
+) {
+  const std::string patched(PatchTheFirstExample(xml_name, text));
 
   std::istringstream iss(patched);
 

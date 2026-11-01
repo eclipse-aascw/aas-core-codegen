@@ -15,7 +15,6 @@ from aas_core_codegen.csharp.common import (
     INDENT4 as IIII,
     INDENT5 as IIIII,
     INDENT6 as IIIIII,
-    INDENT7 as IIIIIII,
 )
 
 
@@ -780,6 +779,17 @@ public static void SerializeValueTo(
 {III}break;
 
 {II}case Nodes.JsonValue jsonValue:
+{III}// NOTE (mristin):
+{III}// We check a number exactly as the verification and the JSON
+{III}// de/serialization do. Otherwise, an integer outside the safe integer
+{III}// range would be quietly written as a different double below.
+{III}string? cause = JsonValueVerification.CheckJsonAbleNumber(jsonValue);
+{III}if (cause != null)
+{III}{{
+{IIII}throw new SerializationFailure(
+{IIIII}new Reporting.Error(cause));
+{III}}}
+
 {III}if (jsonValue.TryGetValue(out bool boolValue))
 {III}{{
 {IIII}writer.WriteStartElement("boolean", "");
@@ -792,22 +802,28 @@ public static void SerializeValueTo(
 {IIII}writer.WriteString(boolValue ? "1" : "0");
 {IIII}writer.WriteEndElement();
 {III}}}
+{III}else if (jsonValue.TryGetValue(out long integer))
+{III}{{
+{IIII}// NOTE (mristin):
+{IIII}// XML-RPC carries every JSON number in a <double>, and the check
+{IIII}// above made sure that the integer is represented exactly.
+{IIII}writer.WriteStartElement("double", "");
+{IIII}writer.WriteValue(integer);
+{IIII}writer.WriteEndElement();
+{III}}}
+{III}else if (jsonValue.TryGetValue(out ulong unsignedInteger))
+{III}{{
+{IIII}writer.WriteStartElement("double", "");
+{IIII}writer.WriteValue((long)unsignedInteger);
+{IIII}writer.WriteEndElement();
+{III}}}
 {III}else if (jsonValue.TryGetValue(out double doubleValue))
 {III}{{
 {IIII}// NOTE (mristin):
-{IIII}// JSON knows neither an infinity nor a not-a-number, so neither
-{IIII}// is a JSON-able value. XmlWriter would happily write "INF" or
-{IIII}// "NaN" -- the xs:double spellings -- which
-{IIII}// DeserializeDoubleTextFrom deliberately refuses to read back.
-{IIII}if (!System.Double.IsFinite(doubleValue))
-{IIII}{{
-{IIIII}throw new SerializationFailure(
-{IIIIII}new Reporting.Error(
-{IIIIIII}"Expected a JSON-able value, but got the number " +
-{IIIIIII}$"{{doubleValue}}, which is neither finite nor " +
-{IIIIIII}"representable in JSON"));
-{IIII}}}
-
+{IIII}// The check above refused an infinity and a not-a-number, which
+{IIII}// XmlWriter would otherwise happily write as "INF" or "NaN" -- the
+{IIII}// xs:double spellings -- and which DeserializeDoubleTextFrom
+{IIII}// deliberately refuses to read back.
 {IIII}writer.WriteStartElement("double", "");
 {IIII}writer.WriteValue(doubleValue);
 {IIII}writer.WriteEndElement();

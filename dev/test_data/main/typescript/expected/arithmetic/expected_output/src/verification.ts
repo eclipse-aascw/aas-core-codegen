@@ -258,6 +258,22 @@ export function hasRemainderOneByLength(
 }
 
 /**
+ * Verify that `that` is a safe integer so that it can be serialized to JSON.
+ *
+ * @param that - to be verified
+ * @returns errors, if any
+ */
+export function *verifyInteger(
+  that: number
+): IterableIterator<VerificationError> {
+  if (!Number.isInteger(that)) {
+    yield new VerificationError(OurCommon.notWholeIntegerMessage(that));
+  } else if (!Number.isSafeInteger(that)) {
+    yield new VerificationError(OurCommon.unsafeIntegerMessage(that));
+  }
+}
+
+/**
  * Verify an instance of the model recursively or non-recursively (depending on the context).
  */
 class Verifier
@@ -362,18 +378,6 @@ class Verifier
       )
     }
 
-    if (!Number.isInteger(that.even)) {
-      const error = new VerificationError(
-        "Expected an integer, but got a floating-point number"
-      );
-      error.path.prepend(
-        new PropertySegment(
-          that,
-          "even"
-        )
-      );
-      yield error;
-    }
     for (const error of verifyEvenInt(that.even)) {
       error.path.prepend(
         new PropertySegment(
@@ -382,6 +386,78 @@ class Verifier
         )
       );
       yield error;
+    }
+
+    for (const error of verifyInteger(that.offset)) {
+      error.path.prepend(
+        new PropertySegment(
+          that,
+          "offset"
+        )
+      );
+      yield error;
+    }
+
+    for (const error of verifyInteger(that.small)) {
+      error.path.prepend(
+        new PropertySegment(
+          that,
+          "small"
+        )
+      );
+      yield error;
+    }
+
+    for (const error of verifyInteger(that.byNegative)) {
+      error.path.prepend(
+        new PropertySegment(
+          that,
+          "byNegative"
+        )
+      );
+      yield error;
+    }
+
+    for (const error of verifyInteger(that.negative)) {
+      error.path.prepend(
+        new PropertySegment(
+          that,
+          "negative"
+        )
+      );
+      yield error;
+    }
+
+    for (const error of verifyInteger(that.deviation)) {
+      error.path.prepend(
+        new PropertySegment(
+          that,
+          "deviation"
+        )
+      );
+      yield error;
+    }
+
+    for (const error of verifyInteger(that.alignment)) {
+      error.path.prepend(
+        new PropertySegment(
+          that,
+          "alignment"
+        )
+      );
+      yield error;
+    }
+
+    if (that.optionalNumber !== null) {
+      for (const error of verifyInteger(that.optionalNumber)) {
+        error.path.prepend(
+          new PropertySegment(
+            that,
+            "optionalNumber"
+          )
+        );
+        yield error;
+      }
     }
   }
 }
@@ -411,6 +487,11 @@ export function *verify(
 export function *verifyEvenInt(
   that: number
 ): IterableIterator<VerificationError> {
+  if (!Number.isSafeInteger(that)) {
+    yield* verifyInteger(that);
+    return;
+  }
+
   if (!((OurCommon.floorMod(that, 2)) == (0))) {
     yield new VerificationError(
       "Even"

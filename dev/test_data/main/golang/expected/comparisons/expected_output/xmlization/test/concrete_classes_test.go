@@ -201,13 +201,13 @@ func TestDuplicatePropertyFails(t *testing.T) {
 	}
 }
 
-// Read the first recorded example of ISomething with the content of
-// the element `xmlName` replaced by `text`.
-func readSomethingWith(
+// Give the text of the first recorded example of ISomething with
+// the content of the element `xmlName` replaced by `text`.
+func patchSomethingWith(
 	t *testing.T,
 	xmlName string,
 	text string,
-) ourtypes.ISomething {
+) string {
 	pths := ourtesting.FindFilesBySuffixRecursively(
 		filepath.Join(
 			ourtesting.TestDataDir,
@@ -236,7 +236,17 @@ func readSomethingWith(
 	start := strings.Index(original, "<"+xmlName+">") + len(xmlName) + 2
 	end := strings.Index(original, "</"+xmlName+">")
 
-	patched := original[:start] + text + original[end:]
+	return original[:start] + text + original[end:]
+}
+
+// Read the first recorded example of ISomething with the content of
+// the element `xmlName` replaced by `text`.
+func readSomethingWith(
+	t *testing.T,
+	xmlName string,
+	text string,
+) ourtypes.ISomething {
+	patched := patchSomethingWith(t, xmlName, text)
 
 	decoder := xml.NewDecoder(strings.NewReader(patched))
 	deserialized, deseriaErr := ourxmlization.Unmarshal(decoder)
@@ -253,6 +263,68 @@ func readSomethingWith(
 	}
 
 	return instance
+}
+
+func TestCountReadFrom9007199254740991(t *testing.T) {
+	instance := readSomethingWith(
+		t,
+		"count",
+		"9007199254740991",
+	)
+
+	got := instance.Count()
+	expected := int64(9007199254740991)
+	if got != expected {
+		t.Fatalf("Expected %v, but got %v", expected, got)
+	}
+}
+
+func TestCountReadFromMinus9007199254740991(t *testing.T) {
+	instance := readSomethingWith(
+		t,
+		"count",
+		"-9007199254740991",
+	)
+
+	got := instance.Count()
+	expected := int64(-9007199254740991)
+	if got != expected {
+		t.Fatalf("Expected %v, but got %v", expected, got)
+	}
+}
+
+func TestCountReadFrom9007199254740992Fails(t *testing.T) {
+	patched := patchSomethingWith(
+		t,
+		"count",
+		"9007199254740992",
+	)
+
+	decoder := xml.NewDecoder(strings.NewReader(patched))
+	_, err := ourxmlization.Unmarshal(decoder)
+
+	expected := "Expected an integer, but got 9007199254740992, which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+	deseriaErr, ok := err.(*ourxmlization.DeserializationError)
+	if !ok || deseriaErr.Message != expected {
+		t.Fatalf("Expected the de-serialization error %q, but got: %v", expected, err)
+	}
+}
+
+func TestCountReadFromMinus9007199254740992Fails(t *testing.T) {
+	patched := patchSomethingWith(
+		t,
+		"count",
+		"-9007199254740992",
+	)
+
+	decoder := xml.NewDecoder(strings.NewReader(patched))
+	_, err := ourxmlization.Unmarshal(decoder)
+
+	expected := "Expected an integer, but got -9007199254740992, which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+	deseriaErr, ok := err.(*ourxmlization.DeserializationError)
+	if !ok || deseriaErr.Message != expected {
+		t.Fatalf("Expected the de-serialization error %q, but got: %v", expected, err)
+	}
 }
 
 func TestRatioReadFrom1e400(t *testing.T) {

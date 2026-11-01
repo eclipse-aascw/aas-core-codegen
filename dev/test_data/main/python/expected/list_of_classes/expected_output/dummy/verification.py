@@ -47,6 +47,7 @@ else:
     from typing_extensions import Final
 
 from dummy import (
+    common as our_common,
     constants as our_constants,
     reporting as our_reporting,
     types as our_types,
@@ -149,12 +150,14 @@ class _Transformer(
             self,
             that: our_types.AnotherItem
     ) -> Iterator[Error]:
-        # No verification has been defined for AnotherItem.
-        return
-        # For this uncommon return-yield construction, see:
-        # https://stackoverflow.com/questions/13243766/how-to-define-an-empty-generator-function
-        # noinspection PyUnreachableCode
-        yield
+        for error in _verify_int(that.serial_number):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'serial_number'
+                )
+            )
+            yield error
 
     # noinspection PyMethodMayBeStatic
     def transform_simple(
@@ -256,6 +259,14 @@ def verify(
     :yield: constraint violations
     """
     yield from _TRANSFORMER.transform(that)
+
+
+def _verify_int(
+        that: int
+) -> Iterator[Error]:
+    """Verify that :paramref:`that` lies in the safe integer range."""
+    if not our_common.is_safe_integer(that):
+        yield Error(our_common.unsafe_integer_message(that))
 
 
 def _verify_list_of__class(

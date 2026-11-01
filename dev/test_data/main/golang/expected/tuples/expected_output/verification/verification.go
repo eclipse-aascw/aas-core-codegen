@@ -75,6 +75,22 @@ func NarrowedPairIsPositive(
 	return pair.Item2 > 0
 }
 
+// Verify that `that` integer lies in the safe integer range of JSON, as
+// checked by [ourcommon.IsSafeInteger] in the serialization as well.
+func verifyInt64(
+	that int64,
+	onError func(*VerificationError) bool,
+) (abort bool) {
+	if !ourcommon.IsSafeInteger(that) {
+		abort = onError(newVerificationError(ourcommon.UnsafeIntegerMessage(that)))
+		if abort {
+			return
+		}
+	}
+
+	return
+}
+
 // Verify `that` instance of [ourtypes.ISomeItem].
 //
 // You have to supply the callback `onError` to iterate over the errors.
@@ -104,7 +120,20 @@ func VerifyAnotherItem(
 ) (abort bool) {
 	abort = false
 
-	// No verification has been defined for IAnotherItem.
+	abort = verifyInt64(
+		that.SerialNumber(),
+		func(err *VerificationError) bool {
+			err.Path.PrependName(
+				&ourreporting.NameSegment{
+					Name: "SerialNumber",
+				},
+			)
+			return onError(err)
+		},
+	)
+	if abort {
+		return
+	}
 
 	return
 }
@@ -151,6 +180,21 @@ func VerifySomething(
 		if abort {
 			return
 		}
+	}
+
+	abort = verifyTupleOf2_string_long(
+		that.Pair(),
+		func(err *VerificationError) bool {
+			err.Path.PrependName(
+				&ourreporting.NameSegment{
+					Name: "Pair",
+				},
+			)
+			return onError(err)
+		},
+	)
+	if abort {
+		return
 	}
 
 	abort = verifyTupleOf2_IAbstractItem_IAbstractItem(
@@ -204,6 +248,29 @@ func VerifySomething(
 }
 
 // Verify the items of `that` recursively.
+func verifyTupleOf2_string_long(
+	that ourcommon.Tuple2[string, int64],
+	onError func(*VerificationError) bool,
+) (abort bool) {
+	abort = verifyInt64(
+		that.Item2,
+		func(err *VerificationError) bool {
+			err.Path.PrependIndex(
+				&ourreporting.IndexSegment{
+					Index: 1,
+				},
+			)
+			return onError(err)
+		},
+	)
+	if abort {
+		return
+	}
+
+	return
+}
+
+// Verify the items of `that` recursively.
 func verifyTupleOf2_IAbstractItem_IAbstractItem(
 	that ourcommon.Tuple2[ourtypes.IAbstractItem, ourtypes.IAbstractItem],
 	onError func(*VerificationError) bool,
@@ -246,6 +313,21 @@ func verifyTupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_PositiveInt_Result(
 	that ourcommon.Tuple6[int64, ourtypes.ISomeItem, ourtypes.IAbstractItem, ourtypes.ISomeItem, int64, ourtypes.Result],
 	onError func(*VerificationError) bool,
 ) (abort bool) {
+	abort = verifyInt64(
+		that.Item1,
+		func(err *VerificationError) bool {
+			err.Path.PrependIndex(
+				&ourreporting.IndexSegment{
+					Index: 0,
+				},
+			)
+			return onError(err)
+		},
+	)
+	if abort {
+		return
+	}
+
 	abort = Verify(
 		that.Item2,
 		func(err *VerificationError) bool {
@@ -387,6 +469,13 @@ func VerifyPositiveInt(
 	onError func(*VerificationError) bool,
 ) (abort bool) {
 	abort = false
+
+	if !ourcommon.IsSafeInteger(that) {
+		abort = onError(newVerificationError(ourcommon.UnsafeIntegerMessage(that)))
+		if abort {
+			return
+		}
+	}
 
 	if !(that > 0) {
 		abort = onError(

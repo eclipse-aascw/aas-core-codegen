@@ -5,6 +5,10 @@
 #include "./common_jsonization.hpp"
 
 #include <dummy/jsonization.hpp>
+#include <dummy/verification.hpp>
+#include <dummy/xmlization.hpp>
+
+#include <sstream>
 
 #include <limits>
 
@@ -212,6 +216,112 @@ void AssertSerializationFailsAt(
   REQUIRE(false);
 }
 
+/**
+ * Assert that the verification, the JSON serialization and the XML serialization
+ * of \p that instance all report \p expected_cause at \p expected_path.
+ */
+void AssertReportedEverywhere(
+  const std::shared_ptr<our::types::IClass>& that,
+  const std::string& expected_path,
+  const std::wstring& expected_cause
+) {
+  bool reported = false;
+  std::vector<std::string> error_messages;
+  for (
+    const our::verification::Error& error
+    : our::verification::RecursiveVerification(that)
+  ) {
+    const std::string path(
+      our::common::WstringToUtf8(error.path.ToWstring())
+    );
+    if (path == expected_path && error.cause == expected_cause) {
+      reported = true;
+      break;
+    }
+
+    error_messages.emplace_back(
+      our::common::Concat(
+        path,
+        ": ",
+        our::common::WstringToUtf8(error.cause)
+      )
+    );
+  }
+
+  INFO(
+    our::common::Concat(
+      "Expected the verification to report at ",
+      expected_path,
+      ": ",
+      our::common::WstringToUtf8(expected_cause),
+      ", but got:\n",
+      test::common::JoinStrings(error_messages, "\n")
+    )
+  )
+  REQUIRE(reported);
+
+  try {
+    our::jsonization::Serialize(*that);
+
+    INFO("Expected the JSON serialization to fail at " + expected_path)
+    REQUIRE(false);
+  } catch (const our::jsonization::SerializationException& exception) {
+    REQUIRE(
+      our::common::WstringToUtf8(exception.path().ToWstring())
+        == expected_path
+    );
+    REQUIRE(exception.cause() == expected_cause);
+  }
+
+  std::ostringstream oss;
+  try {
+    our::xmlization::Serialize(*that, {}, oss);
+
+    INFO("Expected the XML serialization to fail at " + expected_path)
+    REQUIRE(false);
+  } catch (const our::xmlization::SerializationException& exception) {
+    REQUIRE(
+      our::common::WstringToUtf8(exception.path().ToWstring())
+        == expected_path
+    );
+    REQUIRE(exception.cause() == expected_cause);
+  }
+}
+
+/**
+ * Assert that neither the verification nor the JSON serialization nor the XML
+ * serialization of \p that instance report an error of the safe integer range
+ * at \p path.
+ */
+void AssertNotReportedAnywhere(
+  const std::shared_ptr<our::types::IClass>& that,
+  const std::string& path
+) {
+  for (
+    const our::verification::Error& error
+    : our::verification::RecursiveVerification(that)
+  ) {
+    INFO(
+      our::common::Concat(
+        our::common::WstringToUtf8(error.path.ToWstring()),
+        ": ",
+        our::common::WstringToUtf8(error.cause)
+      )
+    )
+    REQUIRE(
+      !(
+        our::common::WstringToUtf8(error.path.ToWstring()) == path
+        && error.cause.find(L"safe integer range") != std::wstring::npos
+      )
+    );
+  }
+
+  REQUIRE_NOTHROW(our::jsonization::Serialize(*that));
+
+  std::ostringstream oss;
+  REQUIRE_NOTHROW(our::xmlization::Serialize(*that, {}, oss));
+}
+
 TEST_CASE("Test the round-trip of an expected Something") {
   const std::deque<std::filesystem::path> paths(
     test::common::FindFilesBySuffixRecursively(
@@ -269,168 +379,6 @@ TEST_CASE("Test the de-serialization failure on an unexpected Something") {
 }
 
 TEST_CASE(
-  "Test the serialization failure on an integer outside the range representable in JSON "
-  "at .even of Something"
-) {
-  for (
-    const int64_t value
-    : {
-      9007199254740992LL,
-      -9007199254740992LL
-    }
-  ) {
-    std::shared_ptr<our::types::ISomething> instance(
-      MustDeserializeTheFirstExpected<our::types::ISomething>(
-        "Something",
-        our::jsonization::SomethingFrom
-      )
-    );
-
-    instance->set_even(value);
-
-    AssertSerializationFailsAt(
-      *instance,
-      ".even"
-    );
-  }
-}
-
-TEST_CASE(
-  "Test the serialization failure on an integer outside the range representable in JSON "
-  "at .offset of Something"
-) {
-  for (
-    const int64_t value
-    : {
-      9007199254740992LL,
-      -9007199254740992LL
-    }
-  ) {
-    std::shared_ptr<our::types::ISomething> instance(
-      MustDeserializeTheFirstExpected<our::types::ISomething>(
-        "Something",
-        our::jsonization::SomethingFrom
-      )
-    );
-
-    instance->set_offset(value);
-
-    AssertSerializationFailsAt(
-      *instance,
-      ".offset"
-    );
-  }
-}
-
-TEST_CASE(
-  "Test the serialization failure on an integer outside the range representable in JSON "
-  "at .small of Something"
-) {
-  for (
-    const int64_t value
-    : {
-      9007199254740992LL,
-      -9007199254740992LL
-    }
-  ) {
-    std::shared_ptr<our::types::ISomething> instance(
-      MustDeserializeTheFirstExpected<our::types::ISomething>(
-        "Something",
-        our::jsonization::SomethingFrom
-      )
-    );
-
-    instance->set_small(value);
-
-    AssertSerializationFailsAt(
-      *instance,
-      ".small"
-    );
-  }
-}
-
-TEST_CASE(
-  "Test the serialization failure on an integer outside the range representable in JSON "
-  "at .by_negative of Something"
-) {
-  for (
-    const int64_t value
-    : {
-      9007199254740992LL,
-      -9007199254740992LL
-    }
-  ) {
-    std::shared_ptr<our::types::ISomething> instance(
-      MustDeserializeTheFirstExpected<our::types::ISomething>(
-        "Something",
-        our::jsonization::SomethingFrom
-      )
-    );
-
-    instance->set_by_negative(value);
-
-    AssertSerializationFailsAt(
-      *instance,
-      ".by_negative"
-    );
-  }
-}
-
-TEST_CASE(
-  "Test the serialization failure on an integer outside the range representable in JSON "
-  "at .negative of Something"
-) {
-  for (
-    const int64_t value
-    : {
-      9007199254740992LL,
-      -9007199254740992LL
-    }
-  ) {
-    std::shared_ptr<our::types::ISomething> instance(
-      MustDeserializeTheFirstExpected<our::types::ISomething>(
-        "Something",
-        our::jsonization::SomethingFrom
-      )
-    );
-
-    instance->set_negative(value);
-
-    AssertSerializationFailsAt(
-      *instance,
-      ".negative"
-    );
-  }
-}
-
-TEST_CASE(
-  "Test the serialization failure on an integer outside the range representable in JSON "
-  "at .deviation of Something"
-) {
-  for (
-    const int64_t value
-    : {
-      9007199254740992LL,
-      -9007199254740992LL
-    }
-  ) {
-    std::shared_ptr<our::types::ISomething> instance(
-      MustDeserializeTheFirstExpected<our::types::ISomething>(
-        "Something",
-        our::jsonization::SomethingFrom
-      )
-    );
-
-    instance->set_deviation(value);
-
-    AssertSerializationFailsAt(
-      *instance,
-      ".deviation"
-    );
-  }
-}
-
-TEST_CASE(
   "Test the serialization failure on a non-finite floating-point number "
   "at .ratio of Something"
 ) {
@@ -459,16 +407,302 @@ TEST_CASE(
 }
 
 TEST_CASE(
-  "Test the serialization failure on an integer outside the range representable in JSON "
-  "at .alignment of Something"
+  "Test the safe integer range at .even of Something"
 ) {
   for (
-    const int64_t value
-    : {
-      9007199254740992LL,
-      -9007199254740992LL
-    }
+    const int64_t integer
+    : {9007199254740992LL, -9007199254740992LL}
   ) {
+    const int64_t value(integer);
+
+    std::shared_ptr<our::types::ISomething> instance(
+      MustDeserializeTheFirstExpected<our::types::ISomething>(
+        "Something",
+        our::jsonization::SomethingFrom
+      )
+    );
+
+    instance->set_even(value);
+
+    AssertReportedEverywhere(
+      instance,
+      ".even",
+      our::common::Concat(
+        L"Expected an integer, but got ",
+        std::to_wstring(integer),
+        L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+      )
+    );
+  }
+
+  for (
+    const int64_t integer
+    : {9007199254740991LL, -9007199254740991LL}
+  ) {
+    const int64_t value(integer);
+
+    std::shared_ptr<our::types::ISomething> instance(
+      MustDeserializeTheFirstExpected<our::types::ISomething>(
+        "Something",
+        our::jsonization::SomethingFrom
+      )
+    );
+
+    instance->set_even(value);
+
+    AssertNotReportedAnywhere(instance, ".even");
+  }
+}
+
+TEST_CASE(
+  "Test the safe integer range at .offset of Something"
+) {
+  for (
+    const int64_t integer
+    : {9007199254740992LL, -9007199254740992LL}
+  ) {
+    const int64_t value(integer);
+
+    std::shared_ptr<our::types::ISomething> instance(
+      MustDeserializeTheFirstExpected<our::types::ISomething>(
+        "Something",
+        our::jsonization::SomethingFrom
+      )
+    );
+
+    instance->set_offset(value);
+
+    AssertReportedEverywhere(
+      instance,
+      ".offset",
+      our::common::Concat(
+        L"Expected an integer, but got ",
+        std::to_wstring(integer),
+        L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+      )
+    );
+  }
+
+  for (
+    const int64_t integer
+    : {9007199254740991LL, -9007199254740991LL}
+  ) {
+    const int64_t value(integer);
+
+    std::shared_ptr<our::types::ISomething> instance(
+      MustDeserializeTheFirstExpected<our::types::ISomething>(
+        "Something",
+        our::jsonization::SomethingFrom
+      )
+    );
+
+    instance->set_offset(value);
+
+    AssertNotReportedAnywhere(instance, ".offset");
+  }
+}
+
+TEST_CASE(
+  "Test the safe integer range at .small of Something"
+) {
+  for (
+    const int64_t integer
+    : {9007199254740992LL, -9007199254740992LL}
+  ) {
+    const int64_t value(integer);
+
+    std::shared_ptr<our::types::ISomething> instance(
+      MustDeserializeTheFirstExpected<our::types::ISomething>(
+        "Something",
+        our::jsonization::SomethingFrom
+      )
+    );
+
+    instance->set_small(value);
+
+    AssertReportedEverywhere(
+      instance,
+      ".small",
+      our::common::Concat(
+        L"Expected an integer, but got ",
+        std::to_wstring(integer),
+        L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+      )
+    );
+  }
+
+  for (
+    const int64_t integer
+    : {9007199254740991LL, -9007199254740991LL}
+  ) {
+    const int64_t value(integer);
+
+    std::shared_ptr<our::types::ISomething> instance(
+      MustDeserializeTheFirstExpected<our::types::ISomething>(
+        "Something",
+        our::jsonization::SomethingFrom
+      )
+    );
+
+    instance->set_small(value);
+
+    AssertNotReportedAnywhere(instance, ".small");
+  }
+}
+
+TEST_CASE(
+  "Test the safe integer range at .by_negative of Something"
+) {
+  for (
+    const int64_t integer
+    : {9007199254740992LL, -9007199254740992LL}
+  ) {
+    const int64_t value(integer);
+
+    std::shared_ptr<our::types::ISomething> instance(
+      MustDeserializeTheFirstExpected<our::types::ISomething>(
+        "Something",
+        our::jsonization::SomethingFrom
+      )
+    );
+
+    instance->set_by_negative(value);
+
+    AssertReportedEverywhere(
+      instance,
+      ".by_negative",
+      our::common::Concat(
+        L"Expected an integer, but got ",
+        std::to_wstring(integer),
+        L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+      )
+    );
+  }
+
+  for (
+    const int64_t integer
+    : {9007199254740991LL, -9007199254740991LL}
+  ) {
+    const int64_t value(integer);
+
+    std::shared_ptr<our::types::ISomething> instance(
+      MustDeserializeTheFirstExpected<our::types::ISomething>(
+        "Something",
+        our::jsonization::SomethingFrom
+      )
+    );
+
+    instance->set_by_negative(value);
+
+    AssertNotReportedAnywhere(instance, ".by_negative");
+  }
+}
+
+TEST_CASE(
+  "Test the safe integer range at .negative of Something"
+) {
+  for (
+    const int64_t integer
+    : {9007199254740992LL, -9007199254740992LL}
+  ) {
+    const int64_t value(integer);
+
+    std::shared_ptr<our::types::ISomething> instance(
+      MustDeserializeTheFirstExpected<our::types::ISomething>(
+        "Something",
+        our::jsonization::SomethingFrom
+      )
+    );
+
+    instance->set_negative(value);
+
+    AssertReportedEverywhere(
+      instance,
+      ".negative",
+      our::common::Concat(
+        L"Expected an integer, but got ",
+        std::to_wstring(integer),
+        L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+      )
+    );
+  }
+
+  for (
+    const int64_t integer
+    : {9007199254740991LL, -9007199254740991LL}
+  ) {
+    const int64_t value(integer);
+
+    std::shared_ptr<our::types::ISomething> instance(
+      MustDeserializeTheFirstExpected<our::types::ISomething>(
+        "Something",
+        our::jsonization::SomethingFrom
+      )
+    );
+
+    instance->set_negative(value);
+
+    AssertNotReportedAnywhere(instance, ".negative");
+  }
+}
+
+TEST_CASE(
+  "Test the safe integer range at .deviation of Something"
+) {
+  for (
+    const int64_t integer
+    : {9007199254740992LL, -9007199254740992LL}
+  ) {
+    const int64_t value(integer);
+
+    std::shared_ptr<our::types::ISomething> instance(
+      MustDeserializeTheFirstExpected<our::types::ISomething>(
+        "Something",
+        our::jsonization::SomethingFrom
+      )
+    );
+
+    instance->set_deviation(value);
+
+    AssertReportedEverywhere(
+      instance,
+      ".deviation",
+      our::common::Concat(
+        L"Expected an integer, but got ",
+        std::to_wstring(integer),
+        L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+      )
+    );
+  }
+
+  for (
+    const int64_t integer
+    : {9007199254740991LL, -9007199254740991LL}
+  ) {
+    const int64_t value(integer);
+
+    std::shared_ptr<our::types::ISomething> instance(
+      MustDeserializeTheFirstExpected<our::types::ISomething>(
+        "Something",
+        our::jsonization::SomethingFrom
+      )
+    );
+
+    instance->set_deviation(value);
+
+    AssertNotReportedAnywhere(instance, ".deviation");
+  }
+}
+
+TEST_CASE(
+  "Test the safe integer range at .alignment of Something"
+) {
+  for (
+    const int64_t integer
+    : {9007199254740992LL, -9007199254740992LL}
+  ) {
+    const int64_t value(integer);
+
     std::shared_ptr<our::types::ISomething> instance(
       MustDeserializeTheFirstExpected<our::types::ISomething>(
         "Something",
@@ -478,10 +712,33 @@ TEST_CASE(
 
     instance->set_alignment(value);
 
-    AssertSerializationFailsAt(
-      *instance,
-      ".alignment"
+    AssertReportedEverywhere(
+      instance,
+      ".alignment",
+      our::common::Concat(
+        L"Expected an integer, but got ",
+        std::to_wstring(integer),
+        L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+      )
     );
+  }
+
+  for (
+    const int64_t integer
+    : {9007199254740991LL, -9007199254740991LL}
+  ) {
+    const int64_t value(integer);
+
+    std::shared_ptr<our::types::ISomething> instance(
+      MustDeserializeTheFirstExpected<our::types::ISomething>(
+        "Something",
+        our::jsonization::SomethingFrom
+      )
+    );
+
+    instance->set_alignment(value);
+
+    AssertNotReportedAnywhere(instance, ".alignment");
   }
 }
 

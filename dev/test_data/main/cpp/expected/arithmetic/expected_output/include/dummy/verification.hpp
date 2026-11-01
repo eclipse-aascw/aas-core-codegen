@@ -133,6 +133,18 @@ class IVerificator {
 }  // namespace impl
 /// \endcond
 
+/// \cond HIDDEN
+namespace impl {
+/**
+ * \brief Describe that the \p integer lies outside the safe integer range.
+ *
+ * \param integer textual representation of the integer
+ * \return the cause of the error
+ */
+std::wstring DescribeIntegerOutsideSafeRange(const std::wstring& integer);
+}  // namespace impl
+/// \endcond
+
 class IVerification {
  public:
   virtual Iterator begin() const = 0;
@@ -255,7 +267,8 @@ bool HasRemainderOneByLength(
 // region Verification of constrained primitives
 
 /**
- * \brief Verify that the invariants hold for \p that value.
+ * \brief Verify that the invariants hold for \p that value, and that
+ * it lies in the safe integer range [-2^53 + 1, 2^53 - 1].
  *
  * \param that value to be verified
  * \return Iterable over constraint violations

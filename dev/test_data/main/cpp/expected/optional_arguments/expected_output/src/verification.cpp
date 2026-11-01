@@ -37,6 +37,16 @@ Error::Error(
 
 // endregion struct Error
 
+namespace impl {
+std::wstring DescribeIntegerOutsideSafeRange(const std::wstring& integer) {
+  return common::Concat(
+    L"Expected an integer, but got ",
+    integer,
+    L", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]"
+  );
+}
+}  // namespace impl
+
 // region Verification functions
 
 bool TextIsShort(
@@ -147,7 +157,8 @@ namespace {
  * A shape tells which checks apply to a value, see \ref ChecksOf.
  */
 enum class Shape : std::uint32_t {
-  kSomething = 0
+  kSomething = 0,
+  kINT64 = 1
 };  // enum class Shape
 
 /**
@@ -250,6 +261,8 @@ bool Something_6(
  * Give out the checks of the values of the \p shape.
  */
 const std::vector<Check>& ChecksOf(Shape shape) {
+  static const std::vector<Check> kNoChecks;
+
   switch (shape) {
     case Shape::kSomething: {
       static const std::vector<Check> checks = {
@@ -284,6 +297,10 @@ const std::vector<Check>& ChecksOf(Shape shape) {
       };
       return checks;
     }
+    case Shape::kINT64:
+      // NOTE (mristin):
+      // These values are verified by the nested verification.
+      return kNoChecks;
     default:
       throw std::logic_error(
         common::Concat(
@@ -297,18 +314,79 @@ const std::vector<Check>& ChecksOf(Shape shape) {
 // endregion Checks
 
 /**
+ * \brief Report a single error whose cause depends on the value.
+ *
+ * The path of the error is empty, as \ref ErrorIterator prefixes it with
+ * the path to the value.
+ */
+class SingleErrorVerificator : public impl::IVerificator {
+ public:
+  explicit SingleErrorVerificator(
+    std::wstring cause
+  ) :
+    cause_(std::move(cause)) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    // NOTE (mristin):
+    // We copy the cause as the caller might take over the data members of
+    // the error, and we still need to be able to start again.
+    error_ = Error(cause_);
+  }
+
+  void Next() override {
+    error_ = common::nullopt;
+  }
+
+  bool Done() const override {
+    return !error_.has_value();
+  }
+
+  const Error& Get() const override {
+    return *error_;
+  }
+
+  Error& GetMutable() override {
+    return *error_;
+  }
+
+  long Index() const override {
+    return error_.has_value() ? 0 : -1;
+  }
+
+  std::unique_ptr<impl::IVerificator> Clone() const override {
+    return common::make_unique<SingleErrorVerificator>(*this);
+  }
+
+ private:
+  std::wstring cause_;
+  common::optional<Error> error_;
+};  // class SingleErrorVerificator
+
+/**
  * \brief Create the nested verification of the \p value, if its \p shape has one.
  *
  * \return nullptr if the shape has no nested verification
  */
 std::unique_ptr<impl::IVerificator> NewNestedVerificator(
-  Shape,
-  const void*
+  Shape shape,
+  const void* value
 ) {
-  // NOTE (mristin):
-  // The meta-model uses no JSON-able values, so no value needs a nested
-  // verification.
-  return nullptr;
+  switch (shape) {
+    case Shape::kINT64: {
+      const int64_t integer = *static_cast<const int64_t*>(value);
+      if (common::IsSafeInteger(integer)) {
+        return nullptr;
+      }
+
+      return common::make_unique<SingleErrorVerificator>(
+        impl::DescribeIntegerOutsideSafeRange(std::to_wstring(integer))
+      );
+    }
+    default:
+      return nullptr;
+  }
 }
 
 // region Iteration over the values
@@ -467,11 +545,189 @@ std::unique_ptr<IIterator> One(
   return common::make_unique<OneIterator>(value, shape);
 }
 
+/**
+ * \brief Iterate over the values of the children, one child after another.
+ *
+ * A child is started only once the previous child is done.
+ */
+class ChainIterator : public IIterator {
+ public:
+  explicit ChainIterator(
+    std::vector<std::unique_ptr<IIterator> > children
+  ) :
+    children_(std::move(children)),
+    active_(0) {
+    // Intentionally empty.
+  }
+
+  ChainIterator(const ChainIterator& other) :
+    active_(other.active_) {
+    children_.reserve(other.children_.size());
+    for (const std::unique_ptr<IIterator>& child : other.children_) {
+      children_.emplace_back(child->Clone());
+    }
+  }
+
+  void Start() override {
+    active_ = 0;
+    if (!children_.empty()) {
+      children_[0]->Start();
+    }
+    SkipDoneChildren();
+  }
+
+  void Next() override {
+    children_[active_]->Next();
+    SkipDoneChildren();
+  }
+
+  bool Done() const override {
+    return active_ >= children_.size();
+  }
+
+  const void* Value() const override {
+    return children_[active_]->Value();
+  }
+
+  Shape ShapeOf() const override {
+    return children_[active_]->ShapeOf();
+  }
+
+  void AppendToPath(iteration::Path& path) const override {
+    children_[active_]->AppendToPath(path);
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<ChainIterator>(*this);
+  }
+
+ private:
+  std::vector<std::unique_ptr<IIterator> > children_;
+
+  /**
+   * Index of the child we currently iterate over
+   */
+  std::size_t active_;
+
+  /**
+   * Move on to the next children, and start them, until one is not done.
+   */
+  void SkipDoneChildren() {
+    while (active_ < children_.size() && children_[active_]->Done()) {
+      ++active_;
+      if (active_ < children_.size()) {
+        children_[active_]->Start();
+      }
+    }
+  }
+};  // class ChainIterator
+
+void CollectChildren(
+  std::vector<std::unique_ptr<IIterator> >&
+) {
+  // Intentionally empty, as there are no more children to collect.
+}
+
+template<typename... Rest>
+void CollectChildren(
+  std::vector<std::unique_ptr<IIterator> >& children,
+  std::unique_ptr<IIterator> first,
+  Rest... rest
+) {
+  children.emplace_back(std::move(first));
+  CollectChildren(children, std::move(rest)...);
+}
+
+// NOTE (mristin):
+// We can not use an initializer list here, as we can not move the unique pointers
+// out of it.
+template<typename... Children>
+std::unique_ptr<IIterator> Chain(
+  Children... children
+) {
+  std::vector<std::unique_ptr<IIterator> > collected;
+  collected.reserve(sizeof...(Children));
+  CollectChildren(collected, std::move(children)...);
+
+  return common::make_unique<ChainIterator>(std::move(collected));
+}
+
+/**
+ * Iterate over the values of the \p child, which lives in a property.
+ */
+class InPropertyIterator : public IIterator {
+ public:
+  InPropertyIterator(
+    iteration::Property property,
+    std::unique_ptr<IIterator> child
+  ) :
+    property_(property),
+    child_(std::move(child)) {
+    // Intentionally empty.
+  }
+
+  InPropertyIterator(const InPropertyIterator& other) :
+    property_(other.property_),
+    child_(other.child_->Clone()) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    child_->Start();
+  }
+
+  void Next() override {
+    child_->Next();
+  }
+
+  bool Done() const override {
+    return child_->Done();
+  }
+
+  const void* Value() const override {
+    return child_->Value();
+  }
+
+  Shape ShapeOf() const override {
+    return child_->ShapeOf();
+  }
+
+  void AppendToPath(iteration::Path& path) const override {
+    path.segments.emplace_back(
+      common::make_unique<iteration::PropertySegment>(property_)
+    );
+    child_->AppendToPath(path);
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<InPropertyIterator>(*this);
+  }
+
+ private:
+  iteration::Property property_;
+  std::unique_ptr<IIterator> child_;
+};  // class InPropertyIterator
+
+std::unique_ptr<IIterator> InProperty(
+  iteration::Property property,
+  std::unique_ptr<IIterator> child
+) {
+  return common::make_unique<InPropertyIterator>(property, std::move(child));
+}
+
 std::unique_ptr<IIterator> Over_Something(
   const types::ISomething& that,
   bool
 ) {
-  return One(&that, Shape::kSomething);
+  return Chain(
+    One(&that, Shape::kSomething),
+    InProperty(
+      iteration::Property::kOptionalNumber,
+      that.optional_number().has_value()
+        ? One(&(*that.optional_number()), Shape::kINT64)
+        : Empty()
+    )
+  );
 }
 
 /**

@@ -389,6 +389,96 @@ def _generate_primitive_converter(
     description = _PRIMITIVE_TYPE_DESCRIPTION[primitive_type]
     value_type = csharp_common.PRIMITIVE_TYPE_MAP[primitive_type]
 
+    if primitive_type is intermediate.PrimitiveType.INT:
+        # NOTE (mristin):
+        # An integer is the only primitive which a JSON node can give us in two
+        # kinds, as an integer or as a float, and it has to be checked for
+        # the safe integer range, so it does not share the scaffolding of
+        # the other primitives below.
+        return Stripped(
+            f"""\
+/// <summary>
+/// Convert <paramref name="node" /> to {description}.
+/// </summary>
+/// <remarks>
+/// A whole number written as a float, such as <c>5.0</c> or <c>1e2</c>, is
+/// accepted as well. An integer outside the safe integer range
+/// [-2^53 + 1, 2^53 - 1] is refused, see
+/// <see cref="Common.IsSafeInteger(long)" />.
+/// </remarks>
+/// <param name="node">JSON node to be parsed</param>
+/// <param name="error">Error, if any, during the deserialization</param>
+internal static {value_type} {name}(
+{I}Nodes.JsonNode? node,
+{I}out Reporting.Error? error)
+{{
+{I}error = null;
+
+{I}// NOTE (mristin):
+{I}// We can not switch on the kind of the number, since
+{I}// ``Nodes.JsonValue.GetValueKind`` arrived only in .NET 8, and the generated
+{I}// code has to build against .NET 6.
+{I}Nodes.JsonValue? value = node as Nodes.JsonValue;
+{I}if (value != null)
+{I}{{
+{II}if (value.TryGetValue<long>(out long integer))
+{II}{{
+{III}if (!Common.IsSafeInteger(integer))
+{III}{{
+{IIII}error = new Reporting.Error(
+{IIIII}Verification.UnsafeIntegerMessage(integer));
+{IIII}return default;
+{III}}}
+{III}return integer;
+{II}}}
+{II}else if (value.TryGetValue<int>(out int smallInteger))
+{II}{{
+{III}// NOTE (mristin):
+{III}// Only a node constructed programmatically holds an int, which is
+{III}// always a safe integer.
+{III}return smallInteger;
+{II}}}
+{II}else if (value.TryGetValue<ulong>(out ulong unsignedInteger))
+{II}{{
+{III}// NOTE (mristin):
+{III}// Only a node constructed programmatically holds an ulong, as a parsed
+{III}// integer beyond the range of a long is read as a double below.
+{III}if (!Common.IsSafeInteger(unsignedInteger))
+{III}{{
+{IIII}error = new Reporting.Error(
+{IIIII}Verification.UnsafeIntegerMessage(unsignedInteger));
+{IIII}return default;
+{III}}}
+{III}return (long)unsignedInteger;
+{II}}}
+{II}else if (value.TryGetValue<double>(out double number))
+{II}{{
+{III}if (!System.Double.IsFinite(number) || System.Math.Truncate(number) != number)
+{III}{{
+{IIII}error = new Reporting.Error(
+{IIIII}$"Expected an integer, but got {{number}}, which is not a whole number");
+{IIII}return default;
+{III}}}
+
+{III}// NOTE (mristin):
+{III}// We have to check the range before the cast, as the cast of a number
+{III}// outside the range of a long gives an unspecified value.
+{III}if (!Common.IsSafeInteger(number))
+{III}{{
+{IIII}error = new Reporting.Error(
+{IIIII}Verification.UnsafeIntegerMessage(number));
+{IIII}return default;
+{III}}}
+{III}return (long)number;
+{II}}}
+{I}}}
+
+{I}error = new Reporting.Error(
+{II}$"Expected an integer, but got: {{Describe(node)}}");
+{I}return default;
+}}"""
+        )
+
     conversion_failed = Stripped(
         f"""\
 error = new Reporting.Error(
@@ -1339,18 +1429,10 @@ private static bool CheckIsJsonAble(
 {III}return true;
 
 {II}case Nodes.JsonValue jsonValue:
-{III}// NOTE (mristin):
-{III}// JSON knows neither an infinity nor a not-a-number, so neither is
-{III}// a JSON-able value. A conformant parser can never produce one, but
-{III}// the caller gives us a node which may have been constructed
-{III}// programmatically.
-{III}if (
-{IIII}jsonValue.TryGetValue<double>(out double number)
-{IIIII}&& !System.Double.IsFinite(number))
+{III}string? cause = JsonValueVerification.CheckJsonAbleNumber(jsonValue);
+{III}if (cause != null)
 {III}{{
-{IIII}error = new Reporting.Error(
-{IIIII}$"Expected a JSON-able value, but got the number {{number}}, " +
-{IIIII}"which is neither finite nor representable in JSON");
+{IIII}error = new Reporting.Error(cause);
 {IIII}return false;
 {III}}}
 {III}return true;
@@ -1478,7 +1560,14 @@ def _generate_deserialize_impl(
 
     blocks: List[Stripped] = [_generate_describe_helper()]
 
+    # NOTE (mristin):
+    # The converter of an integer relies on the safe integer predicate and
+    # message of ``Verification``, which exist only if the model holds integers.
+    holds_integers = intermediate_uses.integers(symbol_table)
     for primitive_type in intermediate.PrimitiveType:
+        if primitive_type is intermediate.PrimitiveType.INT and not holds_integers:
+            continue
+
         blocks.append(_generate_primitive_converter(primitive_type))
 
     # region Shared combinators and the de-serializers they compose
@@ -1641,11 +1730,81 @@ public static Our.{name} {name}From(
     return Stripped(writer.getvalue())
 
 
+def _generate_deserialize_json_able_from(
+    name: str, result_type: str, node_type: str
+) -> Stripped:
+    """
+    Generate the facade deserialization method for the JSON-able ``name``.
+
+    The ``name`` is ``JsonValue``, ``JsonArray`` or ``JsonObject``. The method
+    gives back a node of ``result_type`` from a node of ``node_type``.
+    """
+    what = name[len("Json") :].lower()
+
+    return Stripped(
+        f"""\
+/// <summary>
+/// Deserialize a JSON-able {what} from <paramref name="node" />.
+/// </summary>
+/// <remarks>
+/// A JSON-able value is, recursively, exactly as JSON itself is defined:
+/// a <c>null</c> (JSON null), a boolean, a number, a string, an array of
+/// JSON-able values or an object of JSON-able values with string keys.
+/// An infinity, a not-a-number and an integer outside the safe integer
+/// range [-2^53 + 1, 2^53 - 1] are rejected at any depth.
+///
+/// The result is a deep, independent copy of <paramref name="node" />.
+/// </remarks>
+/// <param name="node">JSON node to be parsed</param>
+/// <exception cref="Jsonization.Exception">
+/// Thrown when <paramref name="node" /> is not a JSON-able
+/// {what}.
+/// </exception>
+public static {result_type} {name}From(
+{I}{node_type} node)
+{{
+{I}{result_type} result = DeserializeImplementation.{name}From(
+{II}node,
+{II}out Reporting.Error? error);
+{I}if (error != null)
+{I}{{
+{II}throw new Jsonization.Exception(
+{III}Reporting.GenerateJsonPath(error.PathSegments),
+{III}error.Cause);
+{I}}}
+{I}return result;
+}}"""
+    )
+
+
 def _generate_deserialize(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the deserializer with a deserialization method for each class."""
     blocks: List[Stripped] = []
+
+    if intermediate_uses.json_types(symbol_table):
+        blocks.append(
+            _generate_deserialize_json_able_from(
+                name="JsonValue",
+                result_type="Nodes.JsonNode?",
+                node_type="Nodes.JsonNode?",
+            )
+        )
+        blocks.append(
+            _generate_deserialize_json_able_from(
+                name="JsonArray",
+                result_type="Nodes.JsonArray",
+                node_type="Nodes.JsonNode",
+            )
+        )
+        blocks.append(
+            _generate_deserialize_json_able_from(
+                name="JsonObject",
+                result_type="Nodes.JsonObject",
+                node_type="Nodes.JsonNode",
+            )
+        )
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
             blocks.append(
@@ -2606,18 +2765,10 @@ private static void CheckIsJsonAbleForSerialization(Nodes.JsonNode that)
 {III}break;
 
 {II}case Nodes.JsonValue jsonValue:
-{III}// NOTE (mristin):
-{III}// JSON knows neither an infinity nor a not-a-number, so neither is
-{III}// a JSON-able value, even though Nodes.JsonValue holds one happily
-{III}// if it was constructed programmatically.
-{III}if (
-{IIII}jsonValue.TryGetValue<double>(out double number)
-{IIIII}&& !System.Double.IsFinite(number))
+{III}string? cause = JsonValueVerification.CheckJsonAbleNumber(jsonValue);
+{III}if (cause != null)
 {III}{{
-{IIII}throw new SerializationFailure(
-{IIIII}new Reporting.Error(
-{IIIIII}$"Expected a JSON-able value, but got the number {{number}}, " +
-{IIIIII}"which is neither finite nor representable in JSON"));
+{IIII}throw new SerializationFailure(new Reporting.Error(cause));
 {III}}}
 {III}break;
 
@@ -2640,7 +2791,7 @@ private static void CheckIsJsonAbleForSerialization(Nodes.JsonNode that)
 /// Thrown if <paramref name="that" /> contains a non-finite number anywhere,
 /// at any depth.
 /// </exception>
-private static Nodes.JsonNode? SerializeJsonValue(Nodes.JsonNode? that)
+internal static Nodes.JsonNode? SerializeJsonValue(Nodes.JsonNode? that)
 {{
 {I}if (that == null)
 {I}{{
@@ -2746,30 +2897,6 @@ internal static Nodes.JsonObject TransformIClass(Our.IClass that)
         Stripped(
             f"""\
 /// <summary>
-/// Convert <paramref name="that" /> 64-bit long integer to a JSON value.
-/// </summary>
-/// <param name="that">value to be converted</param>
-/// <exception name="SerializationFailure">
-/// Thrown if <paramref name="that" /> lies outside the range where it can be
-/// exactly represented as a 64-bit floating-point number, which is what
-/// the JSON de-serializers of the other languages read a number into.
-/// </exception>
-[CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
-private static Nodes.JsonValue ToJsonValue(long that)
-{{
-{I}if (that < -9007199254740991L || that > 9007199254740991L)
-{I}{{
-{II}throw new SerializationFailure(
-{III}new Reporting.Error(
-{IIII}"The integer can not be serialized to JSON as it is outside " +
-{IIII}$"the range [-2^53 + 1, 2^53 - 1]: {{that}}"));
-{I}}}
-{I}return Nodes.JsonValue.Create(that);
-}}"""
-        ),
-        Stripped(
-            f"""\
-/// <summary>
 /// Convert <paramref name="that" /> 64-bit floating-point number to a JSON
 /// value.
 /// </summary>
@@ -2795,6 +2922,35 @@ private static Nodes.JsonValue ToJsonValue(double that)
 }}"""
         ),
     ]
+
+    # NOTE (mristin):
+    # The integers are range-checked with the predicate of ``Common`` and the
+    # message of ``Verification``, which exist only if the model holds integers.
+    if intermediate_uses.integers(symbol_table):
+        blocks.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Convert <paramref name="that" /> 64-bit long integer to a JSON value.
+/// </summary>
+/// <param name="that">value to be converted</param>
+/// <exception name="SerializationFailure">
+/// Thrown if <paramref name="that" /> lies outside the safe integer range,
+/// see <see cref="Common.IsSafeInteger(long)" />.
+/// </exception>
+[CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
+private static Nodes.JsonValue ToJsonValue(long that)
+{{
+{I}if (!Common.IsSafeInteger(that))
+{I}{{
+{II}throw new SerializationFailure(
+{III}new Reporting.Error(
+{IIII}Verification.UnsafeIntegerMessage(that)));
+{I}}}
+{I}return Nodes.JsonValue.Create(that);
+}}"""
+            )
+        )
 
     if len(symbol_table.named_unions) > 0:
         blocks.append(_generate_transform_iunion_helper())
@@ -2940,6 +3096,38 @@ public static Nodes.JsonObject ToJsonObject(Our.IClass that)
 }}"""
         ),
     ]
+
+    if intermediate_uses.json_types(symbol_table):
+        blocks.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Serialize the JSON-able value <paramref name="that" /> into a JSON node.
+/// </summary>
+/// <remarks>
+/// The result is a deep, independent copy of <paramref name="that" />.
+/// A <c>null</c> is a JSON null.
+/// </remarks>
+/// <exception cref="SerializationException">
+/// Thrown when <paramref name="that" /> contains, at any depth, an infinity,
+/// a not-a-number or an integer outside the safe integer range
+/// [-2^53 + 1, 2^53 - 1]
+/// </exception>
+public static Nodes.JsonNode? JsonValueToJsonNode(Nodes.JsonNode? that)
+{{
+{I}try
+{I}{{
+{II}return Transformer.SerializeJsonValue(that);
+{I}}}
+{I}catch (SerializationFailure failure)
+{I}{{
+{II}throw new SerializationException(
+{III}Reporting.GenerateCSharpPath(failure.Error.PathSegments),
+{III}failure.Error.Cause);
+{I}}}
+}}"""
+            )
+        )
 
     for enum in symbol_table.enumerations:
         name = csharp_naming.enum_name(enum.name)

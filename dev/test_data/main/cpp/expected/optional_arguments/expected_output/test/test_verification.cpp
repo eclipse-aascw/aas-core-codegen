@@ -10,6 +10,7 @@
 #include <catch2/catch.hpp>
 
 #include <fstream>
+#include <limits>
 
 namespace our = dummy;
 
@@ -221,6 +222,55 @@ TEST_CASE("Test verification of invalid cases for Something") {
 
       AssertVerificationFailure(path, error_path);
     }
+  }
+}
+
+TEST_CASE("Test the predicates of the safe integer range") {
+  for (
+    const int64_t value
+    : {9007199254740991LL, -9007199254740991LL, 0LL}
+  ) {
+    REQUIRE(our::common::IsSafeInteger(value));
+  }
+
+  for (
+    const int64_t value
+    : {
+      int64_t(9007199254740992LL),
+      int64_t(-9007199254740992LL),
+      std::numeric_limits<int64_t>::max(),
+      std::numeric_limits<int64_t>::min()
+    }
+  ) {
+    REQUIRE(!our::common::IsSafeInteger(value));
+  }
+
+  REQUIRE(our::common::IsSafeInteger(uint64_t(9007199254740991ULL)));
+  REQUIRE(!our::common::IsSafeInteger(uint64_t(9007199254740992ULL)));
+  REQUIRE(
+    !our::common::IsSafeInteger(
+      std::numeric_limits<uint64_t>::max()
+    )
+  );
+
+  for (
+    const double value
+    : {9007199254740991.0, -9007199254740991.0, 0.0}
+  ) {
+    REQUIRE(our::common::IsSafeInteger(value));
+  }
+
+  for (
+    const double value
+    : {
+      9007199254740992.0,
+      -9007199254740992.0,
+      std::numeric_limits<double>::infinity(),
+      -std::numeric_limits<double>::infinity(),
+      std::numeric_limits<double>::quiet_NaN()
+    }
+  ) {
+    REQUIRE(!our::common::IsSafeInteger(value));
   }
 }
 

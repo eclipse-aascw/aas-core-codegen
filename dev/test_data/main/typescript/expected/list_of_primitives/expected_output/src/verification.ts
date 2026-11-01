@@ -332,6 +332,41 @@ export function containsDot(
 }
 
 /**
+ * Verify that `that` is a safe integer so that it can be serialized to JSON.
+ *
+ * @param that - to be verified
+ * @returns errors, if any
+ */
+export function *verifyInteger(
+  that: number
+): IterableIterator<VerificationError> {
+  if (!Number.isInteger(that)) {
+    yield new VerificationError(OurCommon.notWholeIntegerMessage(that));
+  } else if (!Number.isSafeInteger(that)) {
+    yield new VerificationError(OurCommon.unsafeIntegerMessage(that));
+  }
+}
+
+/**
+ * Verify the items of `that` recursively.
+ */
+function *verify_ListOf_int(
+  that: ReadonlyArray<number>
+): IterableIterator<VerificationError> {
+  for (let i = 0; i < that.length; i++) {
+    for (const error of verifyInteger(that[i])) {
+      error.path.prepend(
+        new IndexSegment(
+          that,
+          i
+        )
+      );
+      yield error;
+    }
+  }
+}
+
+/**
  * Verify an instance of the model recursively or non-recursively (depending on the context).
  */
 class Verifier
@@ -340,7 +375,6 @@ class Verifier
   > {
   *transformSomethingWithContext(
     that: OurTypes.Something,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
     if (!(
@@ -446,6 +480,18 @@ class Verifier
       yield new VerificationError(
         "Some floats must be unique."
       )
+    }
+
+    if (context === true) {
+      for (const error of verify_ListOf_int(that.someInts)) {
+        error.path.prepend(
+          new PropertySegment(
+            that,
+            "someInts"
+          )
+        );
+        yield error;
+      }
     }
   }
 }

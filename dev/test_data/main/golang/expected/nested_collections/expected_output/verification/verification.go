@@ -115,6 +115,22 @@ func ResetCorner(
 	return true
 }
 
+// Verify that `that` integer lies in the safe integer range of JSON, as
+// checked by [ourcommon.IsSafeInteger] in the serialization as well.
+func verifyInt64(
+	that int64,
+	onError func(*VerificationError) bool,
+) (abort bool) {
+	if !ourcommon.IsSafeInteger(that) {
+		abort = onError(newVerificationError(ourcommon.UnsafeIntegerMessage(that)))
+		if abort {
+			return
+		}
+	}
+
+	return
+}
+
 // Verify `that` instance of [ourtypes.ISomeItem].
 //
 // You have to supply the callback `onError` to iterate over the errors.
@@ -152,7 +168,20 @@ func VerifyAnotherItem(
 ) (abort bool) {
 	abort = false
 
-	// No verification has been defined for IAnotherItem.
+	abort = verifyInt64(
+		that.SerialNumber(),
+		func(err *VerificationError) bool {
+			err.Path.PrependName(
+				&ourreporting.NameSegment{
+					Name: "SerialNumber",
+				},
+			)
+			return onError(err)
+		},
+	)
+	if abort {
+		return
+	}
 
 	return
 }
@@ -296,6 +325,21 @@ func VerifySomething(
 		if abort {
 			return
 		}
+	} else {
+		abort = verifyListOf_ListOf_long(
+			that.Grid(),
+			func(err *VerificationError) bool {
+				err.Path.PrependName(
+					&ourreporting.NameSegment{
+						Name: "Grid",
+					},
+				)
+				return onError(err)
+			},
+		)
+		if abort {
+			return
+		}
 	}
 
 	if that.RowsOfPairs() == nil {
@@ -398,6 +442,56 @@ func VerifySomething(
 				err.Path.PrependName(
 					&ourreporting.NameSegment{
 						Name: "OptionalGridOfItems",
+					},
+				)
+				return onError(err)
+			},
+		)
+		if abort {
+			return
+		}
+	}
+
+	return
+}
+
+// Verify the items of `that` recursively.
+func verifyListOf_ListOf_long(
+	that [][]int64,
+	onError func(*VerificationError) bool,
+) (abort bool) {
+	for i, item := range that {
+		abort = verifyListOf_long(
+			item,
+			func(err *VerificationError) bool {
+				err.Path.PrependIndex(
+					&ourreporting.IndexSegment{
+						Index: i,
+					},
+				)
+				return onError(err)
+			},
+		)
+		if abort {
+			return
+		}
+	}
+
+	return
+}
+
+// Verify the items of `that` recursively.
+func verifyListOf_long(
+	that []int64,
+	onError func(*VerificationError) bool,
+) (abort bool) {
+	for i, item := range that {
+		abort = verifyInt64(
+			item,
+			func(err *VerificationError) bool {
+				err.Path.PrependIndex(
+					&ourreporting.IndexSegment{
+						Index: i,
 					},
 				)
 				return onError(err)
@@ -595,6 +689,21 @@ func verifyTupleOf2_long_Code(
 	that ourcommon.Tuple2[int64, string],
 	onError func(*VerificationError) bool,
 ) (abort bool) {
+	abort = verifyInt64(
+		that.Item1,
+		func(err *VerificationError) bool {
+			err.Path.PrependIndex(
+				&ourreporting.IndexSegment{
+					Index: 0,
+				},
+			)
+			return onError(err)
+		},
+	)
+	if abort {
+		return
+	}
+
 	abort = VerifyCode(
 		that.Item2,
 		func(err *VerificationError) bool {
@@ -753,6 +862,13 @@ func VerifyPositiveInt(
 	onError func(*VerificationError) bool,
 ) (abort bool) {
 	abort = false
+
+	if !ourcommon.IsSafeInteger(that) {
+		abort = onError(newVerificationError(ourcommon.UnsafeIntegerMessage(that)))
+		if abort {
+			return
+		}
+	}
 
 	if !(that > 0) {
 		abort = onError(

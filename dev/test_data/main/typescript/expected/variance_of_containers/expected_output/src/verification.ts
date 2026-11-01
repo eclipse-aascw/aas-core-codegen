@@ -546,6 +546,22 @@ export function levelsArePositive(
 }
 
 /**
+ * Verify that `that` is a safe integer so that it can be serialized to JSON.
+ *
+ * @param that - to be verified
+ * @returns errors, if any
+ */
+export function *verifyInteger(
+  that: number
+): IterableIterator<VerificationError> {
+  if (!Number.isInteger(that)) {
+    yield new VerificationError(OurCommon.notWholeIntegerMessage(that));
+  } else if (!Number.isSafeInteger(that)) {
+    yield new VerificationError(OurCommon.unsafeIntegerMessage(that));
+  }
+}
+
+/**
  * Verify the items of `that` recursively.
  */
 function *verify_ListOf_class(
@@ -581,12 +597,19 @@ class Verifier
   }
 
   *transformSpecialItemWithContext(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     that: OurTypes.SpecialItem,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    // No verification has been defined for SpecialItem.
+    for (const error of verifyInteger(that.level)) {
+      error.path.prepend(
+        new PropertySegment(
+          that,
+          "level"
+        )
+      );
+      yield error;
+    }
   }
 
   *transformContainerWithContext(

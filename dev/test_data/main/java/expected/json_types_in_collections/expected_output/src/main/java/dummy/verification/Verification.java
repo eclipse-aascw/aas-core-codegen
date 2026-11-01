@@ -44,6 +44,50 @@ public class Verification {
   private static final _Transformer transformer = new _Transformer();
 
   /**
+   * Check whether the integer {@code value} lies in the safe integer range
+   * [-2^53 + 1, 2^53 - 1].
+   *
+   * <p>JSON knows a single numeric type, which all the other SDKs read into
+   * a {@code double}. Outside this range, an integer can not be exactly
+   * represented as a {@code double}, so a reader might quietly get
+   * a different number than the one which was written.
+   *
+   * @param value integer to be checked
+   * @return true if {@code value} is a safe integer
+   */
+  public static boolean isSafeInteger(long value) {
+    return -9007199254740991L <= value && value <= 9007199254740991L;
+  }
+
+  /**
+   * Check whether the whole number {@code value} lies in the safe integer
+   * range [-2^53 + 1, 2^53 - 1].
+   *
+   * <p>Only the range is checked here; the caller has to make sure that
+   * {@code value} is a whole number in the first place.
+   *
+   * @param value whole number to be checked
+   * @return true if {@code value} is a safe integer
+   */
+  public static boolean isSafeInteger(double value) {
+    return -9007199254740991.0 <= value && value <= 9007199254740991.0;
+  }
+
+  /**
+   * Check whether the big integer {@code value} lies in the safe integer
+   * range [-2^53 + 1, 2^53 - 1].
+   *
+   * @param value integer to be checked
+   * @return true if {@code value} is a safe integer
+   */
+  public static boolean isSafeInteger(BigInteger value) {
+    // NOTE (mristin):
+    // A bit length below 64 means that the value fits a long, so we can
+    // narrow it without truncating it silently.
+    return value.bitLength() < 64 && isSafeInteger(value.longValue());
+  }
+
+  /**
    * Stream the field names of {@code node}.
    *
    * <p>Jackson gives an {@link java.util.Iterator}, which is not a stream.
@@ -55,74 +99,120 @@ public class Verification {
   }
 
   /**
+   * Explain that the integer {@code value} of a JSON-able value lies outside
+   * the safe integer range [-2^53 + 1, 2^53 - 1].
+   *
+   * @param value integer, written as it was given
+   * @return the message
+   */
+  public static String jsonAbleIntegerOutsideSafeRangeMessage(Object value) {
+    return "Expected a JSON-able value, but got the integer " + value +
+      ", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]";
+  }
+
+  /**
+   * Check that the number {@code node} is a number of a JSON-able value.
+   *
+   * <p>JSON knows a single numeric type, which all the other SDKs read into
+   * a {@code double}. Hence a JSON-able number has to be finite, and
+   * an integer has to lie in the safe integer range [-2^53 + 1, 2^53 - 1],
+   * as for the integer properties of the model -- otherwise a reader might
+   * quietly get a different number than the one which was given.
+   *
+   * <p>The verification, the de-serialization and the serialization of
+   * a JSON-able value all use this check, so that they agree on what
+   * a JSON-able number is.
+   *
+   * @param node number node to be checked
+   * @return cause why {@code node} is not JSON-able, or null if it is
+   */
+  public static String checkJsonAbleNumber(JsonNode node) {
+    switch (node.numberType()) {
+      case INT:
+      case LONG:
+        if (isSafeInteger(node.longValue())) {
+          return null;
+        }
+        break;
+
+      case BIG_INTEGER:
+        // NOTE (mristin):
+        // Jackson gives a big integer for every integer if
+        // ``USE_BIG_INTEGER_FOR_INTS`` is enabled, so a small one can arrive
+        // as well.
+        if (isSafeInteger(node.bigIntegerValue())) {
+          return null;
+        }
+        break;
+
+      default: {
+        // NOTE (mristin):
+        // JSON knows neither an infinity nor a not-a-number. Jackson's own
+        // parser never gives us one, but {@code node} may well have been
+        // put together programmatically.
+        final double value = node.doubleValue();
+        if (Double.isInfinite(value) || Double.isNaN(value)) {
+          return "Expected a JSON-able value, but got the number " + value +
+            ", which is neither finite nor representable in JSON";
+        }
+        return null;
+      }
+    }
+
+    return jsonAbleIntegerOutsideSafeRangeMessage(node);
+  }
+
+  /**
    * Verify that {@code node} is a JSON-able value, at any depth.
    *
+   * <p>The path of an error is relative to {@code node}.
+   *
    * @param node to be verified
-   * @param path JSON path to {@code node}, written into the messages
    * @return a stream of errors, if any
    */
-  private static Stream<Reporting.Error> verifyJsonValueAt(
-      JsonNode node, String path) {
+  public static Stream<Reporting.Error> verifyJsonValue(JsonNode node) {
     if (node == null || node.isMissingNode()) {
       return Stream.of(
         new Reporting.Error(
-          "Expected a JSON-able value at " + path
-            + ", but got: " + node));
+          "Expected a JSON-able value, but got: " + node));
     }
 
-    if (node.isNull()) {
+    if (node.isNull() || node.isBoolean() || node.isTextual()) {
       return Stream.empty();
     }
 
     if (node.isNumber()) {
-      // NOTE (mristin):
-      // JSON knows neither an infinity nor a not-a-number, so neither is
-      // a JSON-able value, even though a Jackson node holds either.
-      final double value = node.doubleValue();
-      if (Double.isInfinite(value) || Double.isNaN(value)) {
-        return Stream.of(
-          new Reporting.Error(
-            "Expected a JSON-able value at " + path
-              + ", but got the number " + value
-              + ", which is neither finite nor representable in JSON"));
-      }
-      return Stream.empty();
-    }
-
-    if (node.isBoolean() || node.isTextual()) {
-      return Stream.empty();
+      final String cause = checkJsonAbleNumber(node);
+      return (cause == null)
+        ? Stream.empty()
+        : Stream.of(new Reporting.Error(cause));
     }
 
     if (node.isArray()) {
       return Verification.zip(
         IntStream.iterate(0, i -> i + 1).boxed(),
         StreamSupport.stream(node.spliterator(), false))
-          .flatMap(elemTuple -> verifyJsonValueAt(
-            elemTuple.getSecond(),
-            path + "[" + elemTuple.getFirst() + "]"));
+          .flatMap(itemTuple -> verifyJsonValue(itemTuple.getSecond())
+            .map(error -> {
+              error.prependSegment(
+                new Reporting.IndexSegment(itemTuple.getFirst()));
+              return error;
+            }));
     }
 
     if (node.isObject()) {
       return streamOfFieldNames(node)
-        .flatMap(name -> verifyJsonValueAt(
-          node.get(name), path + "." + name));
+        .flatMap(name -> verifyJsonValue(node.get(name))
+          .map(error -> {
+            error.prependSegment(new Reporting.KeySegment(name));
+            return error;
+          }));
     }
 
     return Stream.of(
       new Reporting.Error(
         "Expected a JSON-able value (a null, a boolean, a number, a string, "
-          + "an array or an object) at " + path
-          + ", but got: " + node.getNodeType()));
-  }
-
-  /**
-   * Verify that {@code node} is a JSON-able value, at any depth.
-   *
-   * @param node to be verified
-   * @return a stream of errors, if any
-   */
-  public static Stream<Reporting.Error> verifyJsonValue(JsonNode node) {
-    return verifyJsonValueAt(node, "$");
+          + "an array or an object), but got: " + node.getNodeType()));
   }
 
   /**

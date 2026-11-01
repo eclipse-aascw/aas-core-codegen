@@ -451,6 +451,41 @@ public class TestXmlizationOfConcreteClasses {
   } // public void testRatioReadFromMinusinf
 
   @Test
+  public void testCountReadFrom9007199254740991() throws IOException, XMLStreamException {
+    final Something instance =
+      readWith("count", "9007199254740991");
+
+    assertEquals(
+      Long.valueOf(9007199254740991L),
+      instance.getCount());
+  } // public void testCountReadFrom9007199254740991
+
+  @Test
+  public void testCountReadFromMinus9007199254740991() throws IOException, XMLStreamException {
+    final Something instance =
+      readWith("count", "-9007199254740991");
+
+    assertEquals(
+      Long.valueOf(-9007199254740991L),
+      instance.getCount());
+  } // public void testCountReadFromMinus9007199254740991
+
+  @Test
+  public void testCountReadOutsideTheSafeIntegerRange() throws IOException, XMLStreamException {
+    for (String text : new String[] {"9007199254740992", "-9007199254740992"}) {
+      try {
+        readWith("count", text);
+        fail("Expected the de-serialization of " + text + " to fail, but it succeeded");
+      } catch (XmlCommon.DeserializeException exception) {
+        assertEquals(
+          "Expected an integer, but got " + text
+            + ", which is outside the safe integer range [-2^53 + 1, 2^53 - 1]",
+          exception.getReason().orElse(null));
+      }
+    }
+  } // public void testCountReadOutsideTheSafeIntegerRange
+
+  @Test
   public void testFlagReadFrom1() throws IOException, XMLStreamException {
     final Something instance =
       readWith("flag", "1");
