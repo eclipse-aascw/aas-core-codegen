@@ -62,6 +62,30 @@ def _is_value_type(
     return isinstance(type_annotation, intermediate_type_inference.TupleTypeAnnotation)
 
 
+def _call_list_helper(method: str, arguments: Sequence[Stripped]) -> Stripped:
+    """
+    Call the ``method`` of ``Common.ListHelpers`` on the ``arguments``.
+
+    We put the arguments on separate lines if any of them spans multiple lines,
+    or if the call would be too long.
+    """
+    callee = f"{csharp_common.COMMON_CLASS}.ListHelpers.{method}"
+
+    arguments_joined = ", ".join(arguments)
+    if all("\n" not in argument for argument in arguments) and (
+        len(callee) + len(arguments_joined) < 70
+    ):
+        return Stripped(f"{callee}({arguments_joined})")
+
+    arguments_joined = ",\n".join(arguments)
+    return Stripped(
+        f"""\
+{callee}(
+{I}{indent_but_first_line(arguments_joined, I)}
+)"""
+    )
+
+
 def generate_type(
     type_annotation: intermediate_type_inference.TypeAnnotationUnion,
 ) -> Tuple[Optional[Stripped], Optional[str]]:
@@ -401,66 +425,48 @@ class Transpiler(
         collection, error = self.transform(node.collection)
         if error is not None:
             return None, error
+        assert collection is not None
 
         index, error = self.transform(node.index)
         if error is not None:
             return None, error
         assert index is not None
 
-        index_as_int: Optional[int] = None
-        try:
-            index_as_int = int(index)
-        except ValueError:
-            pass
-
-        if index_as_int is not None and index_as_int < 0:
-            index = Stripped(f"^{-index_as_int}")
-
-        elif (
-            index_as_int is None
-            and intermediate_type_inference.try_primitive_type(
-                self.type_map[node.index]
-            )
-            is intermediate_type_inference.PrimitiveType.INT
+        if isinstance(
+            intermediate_type_inference.beneath_optional(collection_type),
+            intermediate_type_inference.JsonObjectTypeAnnotation,
         ):
+            no_parentheses_types = (
+                parse_tree.Member,
+                parse_tree.FunctionCall,
+                parse_tree.MethodCall,
+                parse_tree.Name,
+                parse_tree.Constant,
+                parse_tree.Index,
+                parse_tree.Slice,
+                parse_tree.IsIn,
+            )
+
+            if not isinstance(node.collection, no_parentheses_types):
+                collection = Stripped(f"({collection})")
+
             # NOTE (mristin):
-            # The integers of the meta-model are ``long``'s in C#, while the lists
-            # and the JSON arrays are indexed by ``int``'s. We narrow the index
-            # explicitly, and fail loudly instead of silently overflowing.
-            if isinstance(
-                node.index,
-                (
-                    parse_tree.Member,
-                    parse_tree.FunctionCall,
-                    parse_tree.MethodCall,
-                    parse_tree.Name,
-                    parse_tree.Index,
-                ),
-            ):
-                index = Stripped(f"checked((int){index})")
-            else:
-                index = Stripped(f"checked((int)({index}))")
-
-        no_parentheses_types = (
-            parse_tree.Member,
-            parse_tree.FunctionCall,
-            parse_tree.MethodCall,
-            parse_tree.Name,
-            parse_tree.Constant,
-            parse_tree.Index,
-            parse_tree.Slice,
-            parse_tree.IsIn,
-        )
-
-        if not isinstance(node.collection, no_parentheses_types):
-            collection = Stripped(f"({collection})")
+            # The indexer of a ``Nodes.JsonObject`` gives a nullable node. This is
+            # exactly our ``JSONValue``, which might be a JSON null even if
+            # the meta-model guarded the key with a membership check, so there is
+            # nothing to forgive.
+            return Stripped(f"{collection}[{index}]"), None
 
         # NOTE (mristin):
-        # The indexer of a ``Nodes.JsonObject`` and of a ``Nodes.JsonArray``
-        # gives a nullable node. This is exactly our ``JSONValue``, which might
-        # be a JSON null even if the meta-model guarded the index with
-        # a membership or a length check, so there is nothing to forgive.
-        return Stripped(f"{collection}[{index}]"), None
+        # We always go through the helper, which resolves a negative index from
+        # the back as Python does, so that we need not distinguish the literal
+        # indices from the indices known only at run time. The indexer of
+        # a ``Nodes.JsonArray`` gives a nullable node, which is exactly our
+        # ``JSONValue``.
+        return (
+            _call_list_helper(method="At", arguments=[collection, index]),
+            None,
+        )
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_slice(
@@ -1930,6 +1936,12 @@ Enumerable.Range(
             errors.append(error)
 
         target: Optional[Stripped] = None
+
+        # NOTE (mristin):
+        # We set the item of a list with a call instead of an assignment, so we
+        # keep the collection and the index apart from the other targets.
+        item_location: Optional[Tuple[Stripped, Stripped]] = None
+
         if (
             isinstance(node.target, parse_tree.Name)
             and self._environment.find(identifier=node.target.identifier) is None
@@ -1982,11 +1994,26 @@ Enumerable.Range(
                 target = Stripped(f"long {target}")
             else:
                 target = Stripped(f"var {target}")
+        elif isinstance(node.target, parse_tree.Index):
+            # NOTE (mristin):
+            # The type inference allows only the items of a list as index targets.
+            # We set them with the helper, which resolves a negative index from
+            # the back as Python does.
+            collection, error = self.transform(node.target.collection)
+            if error is not None:
+                errors.append(error)
+
+            index, error = self.transform(node.target.index)
+            if error is not None:
+                errors.append(error)
+
+            if collection is not None and index is not None:
+                item_location = (collection, index)
+
         else:
             # NOTE (mristin):
-            # The properties are settable in C#, and the index access resolves
-            # the negative literal indices, so we can assign to the members and
-            # the items of the lists directly.
+            # The properties are settable in C#, so we can assign to the members
+            # directly.
             target, error = self.transform(node=node.target)
             if error is not None:
                 errors.append(error)
@@ -1996,7 +2023,7 @@ Enumerable.Range(
                 node.original_node, "Failed to transpile the assignment", errors
             )
 
-        assert target is not None
+        assert (target is not None) ^ (item_location is not None)
         assert value is not None
 
         target_type = self.type_map[node.target]
@@ -2020,6 +2047,20 @@ Enumerable.Range(
                 Identifier(f"from_{root.name}")
             )
             value = Stripped(f"Our.{union_name}.{from_method_name}({value})")
+
+        if item_location is not None:
+            collection, index = item_location
+            return (
+                Stripped(
+                    _call_list_helper(
+                        method="SetAt", arguments=[collection, index, value]
+                    )
+                    + ";"
+                ),
+                None,
+            )
+
+        assert target is not None
 
         # NOTE (mristin):
         # This is a rudimentary heuristic for basic line breaks, but works well in

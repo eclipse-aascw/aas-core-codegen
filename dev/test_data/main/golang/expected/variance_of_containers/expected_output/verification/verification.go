@@ -106,7 +106,7 @@ func FirstIsSpecial[ItemsT ourtypes.IItem](
 	if len(items) == 0 {
 		return false
 	}
-	first := items[0]
+	first := ourcommon.At(items, 0)
 	if ourtypes.IsSpecialItem(first) {
 		return any(first).(ourtypes.ISpecialItem).Level() > 0
 	}
@@ -174,7 +174,7 @@ func LastIsSpecial[ItemsT ourtypes.IItem](
 	if len(items) == 0 {
 		return false
 	}
-	var last ourtypes.IItem = items[len(items) - 1]
+	var last ourtypes.IItem = ourcommon.At(items, int64(len(items) - 1))
 	if ourtypes.IsSpecialItem(last) {
 		return last.(ourtypes.ISpecialItem).Level() > 0
 	}

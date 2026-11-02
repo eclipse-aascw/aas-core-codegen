@@ -84,7 +84,7 @@ public class Verification {
     if (items.size() == 0) {
         return false;
     }
-    var first = items.get(0);
+    var first = ListHelpers.at(items, 0);
     if (first instanceof ISpecialItem) {
         return ((ISpecialItem) first).getLevel() > 0;
     }
@@ -151,7 +151,7 @@ public class Verification {
     if (items.size() == 0) {
         return false;
     }
-    final IItem last = items.get(items.size() - 1);
+    final IItem last = ListHelpers.at(items, items.size() - 1);
     if (last instanceof ISpecialItem) {
         return ((ISpecialItem) last).getLevel() > 0;
     }

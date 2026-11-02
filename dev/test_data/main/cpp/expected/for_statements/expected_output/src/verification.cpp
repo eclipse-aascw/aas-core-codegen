@@ -73,7 +73,7 @@ bool NoNumberIsMinusOne(
   const std::vector<int64_t>& numbers
 ) {
   for (size_t i = 0; i < numbers.size(); ++i) {
-    int64_t number = numbers.at(i);
+    int64_t number = common::At(numbers, i);
     if (number == -1) {
       return false;
     }
@@ -85,7 +85,7 @@ bool NoNumberAfterTheFirstIsOne(
   const std::vector<int64_t>& numbers
 ) {
   for (size_t i = 1; i < numbers.size(); ++i) {
-    if (numbers.at(i) == 1) {
+    if (common::At(numbers, i) == 1) {
       return false;
     }
   }
@@ -169,7 +169,7 @@ bool ItemsAreFewAndTextsExpected(
   int64_t count = 0;
   for (const std::shared_ptr<types::IItem>& item : items) {
     for (size_t i = 0; i < item->texts().size(); ++i) {
-      std::wstring text = item->texts().at(i);
+      std::wstring text = common::At(item->texts(), i);
       if (text == L"unexpected") {
         return false;
       } else if (text == L"a" || text == L"b") {
@@ -234,10 +234,10 @@ bool TextsBeforeStopAreFew(
   for (const std::shared_ptr<types::IItem>& item : items) {
     for (size_t i = 0; i < item->texts().size(); ++i) {
       if (kind == types::Kind::kAlpha) {
-        if (item->texts().at(i) == L"stop") {
+        if (common::At(item->texts(), i) == L"stop") {
           break;
         }
-      } else if (common::LenStr(item->texts().at(i)) > 10) {
+      } else if (common::LenStr(common::At(item->texts(), i)) > 10) {
         break;
       }
       count = count + (1);

@@ -57,7 +57,7 @@ bool GridIsRectangular(
   if (grid.size() < 1) {
     return true;
   }
-  const std::vector<int64_t>& first_row = grid.at(0);
+  const std::vector<int64_t>& first_row = common::At(grid, 0);
   for (const std::vector<int64_t>& row : grid) {
     if (row.size() != first_row.size()) {
       return false;
@@ -125,10 +125,10 @@ bool ResetCorner(
   if (
     (
       grid.size() > 0
-      && grid.at(0).size() > 0
+      && common::At(grid, 0).size() > 0
     )
   ) {
-    grid.at(0).at(0) = 0;
+    common::At(common::At(grid, 0), 0) = 0;
   }
   return true;
 }

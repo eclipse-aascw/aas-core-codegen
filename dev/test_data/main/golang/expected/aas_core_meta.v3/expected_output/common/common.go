@@ -222,6 +222,28 @@ func (tuple Tuple8[T1, T2, T3, T4, T5, T6, T7, T8]) Len() int {
 	return 8
 }
 
+// Get the item of the `slice` at the `index`.
+//
+// A negative `index` counts from the back of the `slice`, as in Python.
+// Panics if the `index` is out of range.
+func At[T any](slice []T, index int64) T {
+	if index < 0 {
+		index += int64(len(slice))
+	}
+	return slice[index]
+}
+
+// Point to the item of the `slice` at the `index` so that it can be set.
+//
+// A negative `index` counts from the back of the `slice`, as in Python.
+// Panics if the `index` is out of range.
+func PointerAt[T any](slice []T, index int64) *T {
+	if index < 0 {
+		index += int64(len(slice))
+	}
+	return &slice[index]
+}
+
 // Count the characters (code points) of `text`.
 //
 // We follow the Python implementation of `len`, since Python is the language of

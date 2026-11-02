@@ -229,7 +229,7 @@ func VerifySomething(
 
 	if !(
 		!(len(that.Values()) > 0 &&
-		(that.Values()[0] == nil))) {
+		(ourcommon.At(that.Values(), 0) == nil))) {
 		abort = onError(
 			newVerificationError(
 				"The first value must not be a JSON null",),
@@ -257,7 +257,7 @@ func VerifySomething(
 
 	if !(
 		!(len(that.Values()) >= 1) ||
-		IsAcceptable(that.Values()[len(that.Values()) - 1])) {
+		IsAcceptable(ourcommon.At(that.Values(), -1))) {
 		abort = onError(
 			newVerificationError(
 				"The last value must be acceptable",),
@@ -269,7 +269,7 @@ func VerifySomething(
 
 	if !(
 		!(len(that.Values()) > 0) ||
-		IsAcceptable(that.Values()[0])) {
+		IsAcceptable(ourcommon.At(that.Values(), 0))) {
 		abort = onError(
 			newVerificationError(
 				"The first value must be acceptable",),

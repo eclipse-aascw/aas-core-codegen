@@ -53,7 +53,7 @@ func GridIsRectangular(
 	if len(grid) < 1 {
 		return true
 	}
-	var firstRow []int64 = grid[0]
+	var firstRow []int64 = ourcommon.At(grid, 0)
 	for _, row := range grid {
 		if len(row) != len(firstRow) {
 			return false
@@ -109,8 +109,8 @@ func ResetCorner(
 ) bool {
 	if (
 		len(grid) > 0 &&
-		len(grid[0]) > 0) {
-		grid[0][0] = 0
+		len(ourcommon.At(grid, 0)) > 0) {
+		*ourcommon.PointerAt(ourcommon.At(grid, 0), 0) = 0
 	}
 	return true
 }

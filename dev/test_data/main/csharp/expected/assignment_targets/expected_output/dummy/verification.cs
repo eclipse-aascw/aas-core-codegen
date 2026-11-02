@@ -101,8 +101,8 @@ namespace dummy
             string text
         )
         {
-            item.Texts[0] = text;
-            item.Texts[^1] = text;
+            Common.ListHelpers.SetAt(item.Texts, 0, text);
+            Common.ListHelpers.SetAt(item.Texts, -1, text);
             return true;
         }  // public static bool SetFirstAndLastText
 
@@ -115,7 +115,7 @@ namespace dummy
         )
         {
             var texts = item.Texts;
-            texts[1] = text;
+            Common.ListHelpers.SetAt(texts, 1, text);
             return true;
         }  // public static bool SetTextThroughListAlias
 
@@ -127,8 +127,12 @@ namespace dummy
             long number
         )
         {
-            numbers[0] = number;
-            numbers[^2] = numbers[^1] + 1;
+            Common.ListHelpers.SetAt(numbers, 0, number);
+            Common.ListHelpers.SetAt(
+                numbers,
+                -2,
+                Common.ListHelpers.At(numbers, -1) + 1
+            );
             return true;
         }  // public static bool SetNumbers
 
@@ -140,8 +144,12 @@ namespace dummy
             string text
         )
         {
-            items[0].Texts[^1] = text;
-            items[^1].Text = text;
+            Common.ListHelpers.SetAt(
+                Common.ListHelpers.At(items, 0).Texts,
+                -1,
+                text
+            );
+            Common.ListHelpers.At(items, -1).Text = text;
             return true;
         }  // public static bool SetNestedText
 
@@ -153,7 +161,7 @@ namespace dummy
             IItem item
         )
         {
-            items[0] = item;
+            Common.ListHelpers.SetAt(items, 0, item);
             return true;
         }  // public static bool ReplaceFirstItem
 
@@ -171,7 +179,11 @@ namespace dummy
             }
             for (int i = 0; i < items.Count; i++)
             {
-                items[i].Texts[0] = text;
+                Common.ListHelpers.SetAt(
+                    Common.ListHelpers.At(items, i).Texts,
+                    0,
+                    text
+                );
             }
             return true;
         }  // public static bool SetTextsInLoops
@@ -186,7 +198,7 @@ namespace dummy
         {
             for (int i = 0; i < texts.Count; i++)
             {
-                texts[i] = text;
+                Common.ListHelpers.SetAt(texts, i, text);
             }
             return true;
         }  // public static bool FillTexts
@@ -263,7 +275,7 @@ namespace dummy
         {
             foreach (var texts in lists)
             {
-                texts[0] = text;
+                Common.ListHelpers.SetAt(texts, 0, text);
             }
             return true;
         }  // public static bool SetFirstTextsOfLists
@@ -280,12 +292,12 @@ namespace dummy
             foreach (var item in items)
             {
                 var texts = item.Texts;
-                texts[0] = text;
+                Common.ListHelpers.SetAt(texts, 0, text);
             }
             foreach (var other in others)
             {
                 var texts = other.Texts;
-                texts[0] = text;
+                Common.ListHelpers.SetAt(texts, 0, text);
             }
             return true;
         }  // public static bool SetFirstTextsInSiblingLoops
@@ -310,9 +322,9 @@ namespace dummy
             List<long> numbers
         )
         {
-            long first = numbers[0];
-            numbers[0] = first + 1;
-            return (first + 1) == (numbers[0]);
+            long first = Common.ListHelpers.At(numbers, 0);
+            Common.ListHelpers.SetAt(numbers, 0, first + 1);
+            return (first + 1) == (Common.ListHelpers.At(numbers, 0));
         }  // public static bool NumberCopyIsIndependent
 
         /// <summary>
@@ -363,7 +375,7 @@ namespace dummy
         )
         {
             var texts = item.Texts;
-            return texts[0] == text;
+            return Common.ListHelpers.At(texts, 0) == text;
         }  // public static bool FirstTextThroughAliasIs
 
         /// <summary>

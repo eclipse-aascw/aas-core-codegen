@@ -129,7 +129,7 @@ void First::FillNumbers(
   std::vector<int64_t>& numbers
 ) const {
   for (size_t i = 0; i < numbers.size(); ++i) {
-    numbers.at(i) = this->count();
+    common::At(numbers, i) = this->count();
   }
 }
 
@@ -143,7 +143,7 @@ void First::FillTexts(
   const std::wstring& text
 ) {
   for (size_t i = 0; i < this->texts().size(); ++i) {
-    this->mutable_texts().at(i) = text;
+    common::At(this->mutable_texts(), i) = text;
   }
 }
 
@@ -301,7 +301,7 @@ void Second::FillNumbers(
   std::vector<int64_t>& numbers
 ) const {
   for (size_t i = 0; i < numbers.size(); ++i) {
-    numbers.at(i) = this->count();
+    common::At(numbers, i) = this->count();
   }
 }
 
@@ -315,7 +315,7 @@ void Second::FillTexts(
   const std::wstring& text
 ) {
   for (size_t i = 0; i < this->texts().size(); ++i) {
-    this->mutable_texts().at(i) = text;
+    common::At(this->mutable_texts(), i) = text;
   }
 }
 

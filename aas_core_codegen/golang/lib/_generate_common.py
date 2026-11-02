@@ -502,6 +502,45 @@ func NewAndPointTo[T any](value T) *T {{
     )
 
     # NOTE (mristin):
+    # The native index panics on a negative index, while Python counts it from
+    # the back, so we always index the lists and the JSON arrays with the helpers.
+    #
+    # We write through a pointer instead of passing the value to a generic setter,
+    # since Go 1.18 can not infer the type parameter from a slice of interfaces
+    # and an instance of a concrete type, *e.g.*, ``[]IClass`` and ``*Class``.
+    if intermediate_uses.list_indexing(type_inference):
+        blocks.extend(
+            [
+                Stripped(
+                    f"""\
+// Get the item of the `slice` at the `index`.
+//
+// A negative `index` counts from the back of the `slice`, as in Python.
+// Panics if the `index` is out of range.
+func At[T any](slice []T, index int64) T {{
+{I}if index < 0 {{
+{II}index += int64(len(slice))
+{I}}}
+{I}return slice[index]
+}}"""
+                ),
+                Stripped(
+                    f"""\
+// Point to the item of the `slice` at the `index` so that it can be set.
+//
+// A negative `index` counts from the back of the `slice`, as in Python.
+// Panics if the `index` is out of range.
+func PointerAt[T any](slice []T, index int64) *T {{
+{I}if index < 0 {{
+{II}index += int64(len(slice))
+{I}}}
+{I}return &slice[index]
+}}"""
+                ),
+            ]
+        )
+
+    # NOTE (mristin):
     # The Go strings count the UTF-8 bytes, while Python counts the characters
     # (code points). Moreover, the native slicing panics on the positions out of
     # range, does not count the negative ones from the end, and ``strings.Index``

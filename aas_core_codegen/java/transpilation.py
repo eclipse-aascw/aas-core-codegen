@@ -386,43 +386,46 @@ class Transpiler(
             return None, error
         assert index is not None
 
-        index_as_int: Optional[int] = None
-        try:
-            index_as_int = int(index)
-        except ValueError:
-            pass
+        assert collection is not None
 
-        if index_as_int is not None and index_as_int < 0:
-            index = Stripped(f"{collection}.size() - {abs(index_as_int)}")
-
-        elif (
-            index_as_int is None
-            and intermediate_type_inference.try_primitive_type(
-                self.type_map[node.index]
-            )
-            is intermediate_type_inference.PrimitiveType.INT
+        if isinstance(
+            collection_type, intermediate_type_inference.JsonObjectTypeAnnotation
         ):
-            # NOTE (mristin):
-            # We represent the integers as ``long``, while the lists are indexed
-            # by ``int``'s in Java. We narrow the index explicitly, and fail loudly
-            # instead of silently overflowing.
-            index = Stripped(f"Math.toIntExact({index})")
+            no_parentheses_types = (
+                parse_tree.Member,
+                parse_tree.FunctionCall,
+                parse_tree.MethodCall,
+                parse_tree.Name,
+                parse_tree.Constant,
+                parse_tree.Index,
+                parse_tree.Slice,
+                parse_tree.IsIn,
+            )
 
-        no_parentheses_types = (
-            parse_tree.Member,
-            parse_tree.FunctionCall,
-            parse_tree.MethodCall,
-            parse_tree.Name,
-            parse_tree.Constant,
-            parse_tree.Index,
-            parse_tree.Slice,
-            parse_tree.IsIn,
+            if not isinstance(node.collection, no_parentheses_types):
+                collection = Stripped(f"({collection})")
+
+            return Stripped(f"{collection}.get({index})"), None
+
+        # NOTE (mristin):
+        # We always go through the helper, which resolves a negative index from
+        # the back as Python does, so that we need not distinguish the literal
+        # indices from the indices known only at run time. The helper also narrows
+        # the index, since we represent the integers as ``long``, while the lists
+        # are indexed by ``int``'s in Java.
+        if "\n" not in collection and "\n" not in index:
+            return Stripped(f"ListHelpers.at({collection}, {index})"), None
+
+        return (
+            Stripped(
+                f"""\
+ListHelpers.at(
+{I}{indent_but_first_line(collection, I)},
+{I}{indent_but_first_line(index, I)}
+)"""
+            ),
+            None,
         )
-
-        if not isinstance(node.collection, no_parentheses_types):
-            collection = Stripped(f"({collection})")
-
-        return Stripped(f"{collection}.get({index})"), None
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def _transform_as_long(
@@ -2044,11 +2047,9 @@ new java.util.ArrayList<{item_type}>(
             if error is not None:
                 errors.append(error)
 
-            index_node: Optional[parse_tree.Expression] = None
             index: Optional[Stripped] = None
             if isinstance(node.target, parse_tree.Index):
-                index_node = node.target.index
-                index, error = self.transform(index_node)
+                index, error = self.transform(node.target.index)
                 if error is not None:
                     errors.append(error)
 
@@ -2066,60 +2067,44 @@ new java.util.ArrayList<{item_type}>(
                 value_type=self.type_map[node.value],
             )
 
-            if not isinstance(
-                receiver_node,
-                (
-                    parse_tree.Member,
-                    parse_tree.FunctionCall,
-                    parse_tree.MethodCall,
-                    parse_tree.Name,
-                    parse_tree.Index,
-                ),
-            ):
-                receiver = Stripped(f"({receiver})")
-
-            arguments: List[Stripped] = [value]
+            callee: str
+            arguments: List[Stripped]
             if isinstance(node.target, parse_tree.Member):
-                method_name = java_naming.setter_name(node.target.name)
+                if not isinstance(
+                    receiver_node,
+                    (
+                        parse_tree.Member,
+                        parse_tree.FunctionCall,
+                        parse_tree.MethodCall,
+                        parse_tree.Name,
+                        parse_tree.Index,
+                    ),
+                ):
+                    receiver = Stripped(f"({receiver})")
+
+                callee = f"{receiver}.{java_naming.setter_name(node.target.name)}"
+                arguments = [value]
             else:
-                assert index_node is not None
                 assert index is not None
 
-                index_as_int: Optional[int] = None
-                try:
-                    index_as_int = int(index)
-                except ValueError:
-                    pass
-
-                if index_as_int is not None and index_as_int < 0:
-                    index = Stripped(f"{receiver}.size() - {-index_as_int}")
-
-                elif (
-                    index_as_int is None
-                    and intermediate_type_inference.try_primitive_type(
-                        self.type_map[index_node]
-                    )
-                    is intermediate_type_inference.PrimitiveType.INT
-                ):
-                    # NOTE (mristin):
-                    # See the corresponding note in :py:meth:`transform_index`.
-                    index = Stripped(f"Math.toIntExact({index})")
-
-                method_name = Identifier("set")
-                arguments.insert(0, index)
+                # NOTE (mristin):
+                # The helper resolves a negative index from the back as Python
+                # does, and narrows the index to an ``int``.
+                callee = "ListHelpers.setAt"
+                arguments = [receiver, index, value]
 
             # NOTE (mristin):
             # This is a rudimentary heuristic for basic line breaks, but works well in
             # practice.
             joined_arguments = ", ".join(arguments)
             if "\n" not in joined_arguments and len(joined_arguments) <= 50:
-                return Stripped(f"{receiver}.{method_name}({joined_arguments});"), None
+                return Stripped(f"{callee}({joined_arguments});"), None
 
             arguments_block = ",\n".join(arguments)
             return (
                 Stripped(
                     f"""\
-{receiver}.{method_name}(
+{callee}(
 {I}{indent_but_first_line(arguments_block, I)});"""
                 ),
                 None,

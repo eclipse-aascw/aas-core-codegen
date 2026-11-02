@@ -1415,7 +1415,7 @@ public class Verification {
     KeyTypes expectedType) {
     return reference.getType() == ReferenceTypes.MODEL_REFERENCE
     && reference.getKeys().size() != 0
-    && reference.getKeys().get(reference.getKeys().size() - 1).getType() == expectedType;
+    && ListHelpers.at(reference.getKeys(), -1).getType() == expectedType;
   }
 
   /**
@@ -1425,7 +1425,7 @@ public class Verification {
     IReference reference) {
     return reference.getType() == ReferenceTypes.MODEL_REFERENCE
     && reference.getKeys().size() != 0
-    && Constants.aasReferables.contains(reference.getKeys().get(reference.getKeys().size() - 1).getType());
+    && Constants.aasReferables.contains(ListHelpers.at(reference.getKeys(), -1).getType());
   }
 
   /**
@@ -7338,7 +7338,7 @@ public class Verification {
 
       if (!(
         !(that.getKeys().size() >= 1)
-        || Constants.globallyIdentifiables.contains(that.getKeys().get(0).getType()))) {
+        || Constants.globallyIdentifiables.contains(ListHelpers.at(that.getKeys(), 0).getType()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7352,7 +7352,7 @@ public class Verification {
             that.getType() == ReferenceTypes.EXTERNAL_REFERENCE
             && that.getKeys().size() >= 1
         )
-        || Constants.genericGloballyIdentifiables.contains(that.getKeys().get(0).getType()))) {
+        || Constants.genericGloballyIdentifiables.contains(ListHelpers.at(that.getKeys(), 0).getType()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7366,7 +7366,7 @@ public class Verification {
             that.getType() == ReferenceTypes.MODEL_REFERENCE
             && that.getKeys().size() >= 1
         )
-        || Constants.aasIdentifiables.contains(that.getKeys().get(0).getType()))) {
+        || Constants.aasIdentifiables.contains(ListHelpers.at(that.getKeys(), 0).getType()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7380,8 +7380,8 @@ public class Verification {
             && that.getKeys().size() >= 1
         )
         || (
-            Constants.genericGloballyIdentifiables.contains(that.getKeys().get(that.getKeys().size() - 1).getType())
-            || Constants.genericFragmentKeys.contains(that.getKeys().get(that.getKeys().size() - 1).getType())
+            Constants.genericGloballyIdentifiables.contains(ListHelpers.at(that.getKeys(), -1).getType())
+            || Constants.genericFragmentKeys.contains(ListHelpers.at(that.getKeys(), -1).getType())
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -7401,7 +7401,7 @@ public class Verification {
                 1,
                 that.getKeys().size()
             ).allMatch(
-                i -> Constants.fragmentKeys.contains(that.getKeys().get(i).getType()))
+                i -> Constants.fragmentKeys.contains(ListHelpers.at(that.getKeys(), i).getType()))
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -7422,7 +7422,7 @@ public class Verification {
                 0,
                 that.getKeys().size() - 1
             ).allMatch(
-                i -> !Constants.genericFragmentKeys.contains(that.getKeys().get(i).getType()))
+                i -> !Constants.genericFragmentKeys.contains(ListHelpers.at(that.getKeys(), i).getType()))
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -7438,11 +7438,11 @@ public class Verification {
         !(
             that.getType() == ReferenceTypes.MODEL_REFERENCE
             && that.getKeys().size() > 1
-            && that.getKeys().get(that.getKeys().size() - 1).getType() == KeyTypes.FRAGMENT_REFERENCE
+            && ListHelpers.at(that.getKeys(), -1).getType() == KeyTypes.FRAGMENT_REFERENCE
         )
         || (
-            that.getKeys().get(that.getKeys().size() - 2).getType() == KeyTypes.FILE
-            || that.getKeys().get(that.getKeys().size() - 2).getType() == KeyTypes.BLOB
+            ListHelpers.at(that.getKeys(), -2).getType() == KeyTypes.FILE
+            || ListHelpers.at(that.getKeys(), -2).getType() == KeyTypes.BLOB
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -7462,8 +7462,8 @@ public class Verification {
                 0,
                 that.getKeys().size() - 1
             ).allMatch(
-                i -> !(that.getKeys().get(i).getType() == KeyTypes.SUBMODEL_ELEMENT_LIST)
-                    || matchesXsNonNegativeInteger(that.getKeys().get(i + 1).getValue()))
+                i -> !(ListHelpers.at(that.getKeys(), i).getType() == KeyTypes.SUBMODEL_ELEMENT_LIST)
+                    || matchesXsNonNegativeInteger(ListHelpers.at(that.getKeys(), i + 1).getValue()))
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(

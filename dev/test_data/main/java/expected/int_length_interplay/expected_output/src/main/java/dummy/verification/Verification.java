@@ -53,17 +53,16 @@ public class Verification {
     List<Long> numbers,
     Long count) {
     for (long i = 0; i < count; i++) {
-        long number = numbers.get(Math.toIntExact(i));
+        long number = ListHelpers.at(numbers, i);
         if (number == 7) {
             return false;
         }
-        long mirrored = (
-            numbers.get(Math.toIntExact((numbers.size() - 1) - i)));
+        long mirrored = ListHelpers.at(numbers, (numbers.size() - 1) - i);
         if (mirrored == 7) {
             return false;
         }
         long rotated = (
-            numbers.get(Math.toIntExact(Math.floorMod(i + 1, (long) numbers.size()))));
+            ListHelpers.at(numbers, Math.floorMod(i + 1, (long) numbers.size())));
         if (rotated == 7) {
             return false;
         }
@@ -89,7 +88,7 @@ public class Verification {
         return true;
     }
     for (long i = start; i < numbers.size(); i++) {
-        long number = numbers.get(Math.toIntExact(i));
+        long number = ListHelpers.at(numbers, i);
         if (number == 7) {
             return false;
         }
@@ -98,7 +97,23 @@ public class Verification {
         start,
         numbers.size()
     ).allMatch(
-        i -> numbers.get(Math.toIntExact(i)) != 7);
+        i -> ListHelpers.at(numbers, i) != 7);
+  }
+
+  /**
+   * Check reading at the negative indices which are known only at run time.
+   *
+   * <p>A negative index counts from the back of the list, as in Python.
+   */
+  public static Boolean numbersAscendFromBack(
+    List<Long> numbers,
+    Long count) {
+    for (long i = 1; i < count; i++) {
+        if (ListHelpers.at(numbers, -i) <= ListHelpers.at(numbers, (-i) - 1)) {
+            return false;
+        }
+    }
+    return true;
   }
 
   /**
@@ -109,8 +124,9 @@ public class Verification {
     Long count,
     String text) {
     for (long i = 0; i < count; i++) {
-        texts.set(Math.toIntExact(i), text);
-        texts.set(Math.toIntExact((texts.size() - 1) - i), text);
+        ListHelpers.setAt(texts, i, text);
+        ListHelpers.setAt(texts, (texts.size() - 1) - i, text);
+        ListHelpers.setAt(texts, -1 - i, text);
     }
     return true;
   }
@@ -135,7 +151,7 @@ public class Verification {
     List<String> texts) {
     something.setCount((long) texts.size());
     something.setMaybeCount((long) texts.size());
-    something.getNumbers().set(0, (long) texts.size());
+    ListHelpers.setAt(something.getNumbers(), 0, (long) texts.size());
     return true;
   }
 
@@ -279,6 +295,14 @@ public class Verification {
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "No number is seven")));
+      }
+
+      if (!(
+        numbersAscendFromBack(that.getNumbers(), (long) that.getNumbers().size()))) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(new Reporting.Error(
+            "Invariant violated:\n" +
+            "Numbers ascend")));
       }
 
       errorStream = Stream.<Reporting.Error>concat(errorStream,

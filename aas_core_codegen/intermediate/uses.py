@@ -256,6 +256,56 @@ def string_slicing(type_inference: intermediate_type_inference.TypeInference) ->
     )
 
 
+def _indexes(
+    type_inference: intermediate_type_inference.TypeInference,
+    collection_types: Tuple[type, ...],
+) -> bool:
+    """
+    Check whether any transpiled code indexes a collection of ``collection_types``.
+
+    The annotations of the annotated assignments, *e.g.*, ``List[int]``, are
+    indices as well, but they have no inferred type, so we skip them.
+    """
+    for node, type_map in _over_inferred_nodes(type_inference):
+        if not isinstance(node, parse_tree.Index):
+            continue
+
+        collection_type = type_map.get(node.collection, None)
+        if collection_type is not None and isinstance(
+            intermediate_type_inference.beneath_optional(collection_type),
+            collection_types,
+        ):
+            return True
+
+    return False
+
+
+def list_indexing(type_inference: intermediate_type_inference.TypeInference) -> bool:
+    """
+    Check whether any transpiled code indexes a list or a JSON array.
+
+    The transpilers resolve the negative indices from the back with a helper,
+    as Python does, so the index need not be known at the time of the code
+    generation.
+    """
+    return _indexes(
+        type_inference,
+        (
+            intermediate_type_inference.ListTypeAnnotation,
+            intermediate_type_inference.JsonArrayTypeAnnotation,
+        ),
+    )
+
+
+def json_array_indexing(
+    type_inference: intermediate_type_inference.TypeInference,
+) -> bool:
+    """Check whether any transpiled code indexes a JSON array."""
+    return _indexes(
+        type_inference, (intermediate_type_inference.JsonArrayTypeAnnotation,)
+    )
+
+
 def string_find_call(type_inference: intermediate_type_inference.TypeInference) -> bool:
     """Check whether any transpiled code calls ``str.find``."""
     return _calls_builtin_method(type_inference, intermediate_type_inference.STR_FIND)

@@ -65,11 +65,26 @@ def no_seven_from(numbers: Sequence[int], start: int) -> bool:
 
 
 @verification
+def numbers_ascend_from_back(numbers: Sequence[int], count: int) -> bool:
+    """
+    Check reading at the negative indices which are known only at run time.
+
+    A negative index counts from the back of the list, as in Python.
+    """
+    for i in range(1, count):
+        if numbers[-i] <= numbers[-i - 1]:
+            return False
+
+    return True
+
+
+@verification
 def fill_texts_from_both_ends(texts: List[str], count: int, text: str) -> bool:
     """Check writing at the indices which are integers rather than lengths."""
     for i in range(0, count):
         texts[i] = text
         texts[len(texts) - 1 - i] = text
+        texts[-1 - i] = text
 
     return True
 
@@ -95,6 +110,10 @@ def set_counts(something: Mutable["Something"], texts: Sequence[str]) -> bool:
     return True
 
 
+@invariant(
+    lambda self: numbers_ascend_from_back(self.numbers, len(self.numbers)),
+    "Numbers ascend",
+)
 @invariant(
     lambda self: no_number_is_seven(self.numbers, len(self.numbers)),
     "No number is seven",

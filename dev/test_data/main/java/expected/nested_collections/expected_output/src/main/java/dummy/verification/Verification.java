@@ -38,7 +38,7 @@ public class Verification {
     if (grid.size() < 1) {
         return true;
     }
-    final List<Long> firstRow = grid.get(0);
+    final List<Long> firstRow = ListHelpers.at(grid, 0);
     for (var row : grid) {
         if (row.size() != firstRow.size()) {
             return false;
@@ -82,9 +82,9 @@ public class Verification {
     List<List<Long>> grid) {
     if (
         grid.size() > 0
-        && (grid.get(0)).size() > 0
+        && (ListHelpers.at(grid, 0)).size() > 0
     ) {
-        grid.get(0).set(0, 0L);
+        ListHelpers.setAt(ListHelpers.at(grid, 0), 0, 0L);
     }
     return true;
   }

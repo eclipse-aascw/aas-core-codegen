@@ -1600,7 +1600,7 @@ bool IsModelReferenceTo(
     (
       reference->type() == types::ReferenceTypes::kModelReference
       && reference->keys().size() != 0
-      && reference->keys().back()->type() == expected_type
+      && common::At(reference->keys(), -1)->type() == expected_type
     )
   );
 }
@@ -1613,7 +1613,7 @@ bool IsModelReferenceToReferable(
       reference->type() == types::ReferenceTypes::kModelReference
       && reference->keys().size() != 0
       && constants::kAasReferables.find(
-        reference->keys().back()->type()
+        common::At(reference->keys(), -1)->type()
       ) != constants::kAasReferables.end()
     )
   );
@@ -5493,7 +5493,7 @@ bool Reference_1(
   );
   return !(that->keys().size() >= 1)
   || constants::kGloballyIdentifiables.find(
-    that->keys().at(0)->type()
+    common::At(that->keys(), 0)->type()
   ) != constants::kGloballyIdentifiables.end();
 }
 
@@ -5508,7 +5508,7 @@ bool Reference_2(
     && that->keys().size() >= 1
   ))
   || constants::kGenericGloballyIdentifiables.find(
-    that->keys().at(0)->type()
+    common::At(that->keys(), 0)->type()
   ) != constants::kGenericGloballyIdentifiables.end();
 }
 
@@ -5523,7 +5523,7 @@ bool Reference_3(
     && that->keys().size() >= 1
   ))
   || constants::kAasIdentifiables.find(
-    that->keys().at(0)->type()
+    common::At(that->keys(), 0)->type()
   ) != constants::kAasIdentifiables.end();
 }
 
@@ -5539,10 +5539,10 @@ bool Reference_4(
   ))
   || ((
     constants::kGenericGloballyIdentifiables.find(
-      that->keys().back()->type()
+      common::At(that->keys(), -1)->type()
     ) != constants::kGenericGloballyIdentifiables.end()
     || constants::kGenericFragmentKeys.find(
-      that->keys().back()->type()
+      common::At(that->keys(), -1)->type()
     ) != constants::kGenericFragmentKeys.end()
   ));
 }
@@ -5560,7 +5560,7 @@ bool Reference_5(
   || common::AllRange<size_t>(
     [&](size_t i) -> bool {
       return constants::kFragmentKeys.find(
-        that->keys().at(i)->type()
+        common::At(that->keys(), i)->type()
       ) != constants::kFragmentKeys.end();
     },
     1,
@@ -5581,7 +5581,7 @@ bool Reference_6(
   || common::AllRange<size_t>(
     [&](size_t i) -> bool {
       return !(constants::kGenericFragmentKeys.find(
-        that->keys().at(i)->type()
+        common::At(that->keys(), i)->type()
       ) != constants::kGenericFragmentKeys.end());
     },
     0,
@@ -5598,11 +5598,11 @@ bool Reference_7(
   return !((
     that->type() == types::ReferenceTypes::kModelReference
     && that->keys().size() > 1
-    && that->keys().back()->type() == types::KeyTypes::kFragmentReference
+    && common::At(that->keys(), -1)->type() == types::KeyTypes::kFragmentReference
   ))
   || ((
-    that->keys().at(that->keys().size() - 2)->type() == types::KeyTypes::kFile
-    || that->keys().at(that->keys().size() - 2)->type() == types::KeyTypes::kBlob
+    common::At(that->keys(), -2)->type() == types::KeyTypes::kFile
+    || common::At(that->keys(), -2)->type() == types::KeyTypes::kBlob
   ));
 }
 
@@ -5618,9 +5618,9 @@ bool Reference_8(
   ))
   || common::AllRange<size_t>(
     [&](size_t i) -> bool {
-      return !(that->keys().at(i)->type() == types::KeyTypes::kSubmodelElementList)
+      return !(common::At(that->keys(), i)->type() == types::KeyTypes::kSubmodelElementList)
       || verification::MatchesXsNonNegativeInteger(
-        that->keys().at(i + (1))->value()
+        common::At(that->keys(), i + (1))->value()
       );
     },
     0,

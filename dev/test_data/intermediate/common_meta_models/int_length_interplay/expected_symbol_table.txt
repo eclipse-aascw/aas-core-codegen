@@ -502,6 +502,31 @@ SymbolTable(
                   original_node=...)],
               original_node=...)"""),
           specified_for='Reference to ConcreteClass Something',
+          parsed=...),
+        Invariant(
+          description='Numbers ascend',
+          body=textwrap.dedent("""\
+            FunctionCall(
+              name='numbers_ascend_from_back',
+              args=[
+                Member(
+                  instance=Name(
+                    identifier='self',
+                    original_node=...),
+                  name='numbers',
+                  original_node=...),
+                FunctionCall(
+                  name='len',
+                  args=[
+                    Member(
+                      instance=Name(
+                        identifier='self',
+                        original_node=...),
+                      name='numbers',
+                      original_node=...)],
+                  original_node=...)],
+              original_node=...)"""),
+          specified_for='Reference to ConcreteClass Something',
           parsed=...)],
       serialization=Serialization(
         with_model_type=False),
@@ -652,6 +677,44 @@ SymbolTable(
             so that the invariant holds up even against integers as large as
             <literal>2 ** 53</literal>. A negative <literal>start</literal> is refused, while a <literal>start</literal> beyond
             the numbers leaves nothing to check.</paragraph>""")],
+        arguments_by_name=[],
+        returns=None,
+        parsed=...),
+      contracts=Contracts(
+        preconditions=[],
+        snapshots=[],
+        postconditions=[]),
+      parsed=...,
+      arguments_by_name=...),
+    TranspilableVerification(
+      name='numbers_ascend_from_back',
+      visibility='PUBLIC',
+      arguments=[
+        Argument(
+          name='numbers',
+          type_annotation=ListTypeAnnotation(
+            items=PrimitiveTypeAnnotation(
+              a_type='INT',
+              parsed=...),
+            parsed=...),
+          default=None,
+          mutable=False,
+          parsed=...),
+        Argument(
+          name='count',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='INT',
+            parsed=...),
+          default=None,
+          mutable=False,
+          parsed=...)],
+      returns=PrimitiveTypeAnnotation(
+        a_type='BOOL',
+        parsed=...),
+      description=DescriptionOfSignature(
+        summary='<paragraph>Check reading at the negative indices which are known only at run time.</paragraph>',
+        remarks=[
+          '<paragraph>A negative index counts from the back of the list, as in Python.</paragraph>'],
         arguments_by_name=[],
         returns=None,
         parsed=...),

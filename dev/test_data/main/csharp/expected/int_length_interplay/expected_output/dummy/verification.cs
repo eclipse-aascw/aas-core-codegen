@@ -61,18 +61,19 @@ namespace dummy
         {
             for (long i = 0; i < count; i++)
             {
-                long number = numbers[checked((int)i)];
+                long number = Common.ListHelpers.At(numbers, i);
                 if (number == 7)
                 {
                     return false;
                 }
-                long mirrored = numbers[checked((int)((numbers.Count - 1) - i))];
+                long mirrored = (
+                    Common.ListHelpers.At(numbers, (numbers.Count - 1) - i));
                 if (mirrored == 7)
                 {
                     return false;
                 }
                 long rotated = (
-                    numbers[checked((int)(Common.FloorMod(i + 1, numbers.Count)))]);
+                    Common.ListHelpers.At(numbers, Common.FloorMod(i + 1, numbers.Count)));
                 if (rotated == 7)
                 {
                     return false;
@@ -105,7 +106,7 @@ namespace dummy
             }
             for (long i = start; i < numbers.Count; i++)
             {
-                long number = numbers[checked((int)i)];
+                long number = Common.ListHelpers.At(numbers, i);
                 if (number == 7)
                 {
                     return false;
@@ -115,8 +116,29 @@ namespace dummy
                 checked((int)start),
                 checked((int)System.Math.Max(0L, numbers.Count - start))
             ).All(
-                i => numbers[checked((int)i)] != 7);
+                i => Common.ListHelpers.At(numbers, i) != 7);
         }  // public static bool NoSevenFrom
+
+        /// <summary>
+        /// Check reading at the negative indices which are known only at run time.
+        /// </summary>
+        /// <remarks>
+        /// A negative index counts from the back of the list, as in Python.
+        /// </remarks>
+        public static bool NumbersAscendFromBack(
+            List<long> numbers,
+            long count
+        )
+        {
+            for (long i = 1; i < count; i++)
+            {
+                if (Common.ListHelpers.At(numbers, -i) <= Common.ListHelpers.At(numbers, (-i) - 1))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }  // public static bool NumbersAscendFromBack
 
         /// <summary>
         /// Check writing at the indices which are integers rather than lengths.
@@ -129,8 +151,9 @@ namespace dummy
         {
             for (long i = 0; i < count; i++)
             {
-                texts[checked((int)i)] = text;
-                texts[checked((int)((texts.Count - 1) - i))] = text;
+                Common.ListHelpers.SetAt(texts, i, text);
+                Common.ListHelpers.SetAt(texts, (texts.Count - 1) - i, text);
+                Common.ListHelpers.SetAt(texts, -1 - i, text);
             }
             return true;
         }  // public static bool FillTextsFromBothEnds
@@ -159,7 +182,7 @@ namespace dummy
         {
             something.Count = texts.Count;
             something.MaybeCount = texts.Count;
-            something.Numbers[0] = texts.Count;
+            Common.ListHelpers.SetAt(something.Numbers, 0, texts.Count);
             return true;
         }  // public static bool SetCounts
 
@@ -244,6 +267,14 @@ namespace dummy
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
                         "No number is seven");
+                }
+
+                if (!(
+                    Verification.NumbersAscendFromBack(that.Numbers, that.Numbers.Count)))
+                {
+                    yield return new Reporting.Error(
+                        "Invariant violated:\n" +
+                        "Numbers ascend");
                 }
 
                 foreach (var error in Verification.Verify_ListOf_long(that.Numbers))

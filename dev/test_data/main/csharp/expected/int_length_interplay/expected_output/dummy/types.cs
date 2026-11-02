@@ -105,7 +105,7 @@ namespace dummy
             long index
         )
         {
-            return this.Texts[checked((int)index)];
+            return Common.ListHelpers.At(this.Texts, index);
         }
 
         /// <summary>

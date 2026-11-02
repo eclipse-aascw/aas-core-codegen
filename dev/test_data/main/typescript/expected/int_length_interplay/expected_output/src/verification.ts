@@ -276,6 +276,25 @@ export function noSevenFrom(
 }
 
 /**
+ * Check reading at the negative indices which are known only at run time.
+ *
+ * @remarks
+ *
+ * A negative index counts from the back of the list, as in Python.
+ */
+export function numbersAscendFromBack(
+  numbers: Array<number>,
+  count: number
+): boolean {
+  for (let i = 1; i < count; i++) {
+    if (OurCommon.at(numbers, -i) <= OurCommon.at(numbers, (-i) - 1)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Check writing at the indices which are integers rather than lengths.
  */
 export function fillTextsFromBothEnds(
@@ -286,6 +305,7 @@ export function fillTextsFromBothEnds(
   for (let i = 0; i < count; i++) {
     OurCommon.setAt(texts, i, text);
     OurCommon.setAt(texts, (texts.length - 1) - i, text);
+    OurCommon.setAt(texts, -1 - i, text);
   }
   return true;
 }
@@ -413,6 +433,17 @@ class Verifier
     if (!noNumberIsSeven(that.numbers, that.numbers.length)) {
       yield new VerificationError(
         "No number is seven"
+      )
+    }
+
+    if (!(
+      numbersAscendFromBack(
+        that.numbers,
+        that.numbers.length
+      )
+    )) {
+      yield new VerificationError(
+        "Numbers ascend"
       )
     }
 

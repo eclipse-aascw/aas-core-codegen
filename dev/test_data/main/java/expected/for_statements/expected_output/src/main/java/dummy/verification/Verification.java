@@ -60,7 +60,7 @@ public class Verification {
   public static Boolean noNumberIsMinusOne(
     List<Long> numbers) {
     for (int i = 0; i < numbers.size(); i++) {
-        long number = numbers.get(i);
+        long number = ListHelpers.at(numbers, i);
         if (number == -1) {
             return false;
         }
@@ -74,7 +74,7 @@ public class Verification {
   public static Boolean noNumberAfterTheFirstIsOne(
     List<Long> numbers) {
     for (int i = 1; i < numbers.size(); i++) {
-        if (numbers.get(i) == 1) {
+        if (ListHelpers.at(numbers, i) == 1) {
             return false;
         }
     }
@@ -166,7 +166,7 @@ public class Verification {
     long count = 0;
     for (var item : items) {
         for (int i = 0; i < item.getTexts().size(); i++) {
-            var text = item.getTexts().get(i);
+            var text = ListHelpers.at(item.getTexts(), i);
             switch (text) {
                 case "unexpected" -> {
                     return false;
@@ -235,10 +235,10 @@ public class Verification {
     for (var item : items) {
         for (int i = 0; i < item.getTexts().size(); i++) {
             if (kind == Kind.ALPHA) {
-                if (Objects.equals(item.getTexts().get(i), "stop")) {
+                if (Objects.equals(ListHelpers.at(item.getTexts(), i), "stop")) {
                     break;
                 }
-            } else if (StringHelpers.len(item.getTexts().get(i)) > 10) {
+            } else if (StringHelpers.len(ListHelpers.at(item.getTexts(), i)) > 10) {
                 break;
             }
             count = count + 1;

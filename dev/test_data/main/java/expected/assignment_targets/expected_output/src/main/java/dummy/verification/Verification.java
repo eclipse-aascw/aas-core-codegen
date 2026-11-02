@@ -88,8 +88,8 @@ public class Verification {
   public static Boolean setFirstAndLastText(
     IItem item,
     String text) {
-    item.getTexts().set(0, text);
-    item.getTexts().set(item.getTexts().size() - 1, text);
+    ListHelpers.setAt(item.getTexts(), 0, text);
+    ListHelpers.setAt(item.getTexts(), -1, text);
     return true;
   }
 
@@ -100,7 +100,7 @@ public class Verification {
     IItem item,
     String text) {
     var texts = item.getTexts();
-    texts.set(1, text);
+    ListHelpers.setAt(texts, 1, text);
     return true;
   }
 
@@ -110,10 +110,8 @@ public class Verification {
   public static Boolean setNumbers(
     List<Long> numbers,
     Long number) {
-    numbers.set(0, number);
-    numbers.set(
-        numbers.size() - 2,
-        numbers.get(numbers.size() - 1) + 1);
+    ListHelpers.setAt(numbers, 0, number);
+    ListHelpers.setAt(numbers, -2, ListHelpers.at(numbers, -1) + 1);
     return true;
   }
 
@@ -123,8 +121,8 @@ public class Verification {
   public static Boolean setNestedText(
     List<IItem> items,
     String text) {
-    items.get(0).getTexts().set(items.get(0).getTexts().size() - 1, text);
-    items.get(items.size() - 1).setText(text);
+    ListHelpers.setAt(ListHelpers.at(items, 0).getTexts(), -1, text);
+    ListHelpers.at(items, -1).setText(text);
     return true;
   }
 
@@ -134,7 +132,7 @@ public class Verification {
   public static Boolean replaceFirstItem(
     List<IItem> items,
     IItem item) {
-    items.set(0, item);
+    ListHelpers.setAt(items, 0, item);
     return true;
   }
 
@@ -148,7 +146,7 @@ public class Verification {
         item.setText(text);
     }
     for (int i = 0; i < items.size(); i++) {
-        items.get(i).getTexts().set(0, text);
+        ListHelpers.setAt(ListHelpers.at(items, i).getTexts(), 0, text);
     }
     return true;
   }
@@ -160,7 +158,7 @@ public class Verification {
     List<String> texts,
     String text) {
     for (int i = 0; i < texts.size(); i++) {
-        texts.set(i, text);
+        ListHelpers.setAt(texts, i, text);
     }
     return true;
   }
@@ -223,7 +221,7 @@ public class Verification {
     List<List<String>> lists,
     String text) {
     for (var texts : lists) {
-        texts.set(0, text);
+        ListHelpers.setAt(texts, 0, text);
     }
     return true;
   }
@@ -237,11 +235,11 @@ public class Verification {
     String text) {
     for (var item : items) {
         var texts = item.getTexts();
-        texts.set(0, text);
+        ListHelpers.setAt(texts, 0, text);
     }
     for (var other : others) {
         var texts = other.getTexts();
-        texts.set(0, text);
+        ListHelpers.setAt(texts, 0, text);
     }
     return true;
   }
@@ -262,9 +260,9 @@ public class Verification {
    */
   public static Boolean numberCopyIsIndependent(
     List<Long> numbers) {
-    long first = numbers.get(0);
-    numbers.set(0, first + 1);
-    return (first + 1) == (numbers.get(0));
+    long first = ListHelpers.at(numbers, 0);
+    ListHelpers.setAt(numbers, 0, first + 1);
+    return (first + 1) == (ListHelpers.at(numbers, 0));
   }
 
   /**
@@ -307,7 +305,7 @@ public class Verification {
     IItem item,
     String text) {
     var texts = item.getTexts();
-    return Objects.equals(texts.get(0), text);
+    return Objects.equals(ListHelpers.at(texts, 0), text);
   }
 
   /**
