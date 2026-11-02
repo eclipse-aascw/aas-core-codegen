@@ -102,7 +102,7 @@ namespace dummy
             {
                 return false;
             }
-            var first = items[0];
+            var first = Common.ListHelpers.At(items, 0);
             if (first is Our.ISpecialItem)
             {
                 return ((Our.ISpecialItem)first).Level > 0;
@@ -195,7 +195,7 @@ namespace dummy
             {
                 return false;
             }
-            Our.IItem last = items[items.Count - 1];
+            Our.IItem last = Common.ListHelpers.At(items, items.Count - 1);
             if (last is Our.ISpecialItem)
             {
                 return ((Our.ISpecialItem)last).Level > 0;

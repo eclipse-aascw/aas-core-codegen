@@ -127,7 +127,7 @@ func FloatsAreUnique(
 ) bool {
 	for i := 0; i < len(numbers); i++ {
 		for j := i + 1; j < len(numbers); j++ {
-			if numbers[i] == numbers[j] {
+			if ourcommon.At(numbers, int64(i)) == ourcommon.At(numbers, int64(j)) {
 				return false
 			}
 		}

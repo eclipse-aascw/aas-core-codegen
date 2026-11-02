@@ -42,7 +42,7 @@ namespace dummy
             {
                 return true;
             }
-            List<long> firstRow = grid[0];
+            List<long> firstRow = Common.ListHelpers.At(grid, 0);
             foreach (var row in grid)
             {
                 if (row.Count != firstRow.Count)
@@ -97,10 +97,10 @@ namespace dummy
         {
             if (
                 grid.Count > 0
-                && (grid[0]).Count > 0
+                && (Common.ListHelpers.At(grid, 0)).Count > 0
             )
             {
-                grid[0][0] = 0;
+                Common.ListHelpers.SetAt(Common.ListHelpers.At(grid, 0), 0, 0);
             }
             return true;
         }  // public static bool ResetCorner

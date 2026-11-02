@@ -1,0 +1,12 @@
+{
+  "numbers": [
+    3,
+    5,
+    4
+  ],
+  "texts": [
+    "hello",
+    "world"
+  ],
+  "count": 2
+}

@@ -447,6 +447,129 @@ public final class StringHelpers {{
     return Stripped("\n\n".join(blocks))
 
 
+def _generate_list_helpers(
+    package: java_common.PackageIdentifier, with_json_arrays: bool
+) -> Stripped:
+    """
+    Generate the access to the items of lists which follows the Python implementation.
+
+    If ``with_json_arrays`` is set, we also generate the access to the items of
+    JSON arrays.
+    """
+    methods: List[Stripped] = [
+        Stripped(
+            f"""\
+/**
+ * Resolve {{@code index}} in a list of {{@code size}} items as Python does.
+ *
+ * @param index of the item; negative counts from the back
+ * @param size of the list
+ * @return the resolved index
+ * @throws ArithmeticException if the resolved index does not fit into an int
+ */
+private static int resolveIndex(long index, int size) {{
+{I}return Math.toIntExact(index < 0 ? index + size : index);
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Get the item of {{@code list}} at {{@code index}}.
+ *
+ * @param list to get the item from
+ * @param index of the item; negative counts from the back
+ * @param <T> type of the items
+ * @return the item
+ * @throws IndexOutOfBoundsException if {{@code index}} is out of range
+ */
+public static <T> T at(List<T> list, long index) {{
+{I}return list.get(resolveIndex(index, list.size()));
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Set the item of {{@code list}} at {{@code index}} to {{@code value}}.
+ *
+ * @param list to set the item in
+ * @param index of the item; negative counts from the back
+ * @param value to be set
+ * @param <T> type of the items
+ * @throws IndexOutOfBoundsException if {{@code index}} is out of range
+ */
+public static <T> void setAt(List<T> list, long index, T value) {{
+{I}list.set(resolveIndex(index, list.size()), value);
+}}"""
+        ),
+    ]
+
+    if with_json_arrays:
+        # NOTE (mristin):
+        # ``ArrayNode.get`` gives null for an index out of range, while Python
+        # raises, so we check the range ourselves.
+        methods.append(
+            Stripped(
+                f"""\
+/**
+ * Get the item of {{@code array}} at {{@code index}}.
+ *
+ * @param array to get the item from
+ * @param index of the item; negative counts from the back
+ * @return the item
+ * @throws IndexOutOfBoundsException if {{@code index}} is out of range
+ */
+public static JsonNode at(ArrayNode array, long index) {{
+{I}final int resolved = resolveIndex(index, array.size());
+{I}if (resolved < 0 || resolved >= array.size()) {{
+{II}throw new IndexOutOfBoundsException(
+{III}"Index " + index + " out of range for a JSON array of size " + array.size()
+{II});
+{I}}}
+{I}return array.get(resolved);
+}}"""
+            )
+        )
+
+    methods_joined = "\n\n".join(methods)
+
+    code = Stripped(
+        f"""\
+/**
+ * Provide the access to the items of lists which follows the Python
+ * implementation, since Python is the language of the meta-model specifications.
+ *
+ * <p>A negative index counts from the back of the list.
+ */
+public final class ListHelpers {{
+{I}private ListHelpers() {{
+{II}// Prevent instantiation
+{I}}}
+
+{I}{indent_but_first_line(methods_joined, I)}
+}}"""
+    )
+
+    imports: List[str] = []
+    if with_json_arrays:
+        imports.extend(
+            [
+                "import com.fasterxml.jackson.databind.JsonNode;",
+                "import com.fasterxml.jackson.databind.node.ArrayNode;",
+            ]
+        )
+    imports.append("import java.util.List;")
+
+    blocks: List[Stripped] = [
+        java_common.WARNING,
+        Stripped(f"package {package}.common;"),
+        Stripped("\n".join(imports)),
+        code,
+        java_common.WARNING,
+    ]
+
+    return Stripped("\n\n".join(blocks))
+
+
 def _generate_set_helpers(
     package: java_common.PackageIdentifier,
     with_operations: bool,
@@ -731,6 +854,13 @@ def generate(
                 f"{_generate_string_helpers(package, symbol_table, type_inference)}\n",
             )
         )
+
+    if intermediate_uses.list_indexing(type_inference):
+        list_helpers = _generate_list_helpers(
+            package=package,
+            with_json_arrays=intermediate_uses.json_array_indexing(type_inference),
+        )
+        files.append(java_common.JavaFile("ListHelpers.java", f"{list_helpers}\n"))
 
     with_operations = intermediate_uses.set_operations(symbol_table)
     with_sorting = java_common.has_set_properties(symbol_table)

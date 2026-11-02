@@ -98,7 +98,7 @@ bool Something::IsValidIndex(
 std::wstring Something::TextAt(
   int64_t index
 ) const {
-  return this->texts().at(index);
+  return common::At(this->texts(), index);
 }
 
 // endregion Something

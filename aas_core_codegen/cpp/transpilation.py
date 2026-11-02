@@ -544,36 +544,31 @@ class Transpiler(
     def _transform_item_access(
         self, collection: Stripped, index_node: parse_tree.Expression
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        """Access the item of the list ``collection`` at ``index_node``."""
+        """
+        Access the item of the list or JSON array ``collection`` at ``index_node``.
+
+        We always go through ``common::At``, which resolves a negative index from
+        the back as Python does, so that we need not distinguish the literal indices
+        from the indices known only at run time.
+        """
         index, error = self._transform_and_value_if_necessary(index_node)
         if error is not None:
             return None, error
         assert index is not None
 
-        index_as_int: Optional[int] = None
-        try:
-            index_as_int = int(index)
-        except ValueError:
-            pass
-
-        if index_as_int is not None and index_as_int == -1:
-            return Stripped(f"{collection}.back()"), None
-
-        if index_as_int is not None and index_as_int < -1:
-            index = Stripped(f"{collection}.size() - {-index_as_int}")
-
-        if "\n" in index:
+        if "\n" in index or "\n" in collection:
             return (
                 Stripped(
                     f"""\
-{collection}.at(
+common::At(
+{I}{indent_but_first_line(collection, I)},
 {I}{indent_but_first_line(index, I)}
 )"""
                 ),
                 None,
             )
 
-        return Stripped(f"{collection}.at({index})"), None
+        return Stripped(f"common::At({collection}, {index})"), None
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def _transform_mutable_path(

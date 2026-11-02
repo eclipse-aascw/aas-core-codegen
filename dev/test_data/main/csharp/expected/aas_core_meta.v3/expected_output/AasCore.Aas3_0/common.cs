@@ -84,6 +84,63 @@ namespace AasCore.Aas3_0
                 return CountCharacters(text, 0, text.Length);
             }
         }  // public static class StringHelpers
+
+        /// <summary>
+        /// Provide the access to the items of lists which follows the Python
+        /// implementation, since Python is the language of the meta-model specifications.
+        /// </summary>
+        /// <remarks>
+        /// A negative index counts from the back of the list.
+        /// </remarks>
+        public static class ListHelpers
+        {
+            /// <summary>
+            /// Resolve <paramref name="index" /> in a list of <paramref name="count" /> items.
+            /// </summary>
+            /// <exception cref="System.OverflowException">
+            /// Thrown if the resolved index does not fit into an <c>int</c>.
+            /// </exception>
+            private static int ResolveIndex(long index, int count)
+            {
+                return checked((int)(index < 0 ? index + count : index));
+            }
+
+            /// <summary>
+            /// Get the item of <paramref name="list" /> at <paramref name="index" />.
+            /// </summary>
+            /// <param name="list">to get the item from</param>
+            /// <param name="index">of the item; negative counts from the back</param>
+            /// <returns>the item</returns>
+            /// <exception cref="System.ArgumentOutOfRangeException">
+            /// Thrown if <paramref name="index" /> is out of range.
+            /// </exception>
+            public static T At<T>(
+                System.Collections.Generic.IReadOnlyList<T> list,
+                long index
+            )
+            {
+                return list[ResolveIndex(index, list.Count)];
+            }
+
+            /// <summary>
+            /// Set the item of <paramref name="list" /> at <paramref name="index" />
+            /// to <paramref name="value" />.
+            /// </summary>
+            /// <param name="list">to set the item in</param>
+            /// <param name="index">of the item; negative counts from the back</param>
+            /// <param name="value">to be set</param>
+            /// <exception cref="System.ArgumentOutOfRangeException">
+            /// Thrown if <paramref name="index" /> is out of range.
+            /// </exception>
+            public static void SetAt<T>(
+                System.Collections.Generic.IList<T> list,
+                long index,
+                T value
+            )
+            {
+                list[ResolveIndex(index, list.Count)] = value;
+            }
+        }  // public static class ListHelpers
     }  // public static class Common
 }  // namespace AasCore.Aas3_0
 

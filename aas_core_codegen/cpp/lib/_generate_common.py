@@ -1291,6 +1291,38 @@ std::vector<const typename SetT::value_type*> SortedPointers(
 )
 
 
+#: Define the access to an item of a list or a JSON array as Python does it
+_AT_DEFINITION: Final[Stripped] = Stripped(
+    f"""\
+/**
+ * \\brief Access the item of \\p container at \\p index as Python does.
+ *
+ * A negative \\p index counts from the back of the \\p container.
+ *
+ * We return the reference given by `at`, so that the item can be both read and
+ * written.
+ *
+ * \\param container to be indexed, *e.g.*, a list or a JSON array
+ * \\param index of the item; negative counts from the back
+ * \\return reference to the item
+ * \\throw std::out_of_range if \\p index is out of range
+ */
+template<typename ContainerT>
+auto At(
+{I}ContainerT&& container,
+{I}int64_t index
+) -> decltype(container.at(std::size_t())) {{
+{I}if (index < 0) {{
+{II}index += static_cast<int64_t>(container.size());
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// An index which is still negative wraps around to a huge size, so that
+{I}// `at` throws.
+{I}return container.at(static_cast<std::size_t>(index));
+}}"""
+)
+
 # fmt: off
 @ensure(
     lambda result:
@@ -1420,6 +1452,7 @@ std::unique_ptr<T> make_unique(
     # and the transpiled code converts the result of ``LenStr`` to ``int64_t``.
     # The helpers ``FloorMod`` and ``ParseSafeInt`` return ``int64_t``'s as well.
     uses_string_helpers = _uses_string_helpers(type_inference)
+    uses_list_indexing = intermediate_uses.list_indexing(type_inference)
 
     extra_std_includes: List[str] = []
     if (
@@ -1428,6 +1461,7 @@ std::unique_ptr<T> make_unique(
         or intermediate_uses.string_find_call(type_inference)
         or intermediate_uses.modulo(symbol_table)
         or intermediate_uses.safe_integer_checks(symbol_table)
+        or uses_list_indexing
     ):
         extra_std_includes.append("#include <cstdint>")
 
@@ -1671,6 +1705,7 @@ bool Contains(
 {I}) != container_end;
 }}"""
             ),
+            *([_AT_DEFINITION] if uses_list_indexing else []),
             Stripped(
                 """\
 /**

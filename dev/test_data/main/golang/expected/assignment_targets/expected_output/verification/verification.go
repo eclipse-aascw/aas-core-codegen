@@ -97,8 +97,8 @@ func SetFirstAndLastText(
 	item ourtypes.IItem,
 	text string,
 ) bool {
-	item.Texts()[0] = text
-	item.Texts()[len(item.Texts()) - 1] = text
+	*ourcommon.PointerAt(item.Texts(), 0) = text
+	*ourcommon.PointerAt(item.Texts(), -1) = text
 	return true
 }
 
@@ -108,7 +108,7 @@ func SetTextThroughListAlias(
 	text string,
 ) bool {
 	texts := item.Texts()
-	texts[1] = text
+	*ourcommon.PointerAt(texts, 1) = text
 	return true
 }
 
@@ -117,8 +117,8 @@ func SetNumbers(
 	numbers []int64,
 	number int64,
 ) bool {
-	numbers[0] = number
-	numbers[len(numbers) - 2] = numbers[len(numbers) - 1] + 1
+	*ourcommon.PointerAt(numbers, 0) = number
+	*ourcommon.PointerAt(numbers, -2) = ourcommon.At(numbers, -1) + 1
 	return true
 }
 
@@ -127,8 +127,8 @@ func SetNestedText(
 	items []ourtypes.IItem,
 	text string,
 ) bool {
-	items[0].Texts()[len(items[0].Texts()) - 1] = text
-	items[len(items) - 1].SetText(text)
+	*ourcommon.PointerAt(ourcommon.At(items, 0).Texts(), -1) = text
+	ourcommon.At(items, -1).SetText(text)
 	return true
 }
 
@@ -137,7 +137,7 @@ func ReplaceFirstItem(
 	items []ourtypes.IItem,
 	item ourtypes.IItem,
 ) bool {
-	items[0] = item
+	*ourcommon.PointerAt(items, 0) = item
 	return true
 }
 
@@ -150,7 +150,7 @@ func SetTextsInLoops(
 		item.SetText(text)
 	}
 	for i := 0; i < len(items); i++ {
-		items[i].Texts()[0] = text
+		*ourcommon.PointerAt(ourcommon.At(items, int64(i)).Texts(), 0) = text
 	}
 	return true
 }
@@ -161,7 +161,7 @@ func FillTexts(
 	text string,
 ) bool {
 	for i := 0; i < len(texts); i++ {
-		texts[i] = text
+		*ourcommon.PointerAt(texts, int64(i)) = text
 	}
 	return true
 }
@@ -218,7 +218,7 @@ func SetFirstTextsOfLists(
 	text string,
 ) bool {
 	for _, texts := range lists {
-		texts[0] = text
+		*ourcommon.PointerAt(texts, 0) = text
 	}
 	return true
 }
@@ -231,11 +231,11 @@ func SetFirstTextsInSiblingLoops(
 ) bool {
 	for _, item := range items {
 		texts := item.Texts()
-		texts[0] = text
+		*ourcommon.PointerAt(texts, 0) = text
 	}
 	for _, other := range others {
 		texts := other.Texts()
-		texts[0] = text
+		*ourcommon.PointerAt(texts, 0) = text
 	}
 	return true
 }
@@ -254,9 +254,9 @@ func TextCopyIsIndependent(
 func NumberCopyIsIndependent(
 	numbers []int64,
 ) bool {
-	first := numbers[0]
-	numbers[0] = first + 1
-	return (first + 1) == numbers[0]
+	first := ourcommon.At(numbers, 0)
+	*ourcommon.PointerAt(numbers, 0) = first + 1
+	return (first + 1) == ourcommon.At(numbers, 0)
 }
 
 // Check the assignment of a copy of a list to an optional property.
@@ -295,7 +295,7 @@ func FirstTextThroughAliasIs(
 	text string,
 ) bool {
 	texts := item.Texts()
-	return texts[0] == text
+	return ourcommon.At(texts, 0) == text
 }
 
 // Check that no text is empty through a read-only list argument.

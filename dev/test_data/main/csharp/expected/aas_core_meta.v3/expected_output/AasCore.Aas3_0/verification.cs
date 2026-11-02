@@ -1957,7 +1957,7 @@ namespace AasCore.Aas3_0
         {
             return reference.Type == ReferenceTypes.ModelReference
             && reference.Keys.Count != 0
-            && reference.Keys[^1].Type == expectedType;
+            && Common.ListHelpers.At(reference.Keys, -1).Type == expectedType;
         }  // public static bool IsModelReferenceTo
 
         /// <summary>
@@ -1969,7 +1969,7 @@ namespace AasCore.Aas3_0
         {
             return reference.Type == ReferenceTypes.ModelReference
             && reference.Keys.Count != 0
-            && Our.Constants.AasReferables.Contains(reference.Keys[^1].Type);
+            && Our.Constants.AasReferables.Contains(Common.ListHelpers.At(reference.Keys, -1).Type);
         }  // public static bool IsModelReferenceToReferable
 
         /// <summary>
@@ -7840,7 +7840,7 @@ namespace AasCore.Aas3_0
 
                 if (!(
                     !(that.Keys.Count >= 1)
-                    || Our.Constants.GloballyIdentifiables.Contains(that.Keys[0].Type)))
+                    || Our.Constants.GloballyIdentifiables.Contains(Common.ListHelpers.At(that.Keys, 0).Type)))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -7854,7 +7854,7 @@ namespace AasCore.Aas3_0
                         that.Type == ReferenceTypes.ExternalReference
                         && that.Keys.Count >= 1
                     )
-                    || Our.Constants.GenericGloballyIdentifiables.Contains(that.Keys[0].Type)))
+                    || Our.Constants.GenericGloballyIdentifiables.Contains(Common.ListHelpers.At(that.Keys, 0).Type)))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -7868,7 +7868,7 @@ namespace AasCore.Aas3_0
                         that.Type == ReferenceTypes.ModelReference
                         && that.Keys.Count >= 1
                     )
-                    || Our.Constants.AasIdentifiables.Contains(that.Keys[0].Type)))
+                    || Our.Constants.AasIdentifiables.Contains(Common.ListHelpers.At(that.Keys, 0).Type)))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -7882,8 +7882,8 @@ namespace AasCore.Aas3_0
                         && that.Keys.Count >= 1
                     )
                     || (
-                        Our.Constants.GenericGloballyIdentifiables.Contains(that.Keys[^1].Type)
-                        || Our.Constants.GenericFragmentKeys.Contains(that.Keys[^1].Type)
+                        Our.Constants.GenericGloballyIdentifiables.Contains(Common.ListHelpers.At(that.Keys, -1).Type)
+                        || Our.Constants.GenericFragmentKeys.Contains(Common.ListHelpers.At(that.Keys, -1).Type)
                     )))
                 {
                     yield return new Reporting.Error(
@@ -7903,7 +7903,7 @@ namespace AasCore.Aas3_0
                             1,
                             System.Math.Max(0, that.Keys.Count - 1)
                         ).All(
-                            i => Our.Constants.FragmentKeys.Contains(that.Keys[i].Type))
+                            i => Our.Constants.FragmentKeys.Contains(Common.ListHelpers.At(that.Keys, i).Type))
                     )))
                 {
                     yield return new Reporting.Error(
@@ -7924,7 +7924,7 @@ namespace AasCore.Aas3_0
                             0,
                             that.Keys.Count - 1
                         ).All(
-                            i => !Our.Constants.GenericFragmentKeys.Contains(that.Keys[i].Type))
+                            i => !Our.Constants.GenericFragmentKeys.Contains(Common.ListHelpers.At(that.Keys, i).Type))
                     )))
                 {
                     yield return new Reporting.Error(
@@ -7940,11 +7940,11 @@ namespace AasCore.Aas3_0
                     !(
                         that.Type == ReferenceTypes.ModelReference
                         && that.Keys.Count > 1
-                        && that.Keys[^1].Type == KeyTypes.FragmentReference
+                        && Common.ListHelpers.At(that.Keys, -1).Type == KeyTypes.FragmentReference
                     )
                     || (
-                        that.Keys[^2].Type == KeyTypes.File
-                        || that.Keys[^2].Type == KeyTypes.Blob
+                        Common.ListHelpers.At(that.Keys, -2).Type == KeyTypes.File
+                        || Common.ListHelpers.At(that.Keys, -2).Type == KeyTypes.Blob
                     )))
                 {
                     yield return new Reporting.Error(
@@ -7964,8 +7964,8 @@ namespace AasCore.Aas3_0
                             0,
                             that.Keys.Count - 1
                         ).All(
-                            i => !(that.Keys[i].Type == KeyTypes.SubmodelElementList)
-                                || Verification.MatchesXsNonNegativeInteger(that.Keys[i + 1].Value))
+                            i => !(Common.ListHelpers.At(that.Keys, i).Type == KeyTypes.SubmodelElementList)
+                                || Verification.MatchesXsNonNegativeInteger(Common.ListHelpers.At(that.Keys, i + 1).Value))
                     )))
                 {
                     yield return new Reporting.Error(

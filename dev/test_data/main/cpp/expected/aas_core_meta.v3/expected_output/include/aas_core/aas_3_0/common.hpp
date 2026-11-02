@@ -10067,6 +10067,34 @@ bool Contains(
 }
 
 /**
+ * \brief Access the item of \p container at \p index as Python does.
+ *
+ * A negative \p index counts from the back of the \p container.
+ *
+ * We return the reference given by `at`, so that the item can be both read and
+ * written.
+ *
+ * \param container to be indexed, *e.g.*, a list or a JSON array
+ * \param index of the item; negative counts from the back
+ * \return reference to the item
+ * \throw std::out_of_range if \p index is out of range
+ */
+template<typename ContainerT>
+auto At(
+  ContainerT&& container,
+  int64_t index
+) -> decltype(container.at(std::size_t())) {
+  if (index < 0) {
+    index += static_cast<int64_t>(container.size());
+  }
+
+  // NOTE (mristin):
+  // An index which is still negative wraps around to a huge size, so that
+  // `at` throws.
+  return container.at(static_cast<std::size_t>(index));
+}
+
+/**
  * Convert platform-independent the wide string to a UTF-8 string.
  *
  * \param text to be converted

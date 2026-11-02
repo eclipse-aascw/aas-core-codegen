@@ -253,6 +253,14 @@ bool NoSevenFrom(
   int64_t start
 );
 
+/// \brief Check reading at the negative indices which are known only at run time.
+///
+/// A negative index counts from the back of the list, as in Python.
+bool NumbersAscendFromBack(
+  const std::vector<int64_t>& numbers,
+  int64_t count
+);
+
 /// \brief Check writing at the indices which are integers rather than lengths.
 bool FillTextsFromBothEnds(
   std::vector<std::wstring>& texts,

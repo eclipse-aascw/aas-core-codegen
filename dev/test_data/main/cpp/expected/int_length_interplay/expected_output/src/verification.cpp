@@ -66,18 +66,18 @@ bool NoNumberIsSeven(
   int64_t count
 ) {
   for (int64_t i = 0; i < count; ++i) {
-    int64_t number = numbers.at(i);
+    int64_t number = common::At(numbers, i);
     if (number == 7) {
       return false;
     }
     int64_t mirrored = (
-      numbers.at(static_cast<int64_t>(numbers.size() - (1)) - i)
+      common::At(numbers, static_cast<int64_t>(numbers.size() - (1)) - i)
     );
     if (mirrored == 7) {
       return false;
     }
     int64_t rotated = (
-      numbers.at(common::FloorMod(i + (1), static_cast<int64_t>(numbers.size())))
+      common::At(numbers, common::FloorMod(i + (1), static_cast<int64_t>(numbers.size())))
     );
     if (rotated == 7) {
       return false;
@@ -97,7 +97,7 @@ bool NoSevenFrom(
     return true;
   }
   for (int64_t i = start; i < static_cast<int64_t>(numbers.size()); ++i) {
-    int64_t number = numbers.at(i);
+    int64_t number = common::At(numbers, i);
     if (number == 7) {
       return false;
     }
@@ -105,12 +105,24 @@ bool NoSevenFrom(
   return (
     common::AllRange<int64_t>(
       [&](int64_t i) -> bool {
-        return numbers.at(i) != 7;
+        return common::At(numbers, i) != 7;
       },
       start,
       numbers.size()
     )
   );
+}
+
+bool NumbersAscendFromBack(
+  const std::vector<int64_t>& numbers,
+  int64_t count
+) {
+  for (int64_t i = 1; i < count; ++i) {
+    if (common::At(numbers, -i) <= common::At(numbers, (-i) - (1))) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool FillTextsFromBothEnds(
@@ -119,8 +131,9 @@ bool FillTextsFromBothEnds(
   const std::wstring& text
 ) {
   for (int64_t i = 0; i < count; ++i) {
-    texts.at(i) = text;
-    texts.at(static_cast<int64_t>(texts.size() - (1)) - i) = text;
+    common::At(texts, i) = text;
+    common::At(texts, static_cast<int64_t>(texts.size() - (1)) - i) = text;
+    common::At(texts, (-1) - i) = text;
   }
   return true;
 }
@@ -141,7 +154,7 @@ bool SetCounts(
 ) {
   something->set_count(texts.size());
   something->set_maybe_count(texts.size());
-  something->mutable_numbers().at(0) = texts.size();
+  common::At(something->mutable_numbers(), 0) = texts.size();
   return true;
 }
 
@@ -268,6 +281,18 @@ bool Something_7(
   );
 }
 
+bool Something_8(
+  const void* value
+) {
+  const types::ISomething* that = (
+    static_cast<const types::ISomething*>(value)
+  );
+  return verification::NumbersAscendFromBack(
+    that->numbers(),
+    that->numbers().size()
+  );
+}
+
 /**
  * Give out the checks of the values of the \p shape.
  */
@@ -308,6 +333,10 @@ const std::vector<Check>& ChecksOf(Shape shape) {
         {
           &Something_7,
           L"No number is seven"
+        },
+        {
+          &Something_8,
+          L"Numbers ascend"
         }
       };
       return checks;

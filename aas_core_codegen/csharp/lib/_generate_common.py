@@ -40,6 +40,119 @@ public static class TupleHelpers
 )
 
 
+def _generate_list_helpers(with_json_arrays: bool) -> Stripped:
+    """
+    Generate the access to the items of lists which follows the Python implementation.
+
+    If ``with_json_arrays`` is set, we also generate the access to the items of
+    JSON arrays.
+    """
+    # NOTE (mristin):
+    # We read from an ``IReadOnlyList``, since both the lists and the covariant
+    # generic sequences implement it, while ``Nodes.JsonArray`` implements only
+    # ``IList``. An overload for ``IList`` would be ambiguous for a ``List``, which
+    # implements both. We write only into the lists, so ``SetAt`` takes
+    # an ``IList``.
+    methods: List[Stripped] = [
+        Stripped(
+            f"""\
+/// <summary>
+/// Resolve <paramref name="index" /> in a list of <paramref name="count" /> items.
+/// </summary>
+/// <exception cref="System.OverflowException">
+/// Thrown if the resolved index does not fit into an <c>int</c>.
+/// </exception>
+private static int ResolveIndex(long index, int count)
+{{
+{I}return checked((int)(index < 0 ? index + count : index));
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Get the item of <paramref name="list" /> at <paramref name="index" />.
+/// </summary>
+/// <param name="list">to get the item from</param>
+/// <param name="index">of the item; negative counts from the back</param>
+/// <returns>the item</returns>
+/// <exception cref="System.ArgumentOutOfRangeException">
+/// Thrown if <paramref name="index" /> is out of range.
+/// </exception>
+public static T At<T>(
+{I}System.Collections.Generic.IReadOnlyList<T> list,
+{I}long index
+)
+{{
+{I}return list[ResolveIndex(index, list.Count)];
+}}"""
+        ),
+    ]
+
+    if with_json_arrays:
+        methods.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Get the item of <paramref name="array" /> at <paramref name="index" />.
+/// </summary>
+/// <param name="array">to get the item from</param>
+/// <param name="index">of the item; negative counts from the back</param>
+/// <returns>the item</returns>
+/// <exception cref="System.ArgumentOutOfRangeException">
+/// Thrown if <paramref name="index" /> is out of range.
+/// </exception>
+public static System.Text.Json.Nodes.JsonNode? At(
+{I}System.Text.Json.Nodes.JsonArray array,
+{I}long index
+)
+{{
+{I}return array[ResolveIndex(index, array.Count)];
+}}"""
+            )
+        )
+
+    methods.append(
+        Stripped(
+            f"""\
+/// <summary>
+/// Set the item of <paramref name="list" /> at <paramref name="index" />
+/// to <paramref name="value" />.
+/// </summary>
+/// <param name="list">to set the item in</param>
+/// <param name="index">of the item; negative counts from the back</param>
+/// <param name="value">to be set</param>
+/// <exception cref="System.ArgumentOutOfRangeException">
+/// Thrown if <paramref name="index" /> is out of range.
+/// </exception>
+public static void SetAt<T>(
+{I}System.Collections.Generic.IList<T> list,
+{I}long index,
+{I}T value
+)
+{{
+{I}list[ResolveIndex(index, list.Count)] = value;
+}}"""
+        )
+    )
+
+    methods_joined = "\n\n".join(methods)
+
+    return Stripped(
+        f"""\
+/// <summary>
+/// Provide the access to the items of lists which follows the Python
+/// implementation, since Python is the language of the meta-model specifications.
+/// </summary>
+/// <remarks>
+/// A negative index counts from the back of the list.
+/// </remarks>
+public static class ListHelpers
+{{
+{I}{indent_but_first_line(methods_joined, I)}
+}}  // public static class ListHelpers"""
+    )
+
+
 def _generate_string_helpers(
     symbol_table: intermediate.SymbolTable,
     type_inference: intermediate_type_inference.TypeInference,
@@ -808,6 +921,13 @@ def generate(
         or intermediate_uses.sets_of_strings_in_properties(symbol_table)
     ):
         blocks.append(_generate_string_helpers(symbol_table, type_inference))
+
+    if intermediate_uses.list_indexing(type_inference):
+        blocks.append(
+            _generate_list_helpers(
+                with_json_arrays=intermediate_uses.json_array_indexing(type_inference)
+            )
+        )
 
     if intermediate_uses.set_properties(symbol_table):
         blocks.append(_generate_set_helpers(symbol_table))

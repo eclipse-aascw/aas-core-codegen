@@ -574,7 +574,7 @@ bool FirstIsSpecial(
   if (items.size() == 0) {
     return false;
   }
-  auto first = items.at(0);
+  auto first = common::At(items, 0);
   if (types::IsSpecialItem(*first)) {
     return (
       std::dynamic_pointer_cast<types::ISpecialItem>(first)->level() > 0
@@ -646,7 +646,7 @@ bool LastIsSpecial(
   if (items.size() == 0) {
     return false;
   }
-  const std::shared_ptr<types::IItem> last = items.at(items.size() - (1));
+  const std::shared_ptr<types::IItem> last = common::At(items, items.size() - (1));
   if (types::IsSpecialItem(*last)) {
     return (
       std::dynamic_pointer_cast<types::ISpecialItem>(last)->level() > 0

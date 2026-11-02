@@ -139,7 +139,7 @@ namespace dummy
             {
                 for (int j = i + 1; j < numbers.Count; j++)
                 {
-                    if (numbers[i] == numbers[j])
+                    if (Common.ListHelpers.At(numbers, i) == Common.ListHelpers.At(numbers, j))
                     {
                         return false;
                     }

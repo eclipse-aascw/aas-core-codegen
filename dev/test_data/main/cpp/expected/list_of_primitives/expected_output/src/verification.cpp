@@ -119,7 +119,7 @@ bool FloatsAreUnique(
 ) {
   for (size_t i = 0; i < numbers.size(); ++i) {
     for (size_t j = i + (1); j < numbers.size(); ++j) {
-      if (numbers.at(i) == numbers.at(j)) {
+      if (common::At(numbers, i) == common::At(numbers, j)) {
         return false;
       }
     }

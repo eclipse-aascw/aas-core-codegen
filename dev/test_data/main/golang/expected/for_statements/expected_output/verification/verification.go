@@ -72,7 +72,7 @@ func NoNumberIsMinusOne(
 	numbers []int64,
 ) bool {
 	for i := 0; i < len(numbers); i++ {
-		number := numbers[i]
+		number := ourcommon.At(numbers, int64(i))
 		if number == -1 {
 			return false
 		}
@@ -85,7 +85,7 @@ func NoNumberAfterTheFirstIsOne(
 	numbers []int64,
 ) bool {
 	for i := 1; i < len(numbers); i++ {
-		if numbers[i] == 1 {
+		if ourcommon.At(numbers, int64(i)) == 1 {
 			return false
 		}
 	}
@@ -171,7 +171,7 @@ func ItemsAreFewAndTextsExpected(
 	count := int64(0)
 	for _, item := range items {
 		for i := 0; i < len(item.Texts()); i++ {
-			text := item.Texts()[i]
+			text := ourcommon.At(item.Texts(), int64(i))
 			switch text {
 			case "unexpected":
 				return false
@@ -232,10 +232,10 @@ func TextsBeforeStopAreFew(
 	for _, item := range items {
 		for i := 0; i < len(item.Texts()); i++ {
 			if kind == ourtypes.KindAlpha {
-				if item.Texts()[i] == "stop" {
+				if ourcommon.At(item.Texts(), int64(i)) == "stop" {
 					break
 				}
-			} else if ourcommon.LenStr(item.Texts()[i]) > 10 {
+			} else if ourcommon.LenStr(ourcommon.At(item.Texts(), int64(i))) > 10 {
 				break
 			}
 			count = count + 1

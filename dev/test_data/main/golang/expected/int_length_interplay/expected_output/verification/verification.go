@@ -65,16 +65,16 @@ func NoNumberIsSeven(
 	count int64,
 ) bool {
 	for i := int64(0); i < count; i++ {
-		number := numbers[i]
+		number := ourcommon.At(numbers, i)
 		if number == 7 {
 			return false
 		}
-		mirrored := numbers[int64(len(numbers) - 1) - i]
+		mirrored := ourcommon.At(numbers, int64(len(numbers) - 1) - i)
 		if mirrored == 7 {
 			return false
 		}
 		rotated :=
-			numbers[ourcommon.FloorMod(i + 1, int64(len(numbers)))]
+			ourcommon.At(numbers, ourcommon.FloorMod(i + 1, int64(len(numbers))))
 		if rotated == 7 {
 			return false
 		}
@@ -99,18 +99,33 @@ func NoSevenFrom(
 		return true
 	}
 	for i := start; i < int64(len(numbers)); i++ {
-		number := numbers[i]
+		number := ourcommon.At(numbers, i)
 		if number == 7 {
 			return false
 		}
 	}
 	return ourcommon.AllRange(
 			func(i int64) bool {
-				return numbers[i] != 7
+				return ourcommon.At(numbers, i) != 7
 			},
 			start,
 			int64(len(numbers)),
 		)
+}
+
+// Check reading at the negative indices which are known only at run time.
+//
+// A negative index counts from the back of the list, as in Python.
+func NumbersAscendFromBack(
+	numbers []int64,
+	count int64,
+) bool {
+	for i := int64(1); i < count; i++ {
+		if ourcommon.At(numbers, -i) <= ourcommon.At(numbers, (-i) - 1) {
+			return false
+		}
+	}
+	return true
 }
 
 // Check writing at the indices which are integers rather than lengths.
@@ -120,8 +135,9 @@ func FillTextsFromBothEnds(
 	text string,
 ) bool {
 	for i := int64(0); i < count; i++ {
-		texts[i] = text
-		texts[int64(len(texts) - 1) - i] = text
+		*ourcommon.PointerAt(texts, i) = text
+		*ourcommon.PointerAt(texts, int64(len(texts) - 1) - i) = text
+		*ourcommon.PointerAt(texts, -1 - i) = text
 	}
 	return true
 }
@@ -144,7 +160,7 @@ func SetCounts(
 ) bool {
 	something.SetCount(int64(len(texts)))
 	something.SetMaybeCount(ourcommon.NewAndPointTo(int64(len(texts))))
-	something.Numbers()[0] = int64(len(texts))
+	*ourcommon.PointerAt(something.Numbers(), 0) = int64(len(texts))
 	return true
 }
 
@@ -259,6 +275,20 @@ func VerifySomething(
 		abort = onError(
 			newVerificationError(
 				"No number is seven",),
+		)
+		if abort {
+			return
+		}
+	}
+
+	if !(
+		NumbersAscendFromBack(
+			that.Numbers(),
+			int64(len(that.Numbers())),
+		)) {
+		abort = onError(
+			newVerificationError(
+				"Numbers ascend",),
 		)
 		if abort {
 			return

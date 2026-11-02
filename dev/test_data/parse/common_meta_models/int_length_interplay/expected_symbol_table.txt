@@ -458,6 +458,30 @@ UnverifiedSymbolTable(
                       original_node=...)],
                   original_node=...)],
               original_node=...)"""),
+          node=...),
+        Invariant(
+          description='Numbers ascend',
+          body=textwrap.dedent("""\
+            FunctionCall(
+              name='numbers_ascend_from_back',
+              args=[
+                Member(
+                  instance=Name(
+                    identifier='self',
+                    original_node=...),
+                  name='numbers',
+                  original_node=...),
+                FunctionCall(
+                  name='len',
+                  args=[
+                    Member(
+                      instance=Name(
+                        identifier='self',
+                        original_node=...),
+                      name='numbers',
+                      original_node=...)],
+                  original_node=...)],
+              original_node=...)"""),
           node=...)],
       serialization=None,
       description=None,
@@ -917,6 +941,104 @@ UnverifiedSymbolTable(
       node=...,
       arguments_by_name=...),
     UnderstoodMethod(
+      name='numbers_ascend_from_back',
+      verification=True,
+      visibility='PUBLIC',
+      arguments=[
+        Argument(
+          name='numbers',
+          type_annotation=SubscriptedTypeAnnotation(
+            identifier='Sequence',
+            subscripts=[
+              AtomicTypeAnnotation(
+                identifier='int',
+                node=...)],
+            node=...),
+          default=None,
+          node=...),
+        Argument(
+          name='count',
+          type_annotation=AtomicTypeAnnotation(
+            identifier='int',
+            node=...),
+          default=None,
+          node=...)],
+      returns=AtomicTypeAnnotation(
+        identifier='bool',
+        node=...),
+      description=Description(
+        document=...,
+        node=...),
+      contracts=Contracts(
+        preconditions=[],
+        snapshots=[],
+        postconditions=[]),
+      non_mutating=False,
+      body=[
+        textwrap.dedent("""\
+          For(
+            generator=ForRange(
+              variable=Name(
+                identifier='i',
+                original_node=...),
+              start=Constant(
+                value=1,
+                original_node=...),
+              end=Name(
+                identifier='count',
+                original_node=...),
+              original_node=...),
+            body=[
+              If(
+                branches=[
+                  IfBranch(
+                    condition=Comparison(
+                      left=Index(
+                        collection=Name(
+                          identifier='numbers',
+                          original_node=...),
+                        index=Neg(
+                          operand=Name(
+                            identifier='i',
+                            original_node=...),
+                          original_node=...),
+                        original_node=...),
+                      op='LE',
+                      right=Index(
+                        collection=Name(
+                          identifier='numbers',
+                          original_node=...),
+                        index=Sub(
+                          left=Neg(
+                            operand=Name(
+                              identifier='i',
+                              original_node=...),
+                            original_node=...),
+                          right=Constant(
+                            value=1,
+                            original_node=...),
+                          original_node=...),
+                        original_node=...),
+                      original_node=...),
+                    body=[
+                      Return(
+                        value=Constant(
+                          value=False,
+                          original_node=...),
+                        original_node=...)],
+                    original_node=...)],
+                default=None,
+                original_node=...)],
+            original_node=...)"""),
+        textwrap.dedent("""\
+          Return(
+            value=Constant(
+              value=True,
+              original_node=...),
+            original_node=...)""")],
+      node=...,
+      arguments_by_name=...),
+    UnderstoodMethod(
       name='fill_texts_from_both_ends',
       verification=True,
       visibility='PUBLIC',
@@ -1003,6 +1125,25 @@ UnverifiedSymbolTable(
                       right=Constant(
                         value=1,
                         original_node=...),
+                      original_node=...),
+                    right=Name(
+                      identifier='i',
+                      original_node=...),
+                    original_node=...),
+                  original_node=...),
+                value=Name(
+                  identifier='text',
+                  original_node=...),
+                annotation=None,
+                original_node=...),
+              Assignment(
+                target=Index(
+                  collection=Name(
+                    identifier='texts',
+                    original_node=...),
+                  index=Sub(
+                    left=Constant(
+                      value=-1,
                       original_node=...),
                     right=Name(
                       identifier='i',

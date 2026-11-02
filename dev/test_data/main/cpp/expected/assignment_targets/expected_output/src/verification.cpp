@@ -85,8 +85,8 @@ bool SetFirstAndLastText(
   const std::shared_ptr<types::IItem>& item,
   const std::wstring& text
 ) {
-  item->mutable_texts().at(0) = text;
-  item->mutable_texts().back() = text;
+  common::At(item->mutable_texts(), 0) = text;
+  common::At(item->mutable_texts(), -1) = text;
   return true;
 }
 
@@ -95,7 +95,7 @@ bool SetTextThroughListAlias(
   const std::wstring& text
 ) {
   auto& texts = item->mutable_texts();
-  texts.at(1) = text;
+  common::At(texts, 1) = text;
   return true;
 }
 
@@ -103,8 +103,8 @@ bool SetNumbers(
   std::vector<int64_t>& numbers,
   int64_t number
 ) {
-  numbers.at(0) = number;
-  numbers.at(numbers.size() - 2) = numbers.back() + (1);
+  common::At(numbers, 0) = number;
+  common::At(numbers, -2) = common::At(numbers, -1) + (1);
   return true;
 }
 
@@ -114,8 +114,8 @@ bool SetNestedText(
   >& items,
   const std::wstring& text
 ) {
-  items.at(0)->mutable_texts().back() = text;
-  items.back()->set_text(text);
+  common::At(common::At(items, 0)->mutable_texts(), -1) = text;
+  common::At(items, -1)->set_text(text);
   return true;
 }
 
@@ -125,7 +125,7 @@ bool ReplaceFirstItem(
   >& items,
   const std::shared_ptr<types::IItem>& item
 ) {
-  items.at(0) = item;
+  common::At(items, 0) = item;
   return true;
 }
 
@@ -139,7 +139,7 @@ bool SetTextsInLoops(
     item->set_text(text);
   }
   for (size_t i = 0; i < items.size(); ++i) {
-    items.at(i)->mutable_texts().at(0) = text;
+    common::At(common::At(items, i)->mutable_texts(), 0) = text;
   }
   return true;
 }
@@ -149,7 +149,7 @@ bool FillTexts(
   const std::wstring& text
 ) {
   for (size_t i = 0; i < texts.size(); ++i) {
-    texts.at(i) = text;
+    common::At(texts, i) = text;
   }
   return true;
 }
@@ -224,7 +224,7 @@ bool SetFirstTextsOfLists(
   const std::wstring& text
 ) {
   for (std::vector<std::wstring>& texts : lists) {
-    texts.at(0) = text;
+    common::At(texts, 0) = text;
   }
   return true;
 }
@@ -240,11 +240,11 @@ bool SetFirstTextsInSiblingLoops(
 ) {
   for (const std::shared_ptr<types::IItem>& item : items) {
     auto& texts = item->mutable_texts();
-    texts.at(0) = text;
+    common::At(texts, 0) = text;
   }
   for (const std::shared_ptr<types::IItem>& other : others) {
     auto& texts = other->mutable_texts();
-    texts.at(0) = text;
+    common::At(texts, 0) = text;
   }
   return true;
 }
@@ -261,9 +261,9 @@ bool TextCopyIsIndependent(
 bool NumberCopyIsIndependent(
   std::vector<int64_t>& numbers
 ) {
-  int64_t first = numbers.at(0);
-  numbers.at(0) = first + (1);
-  return (first + (1)) == (numbers.at(0));
+  int64_t first = common::At(numbers, 0);
+  common::At(numbers, 0) = first + (1);
+  return (first + (1)) == (common::At(numbers, 0));
 }
 
 bool SetMaybeTexts(
@@ -298,7 +298,7 @@ bool FirstTextThroughAliasIs(
   const std::wstring& text
 ) {
   const auto& texts = item->texts();
-  return texts.at(0) == text;
+  return common::At(texts, 0) == text;
 }
 
 bool TextsAreNotEmpty(

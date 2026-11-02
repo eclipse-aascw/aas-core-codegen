@@ -284,7 +284,7 @@ public class Verification {
 
       if (!(
         !(that.getValues().size() > 0
-        && (that.getValues().get(0).isNull())))) {
+        && (ListHelpers.at(that.getValues(), 0).isNull())))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -305,7 +305,7 @@ public class Verification {
 
       if (!(
         !(that.getValues().size() >= 1)
-        || isAcceptable(that.getValues().get(that.getValues().size() - 1)))) {
+        || isAcceptable(ListHelpers.at(that.getValues(), -1)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -314,7 +314,7 @@ public class Verification {
 
       if (!(
         !(that.getValues().size() > 0)
-        || isAcceptable(that.getValues().get(0)))) {
+        || isAcceptable(ListHelpers.at(that.getValues(), 0)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +

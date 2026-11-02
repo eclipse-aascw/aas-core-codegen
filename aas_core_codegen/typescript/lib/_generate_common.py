@@ -322,23 +322,27 @@ export function *range(start: number, end: number): IterableIterator<number> {{
  * Retrieve the `index`-th item from the `array`.
  *
  * @remarks
- * This is a fill for `Array.prototype.at`.
- * See: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/at
+ * Unlike `Array.prototype.at`, we do not give `undefined` on an out-of-bound
+ * `index`, but throw so that we follow the semantics of the meta-model.
  *
  * @param array - to get the element from
  * @param index - zero-based index of the `array`. Negative index counts back.
- * @returns item, or `undefined` if `index` out-of-bound
+ * @returns item at the `index`
+ * @throws {{@link RangeError}} if `index` out-of-bound
  * @typeParam T - type of the array items
  */
 export function at<T>(
 {I}array: Array<T>,
 {I}index: number
-) {{
-{I}if (index < 0) {{
-{II}return array[array.length + index];
-{I}}} else {{
-{II}return array[index];
+): T {{
+{I}const resolved = index < 0 ? array.length + index : index;
+{I}if (resolved < 0 || resolved >= array.length) {{
+{II}throw new RangeError(
+{III}`The index ${{index}} is out of bound ` +
+{III}`for the array of length ${{array.length}}`
+{II});
 {I}}}
+{I}return array[resolved];
 }}"""
         ),
         Stripped(

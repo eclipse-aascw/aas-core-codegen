@@ -395,6 +395,38 @@ class Transpiler(
 
         return code
 
+    def _call_list_helper(
+        self,
+        function: str,
+        collection: Stripped,
+        index_node: parse_tree.Expression,
+        index: Stripped,
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        """
+        Call the list helper ``function`` on the ``collection`` at the ``index``.
+
+        The helpers resolve a negative index from the back as Python does, so that
+        we need not distinguish the literal indices from the indices known only at
+        run time. They take the index as an ``int64``, our integers, while
+        the lengths are ``int``'s.
+        """
+        index = self._as_int64_position(index_node, index)
+
+        callee = f"ourcommon.{function}"
+        if "\n" not in collection and "\n" not in index:
+            return Stripped(f"{callee}({collection}, {index})"), None
+
+        return (
+            Stripped(
+                f"""\
+{callee}(
+{I}{indent_but_first_line(collection, I)},
+{I}{indent_but_first_line(index, I)},
+)"""
+            ),
+            None,
+        )
+
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def _transform_as_pointer(
         self, node: parse_tree.Expression
@@ -597,38 +629,6 @@ class Transpiler(
             return None, error
         assert index is not None
 
-        index_as_int: Optional[int] = None
-        try:
-            index_as_int = int(index)
-        except ValueError:
-            pass
-
-        if index_as_int is not None and index_as_int < 0:
-            if "\n" in collection:
-                index = Stripped(
-                    f"""\
-len(
-{I}{indent_but_first_line(collection, I)}
-) - {-index_as_int}"""
-                )
-            else:
-                index = Stripped(f"len({collection}) - {-index_as_int}")
-
-        no_parentheses_types = (
-            parse_tree.Member,
-            parse_tree.FunctionCall,
-            parse_tree.IsInstance,
-            parse_tree.MethodCall,
-            parse_tree.Name,
-            parse_tree.Constant,
-            parse_tree.Index,
-            parse_tree.Slice,
-            parse_tree.IsIn,
-        )
-
-        if not isinstance(node.collection, no_parentheses_types):
-            collection = Stripped(f"({collection})")
-
         # NOTE (mristin):
         # We explicitly do *not* dereference index access. Make sure you use
         # :py:meth:`_transform_and_dereference_if_necessary` where appropriate. Notably,
@@ -636,7 +636,29 @@ len(
         # references instead of values. That is why we can not simply de-reference
         # all the index access.
 
-        return Stripped(f"{collection}[{index}]"), None
+        if isinstance(
+            collection_type, intermediate_type_inference.JsonObjectTypeAnnotation
+        ):
+            no_parentheses_types = (
+                parse_tree.Member,
+                parse_tree.FunctionCall,
+                parse_tree.IsInstance,
+                parse_tree.MethodCall,
+                parse_tree.Name,
+                parse_tree.Constant,
+                parse_tree.Index,
+                parse_tree.Slice,
+                parse_tree.IsIn,
+            )
+
+            if not isinstance(node.collection, no_parentheses_types):
+                collection = Stripped(f"({collection})")
+
+            return Stripped(f"{collection}[{index}]"), None
+
+        return self._call_list_helper(
+            function="At", collection=collection, index_node=node.index, index=index
+        )
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_slice(
@@ -2456,6 +2478,38 @@ ourcommon.{qualifier_function}(
             target, error = self.transform_name(node=node.target)
             if error is not None:
                 errors.append(error)
+        elif (
+            isinstance(node.target, parse_tree.Index)
+            and not self._is_pointer_map[node.target]
+        ):
+            # NOTE (mristin):
+            # The slices share their underlying arrays, so the assignment to an item
+            # of a list is visible through all the references to the list, as in
+            # Python. We write through the pointer to the item, which resolves
+            # a negative index from the back as Python does.
+            #
+            # An item which is a pointer itself is written through as any other
+            # pointer below, so we need no pointer to it.
+            collection, error = self.transform(node.target.collection)
+            if error is not None:
+                errors.append(error)
+
+            index, error = self.transform(node.target.index)
+            if error is not None:
+                errors.append(error)
+
+            if collection is not None and index is not None:
+                pointer, error = self._call_list_helper(
+                    function="PointerAt",
+                    collection=collection,
+                    index_node=node.target.index,
+                    index=index,
+                )
+                if error is not None:
+                    errors.append(error)
+                else:
+                    assert pointer is not None
+                    target = Stripped(f"*{pointer}")
         else:
             # NOTE (mristin):
             # The slices share their underlying arrays, so the assignment to an item

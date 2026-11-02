@@ -88,7 +88,7 @@ namespace dummy
 
                 if (!(
                     !(that.Values.Count > 0
-                    && (that.Values[0] == null))))
+                    && (Common.ListHelpers.At(that.Values, 0) == null))))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -109,7 +109,7 @@ namespace dummy
 
                 if (!(
                     !(that.Values.Count >= 1)
-                    || Verification.IsAcceptable(that.Values[^1])))
+                    || Verification.IsAcceptable(Common.ListHelpers.At(that.Values, -1))))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -118,7 +118,7 @@ namespace dummy
 
                 if (!(
                     !(that.Values.Count > 0)
-                    || Verification.IsAcceptable(that.Values[0])))
+                    || Verification.IsAcceptable(Common.ListHelpers.At(that.Values, 0))))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +

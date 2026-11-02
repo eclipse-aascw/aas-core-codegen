@@ -186,7 +186,7 @@ public class Second implements ISecond {
     List<Long> numbers
   ) {
     for (int i = 0; i < numbers.size(); i++) {
-        numbers.set(i, this.getCount());
+        ListHelpers.setAt(numbers, i, this.getCount());
     }
   }
 
@@ -212,7 +212,7 @@ public class Second implements ISecond {
     String text
   ) {
     for (int i = 0; i < this.getTexts().size(); i++) {
-        this.getTexts().set(i, text);
+        ListHelpers.setAt(this.getTexts(), i, text);
     }
   }
 

@@ -223,6 +223,28 @@ func (tuple Tuple8[T1, T2, T3, T4, T5, T6, T7, T8]) Len() int {
 	return 8
 }
 
+// Get the item of the `slice` at the `index`.
+//
+// A negative `index` counts from the back of the `slice`, as in Python.
+// Panics if the `index` is out of range.
+func At[T any](slice []T, index int64) T {
+	if index < 0 {
+		index += int64(len(slice))
+	}
+	return slice[index]
+}
+
+// Point to the item of the `slice` at the `index` so that it can be set.
+//
+// A negative `index` counts from the back of the `slice`, as in Python.
+// Panics if the `index` is out of range.
+func PointerAt[T any](slice []T, index int64) *T {
+	if index < 0 {
+		index += int64(len(slice))
+	}
+	return &slice[index]
+}
+
 // Check that `value` lies in the safe integer range [-2^53 + 1, 2^53 - 1].
 //
 // JSON knows a single numeric type, which the SDKs read into a float64.

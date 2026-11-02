@@ -71,7 +71,7 @@ namespace dummy
         {
             for (int i = 0; i < numbers.Count; i++)
             {
-                long number = numbers[i];
+                long number = Common.ListHelpers.At(numbers, i);
                 if (number == -1)
                 {
                     return false;
@@ -89,7 +89,7 @@ namespace dummy
         {
             for (int i = 1; i < numbers.Count; i++)
             {
-                if (numbers[i] == 1)
+                if (Common.ListHelpers.At(numbers, i) == 1)
                 {
                     return false;
                 }
@@ -209,7 +209,7 @@ namespace dummy
             {
                 for (int i = 0; i < item.Texts.Count; i++)
                 {
-                    var text = item.Texts[i];
+                    var text = Common.ListHelpers.At(item.Texts, i);
                     switch (text)
                     {
                         case "unexpected":
@@ -296,12 +296,12 @@ namespace dummy
                 {
                     if (kind == Kind.Alpha)
                     {
-                        if (item.Texts[i] == "stop")
+                        if (Common.ListHelpers.At(item.Texts, i) == "stop")
                         {
                             break;
                         }
                     }
-                    else if (Common.StringHelpers.Len(item.Texts[i]) > 10)
+                    else if (Common.StringHelpers.Len(Common.ListHelpers.At(item.Texts, i)) > 10)
                     {
                         break;
                     }

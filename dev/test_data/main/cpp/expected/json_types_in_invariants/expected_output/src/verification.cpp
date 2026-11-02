@@ -114,7 +114,7 @@ bool Something_1(
   );
   return !((
     that->values().size() > 0
-    && (that->values().at(0).is_null())
+    && (common::At(that->values(), 0).is_null())
   ));
 }
 
@@ -145,7 +145,7 @@ bool Something_3(
   );
   return !(that->values().size() >= 1)
   || verification::IsAcceptable(
-    that->values().back()
+    common::At(that->values(), -1)
   );
 }
 
@@ -157,7 +157,7 @@ bool Something_4(
   );
   return !(that->values().size() > 0)
   || verification::IsAcceptable(
-    that->values().at(0)
+    common::At(that->values(), 0)
   );
 }
 

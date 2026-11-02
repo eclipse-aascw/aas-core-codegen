@@ -239,7 +239,7 @@ namespace dummy
         {
             for (int i = 0; i < numbers.Count; i++)
             {
-                numbers[i] = this.Count;
+                Common.ListHelpers.SetAt(numbers, i, this.Count);
             }
         }
 
@@ -267,7 +267,7 @@ namespace dummy
         {
             for (int i = 0; i < this.Texts.Count; i++)
             {
-                this.Texts[i] = text;
+                Common.ListHelpers.SetAt(this.Texts, i, text);
             }
         }
 
@@ -470,7 +470,7 @@ namespace dummy
         {
             for (int i = 0; i < numbers.Count; i++)
             {
-                numbers[i] = this.Count;
+                Common.ListHelpers.SetAt(numbers, i, this.Count);
             }
         }
 
@@ -498,7 +498,7 @@ namespace dummy
         {
             for (int i = 0; i < this.Texts.Count; i++)
             {
-                this.Texts[i] = text;
+                Common.ListHelpers.SetAt(this.Texts, i, text);
             }
         }
 

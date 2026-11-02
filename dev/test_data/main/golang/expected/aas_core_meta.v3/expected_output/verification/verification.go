@@ -2323,7 +2323,7 @@ func IsModelReferenceTo(
 ) bool {
 	return reference.Type() == ourtypes.ReferenceTypesModelReference &&
 		len(reference.Keys()) != 0 &&
-		reference.Keys()[len(reference.Keys()) - 1].Type() == expectedType
+		ourcommon.At(reference.Keys(), -1).Type() == expectedType
 }
 
 // Check that the target of the reference matches a [ourconstants.AASReferables].
@@ -2334,7 +2334,7 @@ func IsModelReferenceToReferable(
 		len(reference.Keys()) != 0 &&
 		ourcommon.MapContains(
 			ourconstants.AASReferables,
-			reference.Keys()[len(reference.Keys()) - 1].Type(),
+			ourcommon.At(reference.Keys(), -1).Type(),
 		)
 }
 
@@ -10672,7 +10672,7 @@ func VerifyReference(
 		!(len(that.Keys()) >= 1) ||
 		ourcommon.MapContains(
 			ourconstants.GloballyIdentifiables,
-			that.Keys()[0].Type(),
+			ourcommon.At(that.Keys(), 0).Type(),
 		)) {
 		abort = onError(
 			newVerificationError(
@@ -10691,7 +10691,7 @@ func VerifyReference(
 		len(that.Keys()) >= 1) ||
 		ourcommon.MapContains(
 			ourconstants.GenericGloballyIdentifiables,
-			that.Keys()[0].Type(),
+			ourcommon.At(that.Keys(), 0).Type(),
 		)) {
 		abort = onError(
 			newVerificationError(
@@ -10710,7 +10710,7 @@ func VerifyReference(
 		len(that.Keys()) >= 1) ||
 		ourcommon.MapContains(
 			ourconstants.AASIdentifiables,
-			that.Keys()[0].Type(),
+			ourcommon.At(that.Keys(), 0).Type(),
 		)) {
 		abort = onError(
 			newVerificationError(
@@ -10728,11 +10728,11 @@ func VerifyReference(
 		len(that.Keys()) >= 1) ||
 		(ourcommon.MapContains(
 			ourconstants.GenericGloballyIdentifiables,
-			that.Keys()[len(that.Keys()) - 1].Type(),
+			ourcommon.At(that.Keys(), -1).Type(),
 		) ||
 		ourcommon.MapContains(
 			ourconstants.GenericFragmentKeys,
-			that.Keys()[len(that.Keys()) - 1].Type(),
+			ourcommon.At(that.Keys(), -1).Type(),
 		))) {
 		abort = onError(
 			newVerificationError(
@@ -10753,7 +10753,7 @@ func VerifyReference(
 			func(i int) bool {
 				return ourcommon.MapContains(
 						ourconstants.FragmentKeys,
-						that.Keys()[i].Type(),
+						ourcommon.At(that.Keys(), int64(i)).Type(),
 					)
 			},
 			1,
@@ -10779,7 +10779,7 @@ func VerifyReference(
 			func(i int) bool {
 				return !ourcommon.MapContains(
 						ourconstants.GenericFragmentKeys,
-						that.Keys()[i].Type(),
+						ourcommon.At(that.Keys(), int64(i)).Type(),
 					)
 			},
 			0,
@@ -10802,9 +10802,9 @@ func VerifyReference(
 	if !(
 		!(that.Type() == ourtypes.ReferenceTypesModelReference &&
 		len(that.Keys()) > 1 &&
-		that.Keys()[len(that.Keys()) - 1].Type() == ourtypes.KeyTypesFragmentReference) ||
-		(that.Keys()[len(that.Keys()) - 2].Type() == ourtypes.KeyTypesFile ||
-		that.Keys()[len(that.Keys()) - 2].Type() == ourtypes.KeyTypesBlob)) {
+		ourcommon.At(that.Keys(), -1).Type() == ourtypes.KeyTypesFragmentReference) ||
+		(ourcommon.At(that.Keys(), -2).Type() == ourtypes.KeyTypesFile ||
+		ourcommon.At(that.Keys(), -2).Type() == ourtypes.KeyTypesBlob)) {
 		abort = onError(
 			newVerificationError(
 				"Constraint AASd-127: For model references, with more than " +
@@ -10822,9 +10822,9 @@ func VerifyReference(
 		len(that.Keys()) > 2) ||
 		ourcommon.AllRange(
 			func(i int) bool {
-				return !(that.Keys()[i].Type() == ourtypes.KeyTypesSubmodelElementList) ||
+				return !(ourcommon.At(that.Keys(), int64(i)).Type() == ourtypes.KeyTypesSubmodelElementList) ||
 					MatchesXsNonNegativeInteger(
-						that.Keys()[i + 1].Value(),
+						ourcommon.At(that.Keys(), int64(i + 1)).Value(),
 					)
 			},
 			0,

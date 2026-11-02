@@ -341,7 +341,7 @@ func (f *First) FillNumbers(
 	numbers []int64,
 ) {
 	for i := 0; i < len(numbers); i++ {
-		numbers[i] = f.Count()
+		*ourcommon.PointerAt(numbers, int64(i)) = f.Count()
 	}
 }
 
@@ -361,7 +361,7 @@ func (f *First) FillTexts(
 	text string,
 ) {
 	for i := 0; i < len(f.Texts()); i++ {
-		f.Texts()[i] = text
+		*ourcommon.PointerAt(f.Texts(), int64(i)) = text
 	}
 }
 
@@ -640,7 +640,7 @@ func (s *Second) FillNumbers(
 	numbers []int64,
 ) {
 	for i := 0; i < len(numbers); i++ {
-		numbers[i] = s.Count()
+		*ourcommon.PointerAt(numbers, int64(i)) = s.Count()
 	}
 }
 
@@ -660,7 +660,7 @@ func (s *Second) FillTexts(
 	text string,
 ) {
 	for i := 0; i < len(s.Texts()); i++ {
-		s.Texts()[i] = text
+		*ourcommon.PointerAt(s.Texts(), int64(i)) = text
 	}
 }
 

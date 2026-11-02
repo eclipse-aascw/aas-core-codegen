@@ -115,7 +115,7 @@ public class Verification {
     List<Double> numbers) {
     for (int i = 0; i < numbers.size(); i++) {
         for (int j = i + 1; j < numbers.size(); j++) {
-            if ((double) numbers.get(i) == numbers.get(j)) {
+            if ((double) ListHelpers.at(numbers, i) == ListHelpers.at(numbers, j)) {
                 return false;
             }
         }

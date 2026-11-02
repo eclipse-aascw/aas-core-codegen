@@ -127,6 +127,21 @@ def no_seven_from(
         ))
 
 
+def numbers_ascend_from_back(
+    numbers: Sequence[int],
+    count: int
+) -> bool:
+    """
+    Check reading at the negative indices which are known only at run time.
+
+    A negative index counts from the back of the list, as in Python.
+    """
+    for i in range(1, count):
+        if numbers[-i] <= numbers[(-i) - 1]:
+            return False
+    return True
+
+
 def fill_texts_from_both_ends(
     texts: List[str],
     count: int,
@@ -138,6 +153,7 @@ def fill_texts_from_both_ends(
     for i in range(0, count):
         texts[i] = text
         texts[(len(texts) - 1) - i] = text
+        texts[-1 - i] = text
     return True
 
 
@@ -223,6 +239,16 @@ class _Transformer(
         ):
             yield Error(
                 'No number is seven'
+            )
+
+        if not (
+            numbers_ascend_from_back(
+                that.numbers,
+                len(that.numbers)
+            )
+        ):
+            yield Error(
+                'Numbers ascend'
             )
 
         for error in _verify_list_of__int(that.numbers):

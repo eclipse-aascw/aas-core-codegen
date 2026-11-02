@@ -127,7 +127,7 @@ public class Something implements ISomething {
   public String textAt(
     Long index
   ) {
-    return this.getTexts().get(Math.toIntExact(index));
+    return ListHelpers.at(this.getTexts(), index);
   }
 
   /**
