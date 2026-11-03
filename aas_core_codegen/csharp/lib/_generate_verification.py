@@ -486,10 +486,15 @@ def _transpile_transpilable_verification(
                 arg_type = Stripped(f"{arg_type}?")
 
             remarks_on_generic_sequences.append(
-                f"The argument {arg_name} is declared as the covariant "
-                f"IReadOnlyList<{item_type}> instead of the invariant "
-                f"List<{item_type}> so that the lists of the descendants of "
-                f"{item_type} can be passed without a copy."
+                textwrap.fill(
+                    f"The argument {arg_name} is declared as the covariant "
+                    f"IReadOnlyList<{item_type}> instead of the invariant "
+                    f"List<{item_type}> so that the lists of the descendants of "
+                    f"{item_type} can be passed without a copy.",
+                    width=80,
+                    break_long_words=False,
+                    break_on_hyphens=False,
+                )
             )
 
         arg_defs.append(Stripped(f"{arg_type} {arg_name}"))
