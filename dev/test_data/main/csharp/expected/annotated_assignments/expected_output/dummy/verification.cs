@@ -3,8 +3,8 @@
  * Do NOT edit or append.
  */
 
-using Our = dummy;  // renamed
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
+using Our = dummy;  // renamed
 using Regex = System.Text.RegularExpressions.Regex;
 
 using System.Collections.Generic;  // can't alias
@@ -35,7 +35,9 @@ namespace dummy
         /// Check an optional class declared with <c>None</c> and assigned in a loop.
         /// </summary>
         /// <remarks>
-        /// The argument parents is declared as the covariant IReadOnlyList&lt;IParent&gt; instead of the invariant List&lt;IParent&gt; so that the lists of the descendants of IParent can be passed without a copy.
+        /// The argument parents is declared as the covariant IReadOnlyList&lt;IParent&gt; instead
+        /// of the invariant List&lt;IParent&gt; so that the lists of the descendants of IParent
+        /// can be passed without a copy.
         /// </remarks>
         public static bool FirstChildAIsSmall(
             IReadOnlyList<IParent> parents
@@ -95,7 +97,9 @@ namespace dummy
         /// Check a non-optional variable declared wider than its value.
         /// </summary>
         /// <remarks>
-        /// The argument parents is declared as the covariant IReadOnlyList&lt;IParent&gt; instead of the invariant List&lt;IParent&gt; so that the lists of the descendants of IParent can be passed without a copy.
+        /// The argument parents is declared as the covariant IReadOnlyList&lt;IParent&gt; instead
+        /// of the invariant List&lt;IParent&gt; so that the lists of the descendants of IParent
+        /// can be passed without a copy.
         /// </remarks>
         public static bool LastChildBIsNotZero(
             IParent parent,

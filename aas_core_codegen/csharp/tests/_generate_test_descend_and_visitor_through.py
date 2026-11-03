@@ -156,9 +156,8 @@ public void Test_Descend_against_VisitorThrough_for_{cls_name_csharp}()
     return f"""\
 {csharp_common.WARNING}
 
-using Our = {namespace};  // renamed
-
 using Directory = System.IO.Directory;
+using Our = {namespace};  // renamed
 using Path = System.IO.Path;
 
 using NUnit.Framework; // can't alias

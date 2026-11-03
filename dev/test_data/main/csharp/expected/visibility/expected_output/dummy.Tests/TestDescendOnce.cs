@@ -3,9 +3,8 @@
  * Do NOT edit or append.
  */
 
-using Our = dummy;  // renamed
-
 using Directory = System.IO.Directory;
+using Our = dummy;  // renamed
 using Path = System.IO.Path;
 
 using NUnit.Framework; // can't alias

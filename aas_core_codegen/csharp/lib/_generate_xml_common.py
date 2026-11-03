@@ -905,7 +905,7 @@ namespace {namespace}
 
     file_blocks = [
         csharp_common.WARNING,
-        Stripped("\n".join(using_directives)),
+        csharp_common.join_using_directives(using_directives),
         Stripped(writer.getvalue()),
         csharp_common.WARNING,
     ]

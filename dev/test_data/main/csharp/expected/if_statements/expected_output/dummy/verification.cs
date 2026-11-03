@@ -3,8 +3,8 @@
  * Do NOT edit or append.
  */
 
-using Our = dummy;  // renamed
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
+using Our = dummy;  // renamed
 using Regex = System.Text.RegularExpressions.Regex;
 
 using System.Collections.Generic;  // can't alias
@@ -297,7 +297,9 @@ namespace dummy
         /// Check the narrowing after the <c>continue</c> and the early return in a loop.
         /// </summary>
         /// <remarks>
-        /// The argument parents is declared as the covariant IReadOnlyList&lt;IParent&gt; instead of the invariant List&lt;IParent&gt; so that the lists of the descendants of IParent can be passed without a copy.
+        /// The argument parents is declared as the covariant IReadOnlyList&lt;IParent&gt; instead
+        /// of the invariant List&lt;IParent&gt; so that the lists of the descendants of IParent
+        /// can be passed without a copy.
         /// </remarks>
         public static bool ChildAsHaveTexts(
             IReadOnlyList<IParent> parents
@@ -325,7 +327,9 @@ namespace dummy
         /// Check the narrowing after the <c>continue</c> in a loop with a <c>break</c>.
         /// </summary>
         /// <remarks>
-        /// The argument parents is declared as the covariant IReadOnlyList&lt;IParent&gt; instead of the invariant List&lt;IParent&gt; so that the lists of the descendants of IParent can be passed without a copy.
+        /// The argument parents is declared as the covariant IReadOnlyList&lt;IParent&gt; instead
+        /// of the invariant List&lt;IParent&gt; so that the lists of the descendants of IParent
+        /// can be passed without a copy.
         /// </remarks>
         public static bool TextsBeforeContainerAreShort(
             IReadOnlyList<IParent> parents
@@ -367,7 +371,9 @@ namespace dummy
         /// Check the narrowing of a variable to a class by the assigned value.
         /// </summary>
         /// <remarks>
-        /// The argument parents is declared as the covariant IReadOnlyList&lt;IParent&gt; instead of the invariant List&lt;IParent&gt; so that the lists of the descendants of IParent can be passed without a copy.
+        /// The argument parents is declared as the covariant IReadOnlyList&lt;IParent&gt; instead
+        /// of the invariant List&lt;IParent&gt; so that the lists of the descendants of IParent
+        /// can be passed without a copy.
         /// </remarks>
         public static bool LastChildAIsSmall(
             IParent parent,

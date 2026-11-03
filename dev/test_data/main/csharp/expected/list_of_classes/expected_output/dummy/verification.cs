@@ -3,8 +3,8 @@
  * Do NOT edit or append.
  */
 
-using Our = dummy;  // renamed
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
+using Our = dummy;  // renamed
 using Regex = System.Text.RegularExpressions.Regex;
 
 using System.Collections.Generic;  // can't alias
@@ -71,7 +71,9 @@ namespace dummy
         /// holds <see cref="Our.IAbstractItem" />'s.
         /// </para>
         /// <para>
-        /// The argument items is declared as the covariant IReadOnlyList&lt;IAbstractItem&gt; instead of the invariant List&lt;IAbstractItem&gt; so that the lists of the descendants of IAbstractItem can be passed without a copy.
+        /// The argument items is declared as the covariant IReadOnlyList&lt;IAbstractItem&gt;
+        /// instead of the invariant List&lt;IAbstractItem&gt; so that the lists of the
+        /// descendants of IAbstractItem can be passed without a copy.
         /// </para>
         /// </remarks>
         public static List<IAbstractItem> SomeItemsOf(

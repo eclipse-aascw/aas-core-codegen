@@ -1908,20 +1908,17 @@ internal static class Descent
 
     # NOTE (mristin):
     # The transpiled methods might use LINQ, *e.g.*, for ``any`` and ``all``.
-    using_linq = (
-        "\nusing System.Linq;  // can't alias"
-        if len(type_inference.by_method) > 0
-        else ""
+    using_directives.extend(
+        [
+            Stripped(
+                "using EnumMemberAttribute = System.Runtime.Serialization.EnumMemberAttribute;"
+            ),
+            Stripped("using System.Collections.Generic;  // can't alias"),
+        ]
     )
 
-    using_directives.append(
-        Stripped(
-            f"""\
-using EnumMemberAttribute = System.Runtime.Serialization.EnumMemberAttribute;
-
-using System.Collections.Generic;  // can't alias{using_linq}"""
-        )
-    )
+    if len(type_inference.by_method) > 0:
+        using_directives.append(Stripped("using System.Linq;  // can't alias"))
 
     if intermediate_uses.json_types(symbol_table):
         using_directives.append(Stripped("using Nodes = System.Text.Json.Nodes;"))

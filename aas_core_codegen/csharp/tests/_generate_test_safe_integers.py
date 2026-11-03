@@ -443,10 +443,9 @@ public void Test_JsonValueFrom_checks_the_safe_integer_range()
     return f"""\
 {csharp_common.WARNING}
 
-using Our = {namespace};  // renamed
-
 using Directory = System.IO.Directory;
 using Nodes = System.Text.Json.Nodes;
+using Our = {namespace};  // renamed
 using Path = System.IO.Path;
 
 using System.Collections.Generic;  // can't alias
