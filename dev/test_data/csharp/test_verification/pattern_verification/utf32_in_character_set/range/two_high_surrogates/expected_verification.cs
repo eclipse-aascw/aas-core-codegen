@@ -3,8 +3,8 @@
  * Do NOT edit or append.
  */
 
-using Our = dummyNamespace;  // renamed
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
+using Our = dummyNamespace;  // renamed
 using Regex = System.Text.RegularExpressions.Regex;
 
 using System.Collections.Generic;  // can't alias

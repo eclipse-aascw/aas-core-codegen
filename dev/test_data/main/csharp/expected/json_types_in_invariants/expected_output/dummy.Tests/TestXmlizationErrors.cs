@@ -4,7 +4,6 @@
  */
 
 using Our = dummy;  // renamed
-
 using Path = System.IO.Path;
 
 using NUnit.Framework; // can't alias

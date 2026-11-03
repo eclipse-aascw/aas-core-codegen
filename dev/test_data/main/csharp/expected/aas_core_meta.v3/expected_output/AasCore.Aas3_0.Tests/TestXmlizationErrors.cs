@@ -4,7 +4,6 @@
  */
 
 using Our = AasCore.Aas3_0;  // renamed
-
 using Path = System.IO.Path;
 
 using NUnit.Framework; // can't alias

@@ -3,13 +3,12 @@
  * Do NOT edit or append.
  */
 
+using Nodes = System.Text.Json.Nodes;
 using Our = dummy;  // renamed
 
 // We need to use System.MemoryExtension.SequenceEqual.
 using System;  // can't alias
 using System.Collections.Generic;  // can't alias
-
-using Nodes = System.Text.Json.Nodes;
 
 using NUnit.Framework;  // can't alias
 

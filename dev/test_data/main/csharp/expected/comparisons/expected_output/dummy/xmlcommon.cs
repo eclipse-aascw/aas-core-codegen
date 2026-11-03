@@ -3,8 +3,8 @@
  * Do NOT edit or append.
  */
 
-using Our = dummy;  // renamed
 using Globalization = System.Globalization;
+using Our = dummy;  // renamed
 using RegularExpressions = System.Text.RegularExpressions;
 using Xml = System.Xml;
 
