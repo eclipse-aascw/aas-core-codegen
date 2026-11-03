@@ -3,8 +3,8 @@
  * Do NOT edit or append.
  */
 
-using Our = dummy;  // renamed
 using EnumMemberAttribute = System.Runtime.Serialization.EnumMemberAttribute;
+using Our = dummy;  // renamed
 
 using System.Collections.Generic;  // can't alias
 using System.Linq;  // can't alias
@@ -427,7 +427,8 @@ namespace dummy
     }
 
     /// <summary>
-    /// Represent a union of <see cref="IParent" />, <see cref="IItem" /> and <see cref="IChildB" />.
+    /// Represent a union of <see cref="IParent" />, <see cref="IItem" /> and
+    /// <see cref="IChildB" />.
     /// </summary>
     public class WideUnion : IUnion<WideUnion>
     {

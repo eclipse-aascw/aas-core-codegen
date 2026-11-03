@@ -3354,19 +3354,17 @@ namespace {namespace}
         csharp_common.generate_using_our_directive_if_necessary(namespace)
     )
 
-    using_directives.append(
-        Stripped(
-            """\
-using CodeAnalysis = System.Diagnostics.CodeAnalysis;
-using Nodes = System.Text.Json.Nodes;
-
-using System.Collections.Generic;  // can't alias"""
-        )
+    using_directives.extend(
+        [
+            Stripped("using CodeAnalysis = System.Diagnostics.CodeAnalysis;"),
+            Stripped("using Nodes = System.Text.Json.Nodes;"),
+            Stripped("using System.Collections.Generic;  // can't alias"),
+        ]
     )
 
     blocks = [
         csharp_common.WARNING,
-        Stripped("\n".join(using_directives)),
+        csharp_common.join_using_directives(using_directives),
         Stripped(jsonization_writer.getvalue()),
         csharp_common.WARNING,
     ]

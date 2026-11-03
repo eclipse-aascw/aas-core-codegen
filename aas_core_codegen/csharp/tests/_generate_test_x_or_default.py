@@ -172,10 +172,9 @@ public void Test_{cls_name_csharp}_{method_name_csharp}_default()
     return f"""\
 {csharp_common.WARNING}
 
-using Our = {namespace};  // renamed
-
 using Directory = System.IO.Directory;
 using Nodes = System.Text.Json.Nodes;
+using Our = {namespace};  // renamed
 using Path = System.IO.Path;
 
 using NUnit.Framework;  // can't alias

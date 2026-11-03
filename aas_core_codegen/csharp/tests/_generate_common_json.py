@@ -268,12 +268,11 @@ public static void CheckJsonNodesEqual(
     return f"""\
 {csharp_common.WARNING}
 
-using Our = {namespace}; // renamed
-
 using FileMode = System.IO.FileMode;
 using FileStream = System.IO.FileStream;
 using JsonException = System.Text.Json.JsonException;
 using Nodes = System.Text.Json.Nodes;
+using Our = {namespace}; // renamed
 
 using System.Collections.Generic; // can't alias
 using System.Linq; // can't alias

@@ -3,8 +3,8 @@
  * Do NOT edit or append.
  */
 
-using Our = dummy;  // renamed
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
+using Our = dummy;  // renamed
 using Regex = System.Text.RegularExpressions.Regex;
 
 using System.Collections.Generic;  // can't alias
@@ -40,7 +40,9 @@ namespace dummy
         /// the descendants of <see cref="Our.IItem" /> can be passed without a copy.
         /// </para>
         /// <para>
-        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be passed without a copy.
+        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of
+        /// the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be
+        /// passed without a copy.
         /// </para>
         /// </remarks>
         public static bool NamesAreUnique(
@@ -63,7 +65,9 @@ namespace dummy
         /// Iterate over a generic sequence in a generator.
         /// </summary>
         /// <remarks>
-        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be passed without a copy.
+        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of
+        /// the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be
+        /// passed without a copy.
         /// </remarks>
         public static bool NamesAreNonEmpty(
             IReadOnlyList<IItem> items
@@ -77,7 +81,9 @@ namespace dummy
         /// Narrow the items of a generic sequence in a generator.
         /// </summary>
         /// <remarks>
-        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be passed without a copy.
+        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of
+        /// the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be
+        /// passed without a copy.
         /// </remarks>
         public static bool SomeSpecialItemHasLevel(
             IReadOnlyList<IItem> items
@@ -92,7 +98,9 @@ namespace dummy
         /// Index a generic sequence, and narrow the item.
         /// </summary>
         /// <remarks>
-        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be passed without a copy.
+        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of
+        /// the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be
+        /// passed without a copy.
         /// </remarks>
         public static bool FirstIsSpecial(
             IReadOnlyList<IItem> items
@@ -120,7 +128,9 @@ namespace dummy
         /// and the loop continues if it is None.
         /// </para>
         /// <para>
-        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be passed without a copy.
+        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of
+        /// the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be
+        /// passed without a copy.
         /// </para>
         /// </remarks>
         public static bool NicknamesAreUnique(
@@ -153,7 +163,9 @@ namespace dummy
         /// go through <c>any(...)</c>, and of the template parameter in C++.
         /// </para>
         /// <para>
-        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be passed without a copy.
+        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of
+        /// the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be
+        /// passed without a copy.
         /// </para>
         /// </remarks>
         public static bool LevelsOfSpecialItemsArePositive(
@@ -184,7 +196,9 @@ namespace dummy
         /// the shared pointer of the parent class.
         /// </para>
         /// <para>
-        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be passed without a copy.
+        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of
+        /// the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be
+        /// passed without a copy.
         /// </para>
         /// </remarks>
         public static bool LastIsSpecial(
@@ -216,10 +230,14 @@ namespace dummy
         /// are of two different type parameters.
         /// </para>
         /// <para>
-        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be passed without a copy.
+        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of
+        /// the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be
+        /// passed without a copy.
         /// </para>
         /// <para>
-        /// The argument otherItems is declared as the covariant IReadOnlyList&lt;ISomeItem&gt; instead of the invariant List&lt;ISomeItem&gt; so that the lists of the descendants of ISomeItem can be passed without a copy.
+        /// The argument otherItems is declared as the covariant IReadOnlyList&lt;ISomeItem&gt;
+        /// instead of the invariant List&lt;ISomeItem&gt; so that the lists of the descendants of
+        /// ISomeItem can be passed without a copy.
         /// </para>
         /// </remarks>
         public static bool NamesAreDisjoint(
@@ -246,10 +264,14 @@ namespace dummy
         /// and the <c>optional_alias</c> aliases an optional generic sequence.
         /// </para>
         /// <para>
-        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be passed without a copy.
+        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of
+        /// the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be
+        /// passed without a copy.
         /// </para>
         /// <para>
-        /// The argument optionalItems is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be passed without a copy.
+        /// The argument optionalItems is declared as the covariant IReadOnlyList&lt;IItem&gt;
+        /// instead of the invariant List&lt;IItem&gt; so that the lists of the descendants of
+        /// IItem can be passed without a copy.
         /// </para>
         /// </remarks>
         public static bool AliasedNamesAreUnique(
@@ -292,7 +314,9 @@ namespace dummy
         /// the raw pointers are comparable for any template parameter.
         /// </para>
         /// <para>
-        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be passed without a copy.
+        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of
+        /// the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be
+        /// passed without a copy.
         /// </para>
         /// </remarks>
         public static bool ContainsSomeItem(
@@ -311,10 +335,14 @@ namespace dummy
         /// The member and the items are of two different type parameters.
         /// </para>
         /// <para>
-        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be passed without a copy.
+        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of
+        /// the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be
+        /// passed without a copy.
         /// </para>
         /// <para>
-        /// The argument otherItems is declared as the covariant IReadOnlyList&lt;ISomeItem&gt; instead of the invariant List&lt;ISomeItem&gt; so that the lists of the descendants of ISomeItem can be passed without a copy.
+        /// The argument otherItems is declared as the covariant IReadOnlyList&lt;ISomeItem&gt;
+        /// instead of the invariant List&lt;ISomeItem&gt; so that the lists of the descendants of
+        /// ISomeItem can be passed without a copy.
         /// </para>
         /// </remarks>
         public static bool ItemsOverlap(
@@ -365,7 +393,9 @@ namespace dummy
         /// Pass an optional generic sequence on to a generic sequence.
         /// </summary>
         /// <remarks>
-        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be passed without a copy.
+        /// The argument items is declared as the covariant IReadOnlyList&lt;IItem&gt; instead of
+        /// the invariant List&lt;IItem&gt; so that the lists of the descendants of IItem can be
+        /// passed without a copy.
         /// </remarks>
         public static bool OptionalNamesAreUnique(
             IReadOnlyList<IItem>? items
@@ -386,7 +416,9 @@ namespace dummy
         /// class of the parent class.
         /// </para>
         /// <para>
-        /// The argument someItems is declared as the covariant IReadOnlyList&lt;ISomeItem&gt; instead of the invariant List&lt;ISomeItem&gt; so that the lists of the descendants of ISomeItem can be passed without a copy.
+        /// The argument someItems is declared as the covariant IReadOnlyList&lt;ISomeItem&gt;
+        /// instead of the invariant List&lt;ISomeItem&gt; so that the lists of the descendants of
+        /// ISomeItem can be passed without a copy.
         /// </para>
         /// </remarks>
         public static bool SomeNamesAreUnique(

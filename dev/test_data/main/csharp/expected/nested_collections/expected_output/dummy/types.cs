@@ -3,8 +3,8 @@
  * Do NOT edit or append.
  */
 
-using Our = dummy;  // renamed
 using EnumMemberAttribute = System.Runtime.Serialization.EnumMemberAttribute;
+using Our = dummy;  // renamed
 
 using System.Collections.Generic;  // can't alias
 
@@ -247,7 +247,8 @@ namespace dummy
     }
 
     /// <summary>
-    /// Represent a union of <see cref="ISomeItem" /> and <see cref="IAnotherItem" />.
+    /// Represent a union of <see cref="ISomeItem" /> and
+    /// <see cref="IAnotherItem" />.
     /// </summary>
     public class SomeUnion : IUnion<SomeUnion>
     {

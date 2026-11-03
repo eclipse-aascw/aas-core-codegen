@@ -1418,26 +1418,26 @@ def generate(
     # NOTE (mristin):
     # A verification function can take a JSON-able value, and an invariant can
     # name one, so the alias is needed here just as it is in the types.
-    json_using_directive = (
-        "\nusing Nodes = System.Text.Json.Nodes;"
-        if intermediate_uses.json_types(symbol_table)
-        else ""
+    using_directives.extend(
+        [
+            Stripped("using CodeAnalysis = System.Diagnostics.CodeAnalysis;"),
+            Stripped("using Regex = System.Text.RegularExpressions.Regex;"),
+        ]
     )
 
-    using_directives.append(
-        Stripped(
-            f"""\
-using CodeAnalysis = System.Diagnostics.CodeAnalysis;
-using Regex = System.Text.RegularExpressions.Regex;{json_using_directive}
+    if intermediate_uses.json_types(symbol_table):
+        using_directives.append(Stripped("using Nodes = System.Text.Json.Nodes;"))
 
-using System.Collections.Generic;  // can't alias
-using System.Linq;  // can't alias"""
-        )
+    using_directives.extend(
+        [
+            Stripped("using System.Collections.Generic;  // can't alias"),
+            Stripped("using System.Linq;  // can't alias"),
+        ]
     )
 
     blocks: List[Stripped] = [
         csharp_common.WARNING,
-        Stripped("\n".join(using_directives)),
+        csharp_common.join_using_directives(using_directives),
     ]
 
     verification_blocks: List[Stripped] = []

@@ -3,8 +3,8 @@
  * Do NOT edit or append.
  */
 
-using Our = dummy;  // renamed
 using EnumMemberAttribute = System.Runtime.Serialization.EnumMemberAttribute;
+using Our = dummy;  // renamed
 
 using System.Collections.Generic;  // can't alias
 
@@ -230,7 +230,8 @@ namespace dummy
     }
 
     /// <summary>
-    /// Represent a union of <see cref="IStructuralFirst" /> and <see cref="IStructuralSecond" />.
+    /// Represent a union of <see cref="IStructuralFirst" /> and
+    /// <see cref="IStructuralSecond" />.
     /// </summary>
     public class StructuralUnion : IUnion<StructuralUnion>
     {
@@ -708,7 +709,9 @@ namespace dummy
     }
 
     /// <summary>
-    /// Represent a union of <see cref="IMixedAbstractMember" />, <see cref="IMixedConcreteWithDescendants" /> and <see cref="IMixedConcreteLeaf" />.
+    /// Represent a union of <see cref="IMixedAbstractMember" />,
+    /// <see cref="IMixedConcreteWithDescendants" /> and
+    /// <see cref="IMixedConcreteLeaf" />.
     /// </summary>
     public class MixedUnion : IUnion<MixedUnion>
     {
@@ -977,7 +980,8 @@ namespace dummy
     }
 
     /// <summary>
-    /// Represent a union of <see cref="IModelTypedFirst" /> and <see cref="IModelTypedSecond" />.
+    /// Represent a union of <see cref="IModelTypedFirst" /> and
+    /// <see cref="IModelTypedSecond" />.
     /// </summary>
     public class ModelTypedUnion : IUnion<ModelTypedUnion>
     {
@@ -1075,7 +1079,10 @@ namespace dummy
     }
 
     /// <summary>
-    /// Represent a union of <see cref="IModelTypedFirst" />, <see cref="IModelTypedSecond" />, <see cref="IMixedConcreteWithDescendants" /> and <see cref="IMixedConcreteWithDescendantsChild" />.
+    /// Represent a union of <see cref="IModelTypedFirst" />,
+    /// <see cref="IModelTypedSecond" />,
+    /// <see cref="IMixedConcreteWithDescendants" /> and
+    /// <see cref="IMixedConcreteWithDescendantsChild" />.
     /// </summary>
     public class OverlappingUnion : IUnion<OverlappingUnion>
     {

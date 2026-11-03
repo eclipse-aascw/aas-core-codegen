@@ -508,20 +508,22 @@ public void Test_{cls_name}_deep_copy()
             )
         )
 
+    alias_directives: List[str] = []
+    if intermediate_uses.json_types(symbol_table):
+        alias_directives.append("using Nodes = System.Text.Json.Nodes;")
+
+    alias_directives.append(f"using Our = {namespace};  // renamed")
+
     using_directives: List[Stripped] = [
-        Stripped(f"using Our = {namespace};  // renamed"),
+        Stripped("\n".join(alias_directives)),
         Stripped(
             """\
 // We need to use System.MemoryExtension.SequenceEqual.
 using System;  // can't alias
 using System.Collections.Generic;  // can't alias"""
         ),
+        Stripped("using NUnit.Framework;  // can't alias"),
     ]
-
-    if intermediate_uses.json_types(symbol_table):
-        using_directives.append(Stripped("using Nodes = System.Text.Json.Nodes;"))
-
-    using_directives.append(Stripped("using NUnit.Framework;  // can't alias"))
 
     using_directives_joined = "\n\n".join(using_directives)
 
