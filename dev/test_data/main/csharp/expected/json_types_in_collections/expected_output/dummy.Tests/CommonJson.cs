@@ -3,12 +3,11 @@
  * Do NOT edit or append.
  */
 
-using Our = dummy; // renamed
-
 using FileMode = System.IO.FileMode;
 using FileStream = System.IO.FileStream;
 using JsonException = System.Text.Json.JsonException;
 using Nodes = System.Text.Json.Nodes;
+using Our = dummy; // renamed
 
 using System.Collections.Generic; // can't alias
 using System.Linq; // can't alias

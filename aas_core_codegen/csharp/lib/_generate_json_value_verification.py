@@ -308,18 +308,16 @@ namespace {namespace}
         csharp_common.generate_using_our_directive_if_necessary(namespace)
     )
 
-    using_directives.append(
-        Stripped(
-            """\
-using Nodes = System.Text.Json.Nodes;
-
-using System.Collections.Generic;  // can't alias"""
-        )
+    using_directives.extend(
+        [
+            Stripped("using Nodes = System.Text.Json.Nodes;"),
+            Stripped("using System.Collections.Generic;  // can't alias"),
+        ]
     )
 
     final_blocks = [
         csharp_common.WARNING,
-        Stripped("\n".join(using_directives)),
+        csharp_common.join_using_directives(using_directives),
         Stripped(writer.getvalue()),
         csharp_common.WARNING,
     ]

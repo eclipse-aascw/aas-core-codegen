@@ -115,6 +115,7 @@ private static Nodes.JsonNode LoadTheFirstExpected(string modelType)
         ),
         Stripped(
             f"""\
+[SuppressMessage("ReSharper", "UnusedMethodReturnValue.Local")]
 private static string SerializeToXml(Our.IClass instance)
 {{
 {I}var builder = new System.Text.StringBuilder();
@@ -443,10 +444,9 @@ public void Test_JsonValueFrom_checks_the_safe_integer_range()
     return f"""\
 {csharp_common.WARNING}
 
-using Our = {namespace};  // renamed
-
 using Directory = System.IO.Directory;
 using Nodes = System.Text.Json.Nodes;
+using Our = {namespace};  // renamed
 using Path = System.IO.Path;
 
 using System.Collections.Generic;  // can't alias

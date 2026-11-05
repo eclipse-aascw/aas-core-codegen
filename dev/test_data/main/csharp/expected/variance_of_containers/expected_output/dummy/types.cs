@@ -3,8 +3,8 @@
  * Do NOT edit or append.
  */
 
-using Our = dummy;  // renamed
 using EnumMemberAttribute = System.Runtime.Serialization.EnumMemberAttribute;
+using Our = dummy;  // renamed
 
 using System.Collections.Generic;  // can't alias
 using System.Linq;  // can't alias

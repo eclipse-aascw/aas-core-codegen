@@ -3,8 +3,9 @@
  * Do NOT edit or append.
  */
 
-using Our = dummy;  // renamed
 using Nodes = System.Text.Json.Nodes;
+using Our = dummy;  // renamed
+
 using System.Collections.Generic;  // can't alias
 
 namespace dummy

@@ -3,12 +3,12 @@
  * Do NOT edit or append.
  */
 
-using Our = dummy;  // renamed
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
+using Nodes = System.Text.Json.Nodes;
+using Our = dummy;  // renamed
 using Xml = System.Xml;
 
 using System.Collections.Generic;  // can't alias
-using Nodes = System.Text.Json.Nodes;
 
 namespace dummy
 {

@@ -3,8 +3,8 @@
  * Do NOT edit or append.
  */
 
-using Our = AasCore.Aas3_0;  // renamed
 using EnumMemberAttribute = System.Runtime.Serialization.EnumMemberAttribute;
+using Our = AasCore.Aas3_0;  // renamed
 
 using System.Collections.Generic;  // can't alias
 

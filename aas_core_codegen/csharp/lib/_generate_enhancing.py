@@ -750,16 +750,15 @@ public class Enhancer<TEnhancement>
     if intermediate_uses.json_types(symbol_table):
         using_directives.append(Stripped("using Nodes = System.Text.Json.Nodes;"))
 
-    using_directives.append(
-        Stripped(
-            """\
-using System.Collections.Generic;  // can't alias"""
-        )
+    using_directives.extend(
+        [
+            Stripped("using System.Collections.Generic;  // can't alias"),
+        ]
     )
 
     blocks = [
         csharp_common.WARNING,
-        Stripped("\n".join(using_directives)),
+        csharp_common.join_using_directives(using_directives),
     ]
 
     enhancing_writer = io.StringIO()

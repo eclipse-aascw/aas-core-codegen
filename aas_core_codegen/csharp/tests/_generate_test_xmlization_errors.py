@@ -213,7 +213,6 @@ public void Test_error_on_duplicate_property()
 {csharp_common.WARNING}
 
 using Our = {namespace};  // renamed
-
 using Path = System.IO.Path;
 
 using NUnit.Framework; // can't alias

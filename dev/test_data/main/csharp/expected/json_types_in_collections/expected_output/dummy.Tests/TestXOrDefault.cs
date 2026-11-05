@@ -3,10 +3,9 @@
  * Do NOT edit or append.
  */
 
-using Our = dummy;  // renamed
-
 using Directory = System.IO.Directory;
 using Nodes = System.Text.Json.Nodes;
+using Our = dummy;  // renamed
 using Path = System.IO.Path;
 
 using NUnit.Framework;  // can't alias

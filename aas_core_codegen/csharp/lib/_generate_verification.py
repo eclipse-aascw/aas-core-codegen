@@ -486,10 +486,15 @@ def _transpile_transpilable_verification(
                 arg_type = Stripped(f"{arg_type}?")
 
             remarks_on_generic_sequences.append(
-                f"The argument {arg_name} is declared as the covariant "
-                f"IReadOnlyList<{item_type}> instead of the invariant "
-                f"List<{item_type}> so that the lists of the descendants of "
-                f"{item_type} can be passed without a copy."
+                textwrap.fill(
+                    f"The argument {arg_name} is declared as the covariant "
+                    f"IReadOnlyList<{item_type}> instead of the invariant "
+                    f"List<{item_type}> so that the lists of the descendants of "
+                    f"{item_type} can be passed without a copy.",
+                    width=80,
+                    break_long_words=False,
+                    break_on_hyphens=False,
+                )
             )
 
         arg_defs.append(Stripped(f"{arg_type} {arg_name}"))
@@ -1414,26 +1419,26 @@ def generate(
     # NOTE (mristin):
     # A verification function can take a JSON-able value, and an invariant can
     # name one, so the alias is needed here just as it is in the types.
-    json_using_directive = (
-        "\nusing Nodes = System.Text.Json.Nodes;"
-        if intermediate_uses.json_types(symbol_table)
-        else ""
+    using_directives.extend(
+        [
+            Stripped("using CodeAnalysis = System.Diagnostics.CodeAnalysis;"),
+            Stripped("using Regex = System.Text.RegularExpressions.Regex;"),
+        ]
     )
 
-    using_directives.append(
-        Stripped(
-            f"""\
-using CodeAnalysis = System.Diagnostics.CodeAnalysis;
-using Regex = System.Text.RegularExpressions.Regex;{json_using_directive}
+    if intermediate_uses.json_types(symbol_table):
+        using_directives.append(Stripped("using Nodes = System.Text.Json.Nodes;"))
 
-using System.Collections.Generic;  // can't alias
-using System.Linq;  // can't alias"""
-        )
+    using_directives.extend(
+        [
+            Stripped("using System.Collections.Generic;  // can't alias"),
+            Stripped("using System.Linq;  // can't alias"),
+        ]
     )
 
     blocks: List[Stripped] = [
         csharp_common.WARNING,
-        Stripped("\n".join(using_directives)),
+        csharp_common.join_using_directives(using_directives),
     ]
 
     verification_blocks: List[Stripped] = []
