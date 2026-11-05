@@ -680,6 +680,7 @@ func somethingFromMapWithoutDispatch(
 	var theOptionalItem ourtypes.IItem
 	var theOptionalTexts []string
 	var theOptionalKind *ourtypes.Kind
+	var theOptionalFlag *bool
 
 	foundItem := false
 
@@ -703,6 +704,9 @@ func somethingFromMapWithoutDispatch(
 
 		case "optionalKind":
 			theOptionalKind, err = parseOptional(KindFromJsonable(v))
+
+		case "optionalFlag":
+			theOptionalFlag, err = parseOptional(boolFromJsonable(v))
 
 		default:
 			err = newDeserializationError(
@@ -744,6 +748,9 @@ func somethingFromMapWithoutDispatch(
 	)
 	result.SetOptionalKind(
 		theOptionalKind,
+	)
+	result.SetOptionalFlag(
+		theOptionalFlag,
 	)
 
 	return
@@ -1125,6 +1132,10 @@ func somethingToMap(
 			mustSerializationError(err).prependName("OptionalKind()")
 			return
 		}
+	}
+
+	if that.OptionalFlag() != nil {
+		result["optionalFlag"] = *that.OptionalFlag()
 	}
 
 	return

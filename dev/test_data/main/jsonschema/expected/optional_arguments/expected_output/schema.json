@@ -119,6 +119,9 @@
         },
         "optionalKind": {
           "$ref": "#/definitions/Kind"
+        },
+        "optionalFlag": {
+          "type": "boolean"
         }
       },
       "required": [

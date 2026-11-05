@@ -40,6 +40,8 @@ public class Something implements ISomething {
 
   private Kind optionalKind;
 
+  private Boolean optionalFlag;
+
   public Something(IItem item) {
     this.item = Objects.requireNonNull(
       item,
@@ -52,7 +54,8 @@ public class Something implements ISomething {
     Long optionalNumber,
     IItem optionalItem,
     List<String> optionalTexts,
-    Kind optionalKind) {
+    Kind optionalKind,
+    Boolean optionalFlag) {
     this.item = Objects.requireNonNull(
       item,
       "Argument \"item\" must be non-null.");
@@ -61,6 +64,7 @@ public class Something implements ISomething {
     this.optionalItem = optionalItem;
     this.optionalTexts = optionalTexts;
     this.optionalKind = optionalKind;
+    this.optionalFlag = optionalFlag;
   }
 
   @Override
@@ -123,6 +127,16 @@ public class Something implements ISomething {
   @Override
   public void setOptionalKind(Kind optionalKind) {
     this.optionalKind = optionalKind;
+  }
+
+  @Override
+  public Optional<Boolean> getOptionalFlag() {
+    return Optional.ofNullable(optionalFlag);
+  }
+
+  @Override
+  public void setOptionalFlag(Boolean optionalFlag) {
+    this.optionalFlag = optionalFlag;
   }
 
   /**

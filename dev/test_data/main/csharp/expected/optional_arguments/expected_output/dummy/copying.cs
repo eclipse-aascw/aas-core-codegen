@@ -94,7 +94,8 @@ namespace dummy
                     that.OptionalNumber,
                     that.OptionalItem,
                     that.OptionalTexts,
-                    that.OptionalKind);
+                    that.OptionalKind,
+                    that.OptionalFlag);
             }
         }  // internal class ShallowCopier
 
@@ -146,7 +147,8 @@ namespace dummy
                     (that.OptionalTexts != null)
                         ? new List<string>(that.OptionalTexts)
                         : null,
-                    that.OptionalKind
+                    that.OptionalKind,
+                    that.OptionalFlag
                 );
             }
         }  // internal class DeepCopier

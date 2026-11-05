@@ -468,6 +468,8 @@ export class Something extends Class {
 
   optionalKind: Kind | null;
 
+  optionalFlag: boolean | null;
+
   /**
    * Yield from {@link optionalTexts} if it is set, or yield nothing.
    */
@@ -556,7 +558,8 @@ export class Something extends Class {
     optionalNumber: number | null = null,
     optionalItem: Item | null = null,
     optionalTexts: Array<string> | null = null,
-    optionalKind: Kind | null = null
+    optionalKind: Kind | null = null,
+    optionalFlag: boolean | null = null
   ) {
     super();
     this.item = item;
@@ -565,6 +568,7 @@ export class Something extends Class {
     this.optionalItem = optionalItem;
     this.optionalTexts = optionalTexts;
     this.optionalKind = optionalKind;
+    this.optionalFlag = optionalFlag;
   }
 }
 

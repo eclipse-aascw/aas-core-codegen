@@ -658,6 +658,7 @@ function parseSomethingFromSequence(
   let theOptionalItem: OurTypes.Item | null = null;
   let theOptionalTexts: Array<string> | null = null;
   let theOptionalKind: OurTypes.Kind | null = null;
+  let theOptionalFlag: boolean | null = null;
 
   const className = OurTypes.Something.name;
 
@@ -775,6 +776,22 @@ function parseSomethingFromSequence(
         break;
       }
 
+      case "optionalFlag": {
+        if (theOptionalFlag !== null) {
+          propertyError = duplicatePropertyError(propertyLocalName);
+          break;
+        }
+
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_bool
+        );
+        propertyError = parsed.error;
+        theOptionalFlag = parsed.value;
+        break;
+      }
+
       default: {
         propertyError = new DeserializationError(
           `Unexpected XML property: ${propertyLocalName}`
@@ -806,7 +823,8 @@ function parseSomethingFromSequence(
     theOptionalNumber,
     theOptionalItem,
     theOptionalTexts,
-    theOptionalKind
+    theOptionalKind,
+    theOptionalFlag
   );
   return new OurCommon.Either<OurTypes.Something, DeserializationError>(
     instance,
@@ -919,6 +937,12 @@ function writeSomethingAsSequence(
     "optionalKind",
     that.optionalKind,
     write_Kind
+  );
+  writeOptionalProperty(
+    parts,
+    "optionalFlag",
+    that.optionalFlag,
+    write_bool
   );
 }
 

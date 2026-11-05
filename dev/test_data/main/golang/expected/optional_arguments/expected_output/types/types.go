@@ -449,6 +449,12 @@ type ISomething interface {
 	SetOptionalKind(
 		value *Kind,
 	);
+
+	OptionalFlag() *bool;
+
+	SetOptionalFlag(
+		value *bool,
+	);
 }
 
 // Check whether the instance corresponds to [ourtypes.ISomething]
@@ -471,6 +477,7 @@ type Something struct {
 	optionalItem IItem
 	optionalTexts []string
 	optionalKind *Kind
+	optionalFlag *bool
 }
 
 func (s *Something) Item(
@@ -537,6 +544,17 @@ func (s *Something) SetOptionalKind(
 	value *Kind,
 ) {
 	s.optionalKind = value
+}
+
+func (s *Something) OptionalFlag(
+) *bool {
+	return s.optionalFlag
+}
+
+func (s *Something) SetOptionalFlag(
+	value *bool,
+) {
+	s.optionalFlag = value
 }
 
 func (s *Something) ModelType(
@@ -631,6 +649,7 @@ func NewSomething(
 		optionalItem: nil,
 		optionalTexts: nil,
 		optionalKind: nil,
+		optionalFlag: nil,
 	}
 }
 

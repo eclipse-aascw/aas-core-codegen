@@ -187,6 +187,15 @@ namespace dummy
 
             /// <summary>
             /// Convert the content at the current position of <paramref name="reader" />
+            /// to bool.
+            /// </summary>
+            private static bool ReadContentAsBoolean(Xml.XmlReader reader)
+            {
+                return reader.ReadContentAsBoolean();
+            }
+
+            /// <summary>
+            /// Convert the content at the current position of <paramref name="reader" />
             /// to long.
             /// </summary>
             private static long ReadContentAsLong(Xml.XmlReader reader)
@@ -509,6 +518,9 @@ namespace dummy
             private static readonly ContentReader<Kind> Read_Kind = (
                 AsEnum<Our.Kind>(
                     Stringification.KindFromString));
+
+            private static readonly ContentReader<bool> Read_bool = (
+                AsText<bool>(ReadContentAsBoolean));
 
             /// <summary>
             /// Deserialize an instance of class Item from a sequence of XML elements.
@@ -843,6 +855,7 @@ namespace dummy
                 IItem? theOptionalItem = null;
                 List<string>? theOptionalTexts = null;
                 Kind? theOptionalKind = null;
+                bool? theOptionalFlag = null;
 
                 if (!isEmptySequence)
                 {
@@ -917,6 +930,15 @@ namespace dummy
                                 theOptionalKind = Read_Kind(
                                     reader, isEmptyProperty, out error);
                                 break;
+                            case "optionalFlag":
+                                if (theOptionalFlag != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
+                                theOptionalFlag = Read_bool(
+                                    reader, isEmptyProperty, out error);
+                                break;
                             default:
                                 error = new Reporting.Error(
                                     "We expected properties of the class Something, " +
@@ -971,7 +993,8 @@ namespace dummy
                     theOptionalNumber,
                     theOptionalItem,
                     theOptionalTexts,
-                    theOptionalKind);
+                    theOptionalKind,
+                    theOptionalFlag);
             }  // internal static Our.Something? SomethingFromSequence
         }  // internal static class DeserializeImplementation
 
@@ -1488,6 +1511,9 @@ namespace dummy
                 WriteEnum<Our.Kind>(
                     Stringification.ToString));
 
+            private static readonly ContentWriter<bool> Write_bool = (
+                (that, writer) => writer.WriteValue(that));
+
             private static void ItemToSequence(
                 Our.IItem that,
                 Xml.XmlWriter writer)
@@ -1614,6 +1640,16 @@ namespace dummy
                         that.OptionalKind.Value,
                         writer,
                         Write_Kind);
+                }
+
+                if (that.OptionalFlag.HasValue)
+                {
+                    WriteProperty(
+                        "optionalFlag",
+                        "OptionalFlag",
+                        that.OptionalFlag.Value,
+                        writer,
+                        Write_bool);
                 }
             }  // private static void SomethingToSequence
 

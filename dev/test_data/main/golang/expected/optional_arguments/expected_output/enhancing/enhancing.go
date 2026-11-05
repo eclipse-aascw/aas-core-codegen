@@ -320,6 +320,17 @@ func (es *enhancedSomething[E]) SetOptionalKind(
 	es.instance.SetOptionalKind(value)
 }
 
+func (es *enhancedSomething[E]) OptionalFlag(
+) *bool {
+	return es.instance.OptionalFlag()
+}
+
+func (es *enhancedSomething[E]) SetOptionalFlag(
+	value *bool,
+) {
+	es.instance.SetOptionalFlag(value)
+}
+
 func (es *enhancedSomething[E]) getEnhancement(
 ) E {
 	return es.enhancement

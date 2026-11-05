@@ -123,6 +123,19 @@ def item_has_name(
         ))
 
 
+def flag_is_not_set(
+    flag: Optional[bool]
+) -> bool:
+    """
+    Check the negation of the optional boolean argument narrowed to non-null.
+    """
+    return (
+        (
+            (flag is None)
+            or (not flag)
+        ))
+
+
 def texts_are_few(
     texts: Optional[Sequence[str]]
 ) -> bool:
@@ -271,6 +284,11 @@ class _Transformer(
         if not texts_are_few(that.optional_texts):
             yield Error(
                 'Texts must be few'
+            )
+
+        if not flag_is_not_set(that.optional_flag):
+            yield Error(
+                'Flag must not be set'
             )
 
         if not item_has_name(that.optional_item):

@@ -588,6 +588,7 @@ func readSomethingAsSequence(
 	var theOptionalItem ourtypes.IItem
 	var theOptionalTexts []string
 	var theOptionalKind *ourtypes.Kind
+	var theOptionalFlag *bool
 
 	foundItem := false
 	foundOptionalText := false
@@ -595,6 +596,7 @@ func readSomethingAsSequence(
 	foundOptionalItem := false
 	foundOptionalTexts := false
 	foundOptionalKind := false
+	foundOptionalFlag := false
 
 	for {
 		var local string
@@ -663,6 +665,15 @@ func readSomethingAsSequence(
 				readTextAs_Kind(decoder, current),
 			)
 			foundOptionalKind = true
+		case "optionalFlag":
+			if foundOptionalFlag {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
+			theOptionalFlag, current, valueErr = readOptional(
+				xmlcommon.ReadTextAs_bool(decoder, current),
+			)
+			foundOptionalFlag = true
 		default:
 			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
@@ -690,6 +701,7 @@ func readSomethingAsSequence(
 	instance.SetOptionalItem(theOptionalItem)
 	instance.SetOptionalTexts(theOptionalTexts)
 	instance.SetOptionalKind(theOptionalKind)
+	instance.SetOptionalFlag(theOptionalFlag)
 	return
 }
 
@@ -1175,6 +1187,16 @@ func writeSomethingAsSequence(
 		"OptionalKind()",
 		writeOptionalPointer(
 			encoder, "optionalKind", that.OptionalKind(), writeAsText_Kind,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"OptionalFlag()",
+		writeOptionalPointer(
+			encoder, "optionalFlag", that.OptionalFlag(), xmlcommon.WriteAsText_bool,
 		),
 	)
 	if err != nil {

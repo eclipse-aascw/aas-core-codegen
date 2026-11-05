@@ -258,6 +258,11 @@ bool ItemHasName(
   >& item
 );
 
+/// \brief Check the negation of the optional boolean argument narrowed to non-null.
+bool FlagIsNotSet(
+  const common::optional<bool>& flag
+);
+
 /// \brief Check the optional list argument.
 bool TextsAreFew(
   const common::optional<

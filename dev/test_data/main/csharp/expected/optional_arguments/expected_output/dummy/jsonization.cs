@@ -711,6 +711,7 @@ namespace dummy
                 IItem? theOptionalItem = null;
                 List<string>? theOptionalTexts = null;
                 Kind? theOptionalKind = null;
+                bool? theOptionalFlag = null;
 
                 foreach (var keyValue in obj)
                 {
@@ -738,6 +739,10 @@ namespace dummy
                             break;
                         case "optionalKind":
                             theOptionalKind = KindFrom(
+                                keyValue.Value, out error);
+                            break;
+                        case "optionalFlag":
+                            theOptionalFlag = BoolFrom(
                                 keyValue.Value, out error);
                             break;
                         default:
@@ -770,7 +775,8 @@ namespace dummy
                     theOptionalNumber,
                     theOptionalItem,
                     theOptionalTexts,
-                    theOptionalKind);
+                    theOptionalKind,
+                    theOptionalFlag);
             }  // internal static SomethingFrom
         }  // public static class DeserializeImplementation
 
@@ -1069,6 +1075,14 @@ namespace dummy
             /// <summary>
             /// Convert <paramref name="that" /> to a JSON value.
             /// </summary>
+            private static Nodes.JsonValue ToJsonValue(bool that)
+            {
+                return Nodes.JsonValue.Create(that);
+            }
+
+            /// <summary>
+            /// Convert <paramref name="that" /> to a JSON value.
+            /// </summary>
             private static Nodes.JsonValue ToJsonValue(string that)
             {
                 return Nodes.JsonValue.Create(that)
@@ -1130,6 +1144,8 @@ namespace dummy
             private static readonly Serializer<long> Serialize_long = ToJsonValue;
 
             private static readonly Serializer<Kind> Serialize_Kind = Serialize.KindToJsonValue;
+
+            private static readonly Serializer<bool> Serialize_bool = ToJsonValue;
 
             /// <summary>
             /// Set the property <paramref name="jsonName" /> of
@@ -1276,6 +1292,16 @@ namespace dummy
                         "OptionalKind",
                         that.OptionalKind.Value,
                         Serialize_Kind);
+                }
+
+                if (that.OptionalFlag.HasValue)
+                {
+                    SetProperty(
+                        result,
+                        "optionalFlag",
+                        "OptionalFlag",
+                        that.OptionalFlag.Value,
+                        Serialize_bool);
                 }
 
                 return result;

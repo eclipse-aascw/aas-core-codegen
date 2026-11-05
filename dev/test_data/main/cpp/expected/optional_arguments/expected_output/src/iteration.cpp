@@ -28,6 +28,8 @@ std::wstring PropertyToWstring(
       return L"note";
     case Property::kOptionalChildren:
       return L"optional_children";
+    case Property::kOptionalFlag:
+      return L"optional_flag";
     case Property::kOptionalItem:
       return L"optional_item";
     case Property::kOptionalKind:
