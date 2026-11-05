@@ -1513,6 +1513,46 @@ def _read_instance_from_iterparse(
         raise
 
 
+_XS_BOOLEAN_LITERAL_SET = {
+    "1",
+    "true",
+    "0",
+    "false",
+}
+
+
+def _read_bool_from_element_text(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> bool:
+    """
+    Parse the text of :paramref:`element` as a boolean, and
+    read the corresponding end element from :paramref:`iterator`.
+
+    :param element: start element
+    :param iterator:
+        Input stream of ``(event, element)`` coming from
+        :py:func:`xml.etree.ElementTree.iterparse` with the argument
+        ``events=["start", "end"]``
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return: parsed value
+    """
+    text = collapse_whitespace(
+        read_text_from_element(
+            element,
+            iterator
+        )
+    )
+
+    if text not in _XS_BOOLEAN_LITERAL_SET:
+        raise DeserializationException(
+            f"Expected a boolean, "
+            f"but got an element with text: {text!r}"
+        )
+
+    return text in ('1', 'true')
+
+
 #: Match the lexical space of ``xs:long``.
 #:
 #: Mind the explicit ``[0-9]``: ``\d`` would match a digit of any script.
@@ -1936,6 +1976,7 @@ def _read_something_as_sequence(
     the_optional_item: Optional[our_types.Item] = values.get('optionalItem')
     the_optional_texts: Optional[List[str]] = values.get('optionalTexts')
     the_optional_kind: Optional[our_types.Kind] = values.get('optionalKind')
+    the_optional_flag: Optional[bool] = values.get('optionalFlag')
 
     if the_item is None:
         raise DeserializationException(
@@ -1948,7 +1989,8 @@ def _read_something_as_sequence(
         the_optional_number,
         the_optional_item,
         the_optional_texts,
-        the_optional_kind
+        the_optional_kind,
+        the_optional_flag
     )
 
 
@@ -2078,6 +2120,7 @@ _READERS_FOR_SOMETHING: Mapping[
     'optionalItem': _read_item_as_sequence,
     'optionalTexts': _read_list_of__str,
     'optionalKind': _read_kind_from_element_text,
+    'optionalFlag': _read_bool_from_element_text,
 }
 
 
@@ -2177,6 +2220,32 @@ _ElementWriter = Callable[
     [str, Optional[str], _ValueT, '_Serializer'],
     None
 ]
+
+
+def _write_bool_as_element(
+    name: str,
+    prop_name: Optional[str],
+    value: bool,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write the :paramref:`value` of a boolean enclosed in
+    the :paramref:`name` element.
+
+    :param name: of the corresponding element tag
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
+    :param value: to be serialized
+    :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
+    """
+    try:
+        serializer.writer.write_start_element(name)
+        serializer.writer.stream.write('true' if value else 'false')
+        serializer.writer.write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_int_as_element(
@@ -2509,6 +2578,10 @@ def _write_something_as_element(
         if that.optional_kind is not None:
             _write_enum_as_element(
                 'optionalKind', 'optional_kind', that.optional_kind, serializer
+            )
+        if that.optional_flag is not None:
+            _write_bool_as_element(
+                'optionalFlag', 'optional_flag', that.optional_flag, serializer
             )
         serializer.writer.write_end_element(name)
     except Exception as exception:

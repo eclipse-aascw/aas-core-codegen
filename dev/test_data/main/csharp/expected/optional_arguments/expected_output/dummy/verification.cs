@@ -96,6 +96,17 @@ namespace dummy
         }  // public static bool ItemHasName
 
         /// <summary>
+        /// Check the negation of the optional boolean argument narrowed to non-null.
+        /// </summary>
+        public static bool FlagIsNotSet(
+            bool? flag
+        )
+        {
+            return (flag == null)
+            || (!flag.Value);
+        }  // public static bool FlagIsNotSet
+
+        /// <summary>
         /// Check the optional list argument.
         /// </summary>
         public static bool TextsAreFew(
@@ -271,6 +282,13 @@ namespace dummy
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
                         "Texts must be few");
+                }
+
+                if (!Verification.FlagIsNotSet(that.OptionalFlag))
+                {
+                    yield return new Reporting.Error(
+                        "Invariant violated:\n" +
+                        "Flag must not be set");
                 }
 
                 if (!Verification.ItemHasName(that.OptionalItem))

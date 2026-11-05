@@ -209,6 +209,14 @@ class ISomething
     common::optional<Kind> value
   ) = 0;
 
+  virtual const common::optional<bool>& optional_flag() const = 0;
+
+  virtual common::optional<bool>& mutable_optional_flag() = 0;
+
+  virtual void set_optional_flag(
+    common::optional<bool> value
+  ) = 0;
+
   virtual ~ISomething() = default;
 };
 
@@ -355,7 +363,8 @@ class Something
     common::optional<
       std::vector<std::wstring>
     > optional_texts = common::nullopt,
-    common::optional<Kind> optional_kind = common::nullopt
+    common::optional<Kind> optional_kind = common::nullopt,
+    common::optional<bool> optional_flag = common::nullopt
   );
 
   ModelType model_type() const override;
@@ -444,6 +453,18 @@ class Something
 
   // endregion
 
+  // region Get and set optional_flag_
+
+  const common::optional<bool>& optional_flag() const override;
+
+  common::optional<bool>& mutable_optional_flag() override;
+
+  void set_optional_flag(
+    common::optional<bool> value
+  ) override;
+
+  // endregion
+
   ~Something() override = default;
 
  private:
@@ -462,6 +483,8 @@ class Something
   > optional_texts_;
 
   common::optional<Kind> optional_kind_;
+
+  common::optional<bool> optional_flag_;
 };
 
 // endregion

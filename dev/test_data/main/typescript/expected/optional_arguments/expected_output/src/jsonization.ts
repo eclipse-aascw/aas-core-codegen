@@ -986,6 +986,7 @@ function parsePropertiesOfSomething(
   let theOptionalItem: OurTypes.Item | null = null;
   let theOptionalTexts: Array<string> | null = null;
   let theOptionalKind: OurTypes.Kind | null = null;
+  let theOptionalFlag: boolean | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
@@ -1047,6 +1048,15 @@ function parsePropertiesOfSomething(
         break;
       }
 
+      case "optionalFlag": {
+        const parsed = booleanFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theOptionalFlag = parsed.value;
+        break;
+      }
+
       // NOTE (mristin):
       // Since we conflate here a JavaScript object with a JSON object, we ignore
       // properties which we do not know how to de-serialize and assume they are
@@ -1088,7 +1098,8 @@ function parsePropertiesOfSomething(
       theOptionalNumber,
       theOptionalItem,
       theOptionalTexts,
-      theOptionalKind
+      theOptionalKind,
+      theOptionalFlag
     ),
     null
   );
@@ -1362,6 +1373,12 @@ function serializeSomething(
       prop = "optionalKind";
       jsonable["optionalKind"] =
         serialize_Kind(that.optionalKind);
+    }
+
+    if (that.optionalFlag !== null) {
+      prop = "optionalFlag";
+      jsonable["optionalFlag"] =
+        that.optionalFlag;
     }
   } catch (error) {
     if (error instanceof SerializationError) {

@@ -405,6 +405,18 @@ SymbolTable(
           specified_for='Reference to ConcreteClass Something',
           json_name='optionalKind',
           xml_name='optionalKind',
+          parsed=...),
+        Property(
+          name='optional_flag',
+          type_annotation=OptionalTypeAnnotation(
+            value=PrimitiveTypeAnnotation(
+              a_type='BOOL',
+              parsed=...),
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='optionalFlag',
+          xml_name='optionalFlag',
           parsed=...)],
       methods=[],
       constructor=Constructor(
@@ -479,6 +491,18 @@ SymbolTable(
               value=None,
               parsed=...),
             mutable=False,
+            parsed=...),
+          Argument(
+            name='optional_flag',
+            type_annotation=OptionalTypeAnnotation(
+              value=PrimitiveTypeAnnotation(
+                a_type='BOOL',
+                parsed=...),
+              parsed=...),
+            default=DefaultPrimitive(
+              value=None,
+              parsed=...),
+            mutable=False,
             parsed=...)],
         returns=None,
         description=None,
@@ -518,6 +542,11 @@ SymbolTable(
             AssignArgument(
               name='optional_kind',
               argument='optional_kind',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_flag',
+              argument='optional_flag',
               default=None)""")],
         inlined_statements=[
           textwrap.dedent("""\
@@ -549,6 +578,11 @@ SymbolTable(
             AssignArgument(
               name='optional_kind',
               argument='optional_kind',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_flag',
+              argument='optional_flag',
               default=None)""")]),
       invariants=[
         Invariant(
@@ -592,6 +626,21 @@ SymbolTable(
                     identifier='self',
                     original_node=...),
                   name='optional_texts',
+                  original_node=...)],
+              original_node=...)"""),
+          specified_for='Reference to ConcreteClass Something',
+          parsed=...),
+        Invariant(
+          description='Flag must not be set',
+          body=textwrap.dedent("""\
+            FunctionCall(
+              name='flag_is_not_set',
+              args=[
+                Member(
+                  instance=Name(
+                    identifier='self',
+                    original_node=...),
+                  name='optional_flag',
                   original_node=...)],
               original_node=...)"""),
           specified_for='Reference to ConcreteClass Something',
@@ -931,6 +980,35 @@ SymbolTable(
         parsed=...),
       description=DescriptionOfSignature(
         summary='<paragraph>Check the optional instance argument.</paragraph>',
+        remarks=[],
+        arguments_by_name=[],
+        returns=None,
+        parsed=...),
+      contracts=Contracts(
+        preconditions=[],
+        snapshots=[],
+        postconditions=[]),
+      parsed=...,
+      arguments_by_name=...),
+    TranspilableVerification(
+      name='flag_is_not_set',
+      visibility='PUBLIC',
+      arguments=[
+        Argument(
+          name='flag',
+          type_annotation=OptionalTypeAnnotation(
+            value=PrimitiveTypeAnnotation(
+              a_type='BOOL',
+              parsed=...),
+            parsed=...),
+          default=None,
+          mutable=False,
+          parsed=...)],
+      returns=PrimitiveTypeAnnotation(
+        a_type='BOOL',
+        parsed=...),
+      description=DescriptionOfSignature(
+        summary='<paragraph>Check the negation of the optional boolean argument narrowed to non-null.</paragraph>',
         remarks=[],
         arguments_by_name=[],
         returns=None,
