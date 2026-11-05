@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Generate the unit test code for Java."""
 
 from aas_core_codegen.java.tests import (

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Generate code for common functionality shared across the tests."""
 
 import re

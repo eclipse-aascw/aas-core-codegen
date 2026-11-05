@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Provide types for the references in the docstrings."""
 
 import abc

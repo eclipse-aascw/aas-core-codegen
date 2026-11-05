@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Generate implementations and schemas based on an AAS meta-model."""
 
 __version__ = "0.0.27rc5"

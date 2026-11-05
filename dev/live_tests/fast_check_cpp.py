@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """
 Check the C++ generated code with ``-fsyntax-only``, but do not build it.
 

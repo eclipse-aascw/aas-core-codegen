@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """This module provides an inferrer to resolve optional type information."""
 
 from typing import Final, List, MutableMapping, Optional, Union, Mapping, Sequence

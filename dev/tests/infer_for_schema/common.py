@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Provide functions shared among the tests."""
 from typing import Tuple, Optional, Mapping
 

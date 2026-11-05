@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 # NOTE (mristin):
 # This is not really test suite, but a playground to document how streaming XML
 # working in Python.

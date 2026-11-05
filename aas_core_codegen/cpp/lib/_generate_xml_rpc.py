@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Generate code for de/serializing JSON-able values to and from XML."""
 
 # NOTE (mristin):

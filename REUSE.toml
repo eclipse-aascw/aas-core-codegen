@@ -1,0 +1,48 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
+version = 1
+
+# Prose, metadata and images where a header would end up in the rendered output
+# (e.g., README shown on PyPI, the diagram in the README) or which can not carry
+# a comment.
+[[annotations]]
+path = [
+    "AUTHORS",
+    "README.rst",
+    "CHANGELOG.rst",
+    "CONTRIBUTING.rst",
+    "CLAUDE.md",
+    "diagram.svg",
+    "aas_core_codegen/py.typed",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2023 aas-core-codegen AUTHORS"
+SPDX-License-Identifier = "MIT"
+
+# The test inputs and the golden outputs (expected generated code, symbol tables,
+# error messages etc.) are compared byte-by-byte by the unit tests, and
+# the expected errors refer to line numbers in the input meta-models. Many of
+# the files (e.g., JSON) can not carry a comment either.
+[[annotations]]
+path = "dev/test_data/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2023 aas-core-codegen AUTHORS"
+SPDX-License-Identifier = "MIT"
+
+# The meta-model is copied verbatim from aas-core-meta, so we attribute it to
+# its authors. The upstream file does not carry a license header itself.
+[[annotations]]
+path = "dev/test_data/common_meta_models/aas_core_meta.v3.py"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2024 aas-core-meta AUTHORS"
+SPDX-License-Identifier = "MIT"
+
+# Catch2 single header, vendored for the C++ live tests. We keep its original
+# copyright and license.
+[[annotations]]
+path = "dev/test_data/live_tests/cpp/boilerplate/catch.hpp"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2022 Two Blue Cubes Ltd."
+SPDX-License-Identifier = "BSL-1.0"

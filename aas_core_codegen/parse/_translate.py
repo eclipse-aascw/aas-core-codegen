@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Translate the abstract syntax tree of the meta-model into parsed structures."""
 import ast
 import collections

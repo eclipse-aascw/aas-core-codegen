@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Provide data structures for the constraint inferences."""
 from typing import Mapping, Sequence, Optional, Final, MutableMapping
 

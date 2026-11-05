@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Run pre-commit checks on the repository."""
 import argparse
 import enum
@@ -23,6 +27,7 @@ class Step(enum.Enum):
     DOCTEST = "doctest"
     CHECK_INIT_AND_PYPROJECT_CONSISTENT = "check-init-and-pyproject-consistent"
     CHECK_HELP_IN_README = "check-help-in-readme"
+    REUSE = "reuse"
 
 
 def call_and_report(
@@ -377,6 +382,18 @@ def main() -> int:
             "Skipped checking that --help's and the doc coincide "
             "since we pin it on Python version 3.12."
         )
+
+    if Step.REUSE in selects and Step.REUSE not in skips:
+        print("Checking the REUSE compliance...")
+        exit_code = call_and_report(
+            verb="check the REUSE compliance",
+            cmd=[sys.executable, "-m", "reuse", "lint"],
+            cwd=repo_root,
+        )
+        if exit_code != 0:
+            return 1
+    else:
+        print("Skipped checking the REUSE compliance.")
 
     return 0
 
