@@ -18,7 +18,7 @@ namespace dummyNamespace
     public static class Verification
     {
         [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-        [CodeAnalysis.SuppressMessageAttribute("ReSharper", "IdentifierTypo")]
+        [CodeAnalysis.SuppressMessage("ReSharper", "IdentifierTypo")]
         [CodeAnalysis.SuppressMessage("ReSharper", "StringLiteralTypo")]
         private static Regex _constructMatchSomething()
         {
