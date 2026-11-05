@@ -239,8 +239,13 @@ bool LessByRankOfDirection(
   return RankOfDirection(that) < RankOfDirection(other);
 }
 
-// The following encoder has been adapted from Jouni Malinen <j@w1.fi> to work with
-// std::string. The original source code is available at:
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2005-2011 Jouni Malinen <j@w1.fi>
+// SPDX-License-Identifier: BSD-3-Clause
+//
+// The following encoder has been adapted from base64.c of wpa_supplicant/hostapd
+// by Jouni Malinen <j@w1.fi> to work with std::string. The original source code
+// is available at:
 // https://web.mit.edu/freebsd/head/contrib/wpa/src/utils/base64.c
 //
 // See also the following StackOverflow question for a benchmark:
@@ -317,11 +322,16 @@ std::string Base64Encode(
 
   return out_string;
 }
+// SPDX-SnippetEnd
 
-// The following decoder is vaguely based on:
-// https://github.com/danguer/blog-examples/blob/master/js/base64-binary.js,
-// https://github.com/niklasvh/base64-arraybuffer/blob/master/src/index.ts and
-// https://github.com/beatgammit/base64-js/blob/master/index.js.
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2012 Niklas von Hertzen
+// SPDX-License-Identifier: MIT
+//
+// The following decoder has been adapted from the decode function of
+// base64-arraybuffer by Niklas von Hertzen, and extended with input validation.
+// The original source code is available at:
+// https://github.com/niklasvh/base64-arraybuffer/blob/master/src/index.ts
 
 std::vector<std::uint8_t> ConstructBase64Lookup() {
   std::vector<std::uint8_t> lookup(256, 255);
@@ -517,6 +527,7 @@ common::expected<
 
   return bytes;
 }
+// SPDX-SnippetEnd
 
 }  // namespace stringification
 /**@}*/
