@@ -256,7 +256,7 @@ def _transpile_pattern_verification(
     writer.write(
         f"""\
 [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-[CodeAnalysis.SuppressMessageAttribute("ReSharper", "IdentifierTypo")]
+[CodeAnalysis.SuppressMessage("ReSharper", "IdentifierTypo")]
 [CodeAnalysis.SuppressMessage("ReSharper", "StringLiteralTypo")]
 private static Regex {construct_name}()
 {{
