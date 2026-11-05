@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Generate code to specify regular expressions."""
 import io
 from typing import Tuple, Optional, Union, List, Mapping, TextIO

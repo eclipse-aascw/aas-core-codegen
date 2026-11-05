@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Provide the intermediate representation of the meta-model."""
 
 from aas_core_codegen.intermediate import _types, _translate, _stringify

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Parse a regular expression defined over a possibly-formatted string."""
 import collections.abc
 import io

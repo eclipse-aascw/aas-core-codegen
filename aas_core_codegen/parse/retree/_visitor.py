@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Provide a visitor implementation so that we do not have to duplicate the code."""
 from aas_core_codegen.parse.retree._types import (
     Visitor,

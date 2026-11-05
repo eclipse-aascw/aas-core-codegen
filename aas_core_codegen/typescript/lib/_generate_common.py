@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Generate code of common functionality."""
 
 import io
@@ -495,6 +499,14 @@ export class Either<ValueT, ErrorT> {{
         ),
         Stripped(
             f"""\
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2012 Niklas von Hertzen
+// SPDX-License-Identifier: MIT
+//
+// The base64 character table, the lookup table and the functions base64Encode and
+// base64Decode below have been adapted from base64-arraybuffer by Niklas von Hertzen.
+// The original source code is available at:
+// https://github.com/niklasvh/base64-arraybuffer/blob/master/src/index.ts
 const BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const BASE64_LOOKUP = new Uint8Array(256);
 
@@ -524,10 +536,8 @@ for (let i = 0; i < BASE64_CHARS.length; i++) {{
  */
 export function base64Encode(bytes: Uint8Array): string {{
 {I}// NOTE (mristin):
-{I}// This implementation is vaguely based on:
-{I}// https://github.com/danguer/blog-examples/blob/master/js/base64-binary.js,
-{I}// https://github.com/niklasvh/base64-arraybuffer/blob/master/src/index.ts and
-{I}// https://github.com/beatgammit/base64-js/blob/master/index.js.
+{I}// This implementation has been adapted from the encode function of
+{I}// base64-arraybuffer, see the snippet header above.
 
 {I}// NOTE (mristin):
 {I}// We assume that string concatenation is actually *faster* than joining an array
@@ -580,10 +590,9 @@ export function base64Encode(bytes: Uint8Array): string {{
  */
 export function base64Decode(text: string): Either<Uint8Array, string> {{
 {I}// NOTE (mristin):
-{I}// This implementation is vaguely based on:
-{I}// https://github.com/danguer/blog-examples/blob/master/js/base64-binary.js,
-{I}// https://github.com/niklasvh/base64-arraybuffer/blob/master/src/index.ts and
-{I}// https://github.com/beatgammit/base64-js/blob/master/index.js.
+{I}// This implementation has been adapted from the decode function of
+{I}// base64-arraybuffer and extended with input validation, see the snippet header
+{I}// above.
 
 {I}const len = text.length;
 {I}let lenWoPad = len;
@@ -702,7 +711,8 @@ export function base64Decode(text: string): Either<Uint8Array, string> {{
 {I}}}
 
 {I}return new Either<Uint8Array, string>(bytes, null);
-}}"""
+}}
+// SPDX-SnippetEnd"""
         ),
         Stripped(
             f"""\

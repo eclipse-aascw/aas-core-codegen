@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Infer the constraints on the length of a property value."""
 from typing import MutableMapping, Optional, Tuple, List, Union, Sequence
 

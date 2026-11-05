@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Provide common functions shared among different Java code generation modules."""
 
 from typing import Final, Iterable, List, Mapping, cast, Optional, Sequence

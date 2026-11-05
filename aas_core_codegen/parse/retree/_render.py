@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Render the parsed (and possibly modified) regular expression back into values."""
 import io
 from typing import Final, List, Union, Optional, Mapping

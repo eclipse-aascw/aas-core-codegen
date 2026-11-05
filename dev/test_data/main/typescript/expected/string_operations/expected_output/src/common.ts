@@ -193,6 +193,14 @@ export class Either<ValueT, ErrorT> {
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2012 Niklas von Hertzen
+// SPDX-License-Identifier: MIT
+//
+// The base64 character table, the lookup table and the functions base64Encode and
+// base64Decode below have been adapted from base64-arraybuffer by Niklas von Hertzen.
+// The original source code is available at:
+// https://github.com/niklasvh/base64-arraybuffer/blob/master/src/index.ts
 const BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const BASE64_LOOKUP = new Uint8Array(256);
 
@@ -222,10 +230,8 @@ for (let i = 0; i < BASE64_CHARS.length; i++) {
  */
 export function base64Encode(bytes: Uint8Array): string {
   // NOTE (mristin):
-  // This implementation is vaguely based on:
-  // https://github.com/danguer/blog-examples/blob/master/js/base64-binary.js,
-  // https://github.com/niklasvh/base64-arraybuffer/blob/master/src/index.ts and
-  // https://github.com/beatgammit/base64-js/blob/master/index.js.
+  // This implementation has been adapted from the encode function of
+  // base64-arraybuffer, see the snippet header above.
 
   // NOTE (mristin):
   // We assume that string concatenation is actually *faster* than joining an array
@@ -277,10 +283,9 @@ export function base64Encode(bytes: Uint8Array): string {
  */
 export function base64Decode(text: string): Either<Uint8Array, string> {
   // NOTE (mristin):
-  // This implementation is vaguely based on:
-  // https://github.com/danguer/blog-examples/blob/master/js/base64-binary.js,
-  // https://github.com/niklasvh/base64-arraybuffer/blob/master/src/index.ts and
-  // https://github.com/beatgammit/base64-js/blob/master/index.js.
+  // This implementation has been adapted from the decode function of
+  // base64-arraybuffer and extended with input validation, see the snippet header
+  // above.
 
   const len = text.length;
   let lenWoPad = len;
@@ -400,6 +405,7 @@ export function base64Decode(text: string): Either<Uint8Array, string> {
 
   return new Either<Uint8Array, string>(bytes, null);
 }
+// SPDX-SnippetEnd
 
 
 /**

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Infer the constraints on a property based on constant sets."""
 import collections
 from typing import Optional, Tuple, MutableMapping, List, Mapping, Union, Sequence

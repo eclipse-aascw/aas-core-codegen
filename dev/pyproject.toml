@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 [build-system]
 requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -22,7 +26,8 @@ dependencies = [
     "xmlschema==3.3.1",
     "ssort==0.12.3",
     "requests==2.32.4",
-    "types-requests==2.32.4.20250913"
+    "types-requests==2.32.4.20250913",
+    "reuse==6.3.0"
 ]
 
 [tool.setuptools]

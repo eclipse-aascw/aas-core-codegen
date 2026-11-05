@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Generate code to test the XML de/serialization of concrete classes."""
 
 from typing import Dict, List, Mapping, Tuple

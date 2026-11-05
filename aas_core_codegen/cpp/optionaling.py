@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 aas-core-codegen AUTHORS
+#
+# SPDX-License-Identifier: MIT
+
 """Infer and retrieve whether a node in our AST denotes a ``common::optional``."""
 from typing import Optional, Final, MutableMapping, List, Mapping, Sequence, Union
 
