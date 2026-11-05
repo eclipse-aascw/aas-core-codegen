@@ -115,6 +115,7 @@ private static Nodes.JsonNode LoadTheFirstExpected(string modelType)
         ),
         Stripped(
             f"""\
+[SuppressMessage("ReSharper", "UnusedMethodReturnValue.Local")]
 private static string SerializeToXml(Our.IClass instance)
 {{
 {I}var builder = new System.Text.StringBuilder();

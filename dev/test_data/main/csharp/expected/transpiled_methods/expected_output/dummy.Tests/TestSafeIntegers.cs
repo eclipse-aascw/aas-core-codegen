@@ -3,10 +3,9 @@
  * Do NOT edit or append.
  */
 
-using Our = dummy;  // renamed
-
 using Directory = System.IO.Directory;
 using Nodes = System.Text.Json.Nodes;
+using Our = dummy;  // renamed
 using Path = System.IO.Path;
 
 using System.Collections.Generic;  // can't alias
@@ -83,6 +82,7 @@ namespace dummy.Tests
             return Our.Tests.CommonJson.ReadFromFile(paths[0]);
         }
 
+        [SuppressMessage("ReSharper", "UnusedMethodReturnValue.Local")]
         private static string SerializeToXml(Our.IClass instance)
         {
             var builder = new System.Text.StringBuilder();
