@@ -46,3 +46,53 @@ path = "dev/test_data/live_tests/cpp/boilerplate/catch.hpp"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2022 Two Blue Cubes Ltd."
 SPDX-License-Identifier = "BSL-1.0"
+
+# The meta-model and the code generated from it transcribe the AAS
+# specification: the docstrings and the doc comments derived from them quote
+# the definitions of the classes, attributes and constraints. That text keeps
+# the license of the specification, next to the MIT license of our own code.
+# The specifications published by IDTA are licensed under CC BY 4.0.
+#
+# This covers the copy of the meta-model, the symbol tables derived from it and
+# the golden generated code of the meta-model. The golden files with recorded
+# error messages are not covered.
+[[annotations]]
+path = [
+    "dev/test_data/parse/common_meta_models/aas_core_meta.v3/expected_symbol_table.txt",
+    "dev/test_data/intermediate/common_meta_models/aas_core_meta.v3/expected_symbol_table.txt",
+    "dev/test_data/main/cpp/expected/aas_core_meta.v3/expected_output/include/aas_core/aas_3_0/constants.hpp",
+    "dev/test_data/main/cpp/expected/aas_core_meta.v3/expected_output/include/aas_core/aas_3_0/types.hpp",
+    "dev/test_data/main/cpp/expected/aas_core_meta.v3/expected_output/include/aas_core/aas_3_0/verification.hpp",
+    "dev/test_data/main/cpp/expected/aas_core_meta.v3/expected_output/src/verification.cpp",
+    "dev/test_data/main/csharp/expected/aas_core_meta.v3/expected_output/AasCore.Aas3_0/types.cs",
+    "dev/test_data/main/csharp/expected/aas_core_meta.v3/expected_output/AasCore.Aas3_0/verification.cs",
+    "dev/test_data/main/golang/expected/aas_core_meta.v3/expected_output/constants/constants.go",
+    "dev/test_data/main/golang/expected/aas_core_meta.v3/expected_output/types/types.go",
+    "dev/test_data/main/golang/expected/aas_core_meta.v3/expected_output/verification/verification.go",
+    "dev/test_data/main/java/expected/aas_core_meta.v3/expected_output/src/main/java/aas_core/aas3_0/generation/*Builder.java",
+    "dev/test_data/main/java/expected/aas_core_meta.v3/expected_output/src/main/java/aas_core/aas3_0/types/**",
+    "dev/test_data/main/java/expected/aas_core_meta.v3/expected_output/src/main/java/aas_core/aas3_0/verification/Verification.java",
+    "dev/test_data/main/python/expected/aas_core_meta.v3/expected_output/aas_core3/constants.py",
+    "dev/test_data/main/python/expected/aas_core_meta.v3/expected_output/aas_core3/types.py",
+    "dev/test_data/main/python/expected/aas_core_meta.v3/expected_output/aas_core3/verification.py",
+    "dev/test_data/main/typescript/expected/aas_core_meta.v3/expected_output/src/constants.ts",
+    "dev/test_data/main/typescript/expected/aas_core_meta.v3/expected_output/src/types.ts",
+    "dev/test_data/main/typescript/expected/aas_core_meta.v3/expected_output/src/verification.ts",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = [
+    "2023 aas-core-codegen AUTHORS",
+    "Industrial Digital Twin Association e. V.",
+]
+SPDX-License-Identifier = "MIT AND CC-BY-4.0"
+
+# The meta-model copy is annotated with its own authors above, so the holder of
+# the specification is added to those.
+[[annotations]]
+path = "dev/test_data/common_meta_models/aas_core_meta.v3.py"
+precedence = "aggregate"
+SPDX-FileCopyrightText = [
+    "2024 aas-core-meta AUTHORS",
+    "Industrial Digital Twin Association e. V.",
+]
+SPDX-License-Identifier = "MIT AND CC-BY-4.0"
