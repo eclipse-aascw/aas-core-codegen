@@ -3,8 +3,8 @@
  * Do NOT edit or append.
  */
 
-using Our = dummyNamespace;  // renamed
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
+using Our = dummyNamespace;  // renamed
 using Regex = System.Text.RegularExpressions.Regex;
 
 using System.Collections.Generic;  // can't alias
@@ -18,7 +18,7 @@ namespace dummyNamespace
     public static class Verification
     {
         [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-        [CodeAnalysis.SuppressMessageAttribute("ReSharper", "IdentifierTypo")]
+        [CodeAnalysis.SuppressMessage("ReSharper", "IdentifierTypo")]
         [CodeAnalysis.SuppressMessage("ReSharper", "StringLiteralTypo")]
         private static Regex _constructMatchSomething()
         {

@@ -4,6 +4,7 @@
  */
 
 using Our = AasCore.Aas3_0;  // renamed
+
 using System.Collections.Generic;  // can't alias
 
 namespace AasCore.Aas3_0

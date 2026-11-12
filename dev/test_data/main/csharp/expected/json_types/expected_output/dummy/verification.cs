@@ -3,10 +3,10 @@
  * Do NOT edit or append.
  */
 
-using Our = dummy;  // renamed
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
-using Regex = System.Text.RegularExpressions.Regex;
 using Nodes = System.Text.Json.Nodes;
+using Our = dummy;  // renamed
+using Regex = System.Text.RegularExpressions.Regex;
 
 using System.Collections.Generic;  // can't alias
 using System.Linq;  // can't alias

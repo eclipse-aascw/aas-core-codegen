@@ -3,9 +3,9 @@
  * Do NOT edit or append.
  */
 
+using Nodes = System.Text.Json.Nodes;
 using Our = dummy;  // renamed
 using Xml = System.Xml;
-using Nodes = System.Text.Json.Nodes;
 
 namespace dummy
 {

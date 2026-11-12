@@ -3,8 +3,8 @@
  * Do NOT edit or append.
  */
 
-using Our = dummy;  // renamed
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
+using Our = dummy;  // renamed
 using Regex = System.Text.RegularExpressions.Regex;
 
 using System.Collections.Generic;  // can't alias
@@ -32,7 +32,7 @@ namespace dummy
     public static class Verification
     {
         [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-        [CodeAnalysis.SuppressMessageAttribute("ReSharper", "IdentifierTypo")]
+        [CodeAnalysis.SuppressMessage("ReSharper", "IdentifierTypo")]
         [CodeAnalysis.SuppressMessage("ReSharper", "StringLiteralTypo")]
         private static Regex _constructMatchesDigits()
         {

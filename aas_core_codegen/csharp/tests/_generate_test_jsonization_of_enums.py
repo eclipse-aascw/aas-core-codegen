@@ -75,9 +75,8 @@ public void Test_round_trip_{enum_name}()
     return f"""\
 {csharp_common.WARNING}
 
-using Our = {namespace};  // renamed
-
 using Nodes = System.Text.Json.Nodes;
+using Our = {namespace};  // renamed
 
 using NUnit.Framework;  // can't alias
 

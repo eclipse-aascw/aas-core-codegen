@@ -519,11 +519,10 @@ def generate(
         csharp_common.generate_using_our_directive_if_necessary(namespace)
     )
 
-    using_directives.append(
-        Stripped(
-            """\
-using System.Collections.Generic;  // can't alias"""
-        )
+    using_directives.extend(
+        [
+            Stripped("using System.Collections.Generic;  // can't alias"),
+        ]
     )
 
     if intermediate_uses.json_types(symbol_table):
@@ -643,7 +642,7 @@ public static class Copying
 
     blocks = [
         csharp_common.WARNING,
-        Stripped("\n".join(using_directives)),
+        csharp_common.join_using_directives(using_directives),
         Stripped(
             f"""\
 namespace {namespace}

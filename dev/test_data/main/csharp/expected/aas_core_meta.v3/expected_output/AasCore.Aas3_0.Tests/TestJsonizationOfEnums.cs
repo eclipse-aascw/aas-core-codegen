@@ -3,9 +3,8 @@
  * Do NOT edit or append.
  */
 
-using Our = AasCore.Aas3_0;  // renamed
-
 using Nodes = System.Text.Json.Nodes;
+using Our = AasCore.Aas3_0;  // renamed
 
 using NUnit.Framework;  // can't alias
 

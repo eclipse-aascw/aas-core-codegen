@@ -4,6 +4,7 @@
 
 """Generate code of the data structures representing the meta-model."""
 import io
+import re
 import textwrap
 from typing import (
     Optional,
@@ -1483,6 +1484,30 @@ public T Transform<TContext, T>(
     return Stripped(writer.getvalue()), None
 
 
+_CREF_OR_WORD_RE = re.compile(r'<see cref="[^"]*" />\S*|\S+')
+
+
+def _wrap_summary_with_crefs(text: str, width: int = 80) -> Stripped:
+    """
+    Wrap ``text`` into ``///`` lines without breaking the ``<see cref />`` elements.
+    """
+    lines: List[str] = []
+    current = ""
+    for atom in _CREF_OR_WORD_RE.findall(text):
+        if current == "":
+            current = atom
+        elif len(current) + 1 + len(atom) + len("/// ") <= width:
+            current += " " + atom
+        else:
+            lines.append(current)
+            current = atom
+
+    if current != "":
+        lines.append(current)
+
+    return Stripped("\n".join(f"/// {line}" for line in lines))
+
+
 def _generate_named_union_class(named_union: intermediate.NamedUnion) -> Stripped:
     """
     Generate the class representing the named union ``named_union``.
@@ -1602,10 +1627,14 @@ case {interface_name} casted:
     from_methods_joined = "\n\n".join(from_methods)
     from_underlying_cases_joined = "\n".join(from_underlying_cases)
 
+    summary_lines_joined = _wrap_summary_with_crefs(
+        f"Represent a union of {crefs_joined}."
+    )
+
     return Stripped(
         f"""\
 /// <summary>
-/// Represent a union of {crefs_joined}.
+{summary_lines_joined}
 /// </summary>
 public class {name} : IUnion<{name}>
 {{
@@ -1912,20 +1941,17 @@ internal static class Descent
 
     # NOTE (mristin):
     # The transpiled methods might use LINQ, *e.g.*, for ``any`` and ``all``.
-    using_linq = (
-        "\nusing System.Linq;  // can't alias"
-        if len(type_inference.by_method) > 0
-        else ""
+    using_directives.extend(
+        [
+            Stripped(
+                "using EnumMemberAttribute = System.Runtime.Serialization.EnumMemberAttribute;"
+            ),
+            Stripped("using System.Collections.Generic;  // can't alias"),
+        ]
     )
 
-    using_directives.append(
-        Stripped(
-            f"""\
-using EnumMemberAttribute = System.Runtime.Serialization.EnumMemberAttribute;
-
-using System.Collections.Generic;  // can't alias{using_linq}"""
-        )
-    )
+    if len(type_inference.by_method) > 0:
+        using_directives.append(Stripped("using System.Linq;  // can't alias"))
 
     if intermediate_uses.json_types(symbol_table):
         using_directives.append(Stripped("using Nodes = System.Text.Json.Nodes;"))
@@ -1934,7 +1960,7 @@ using System.Collections.Generic;  // can't alias{using_linq}"""
 
     blocks: List[Stripped] = [
         csharp_common.WARNING,
-        Stripped("\n".join(using_directives)),
+        csharp_common.join_using_directives(using_directives),
         Stripped(
             f"""\
 namespace {namespace}

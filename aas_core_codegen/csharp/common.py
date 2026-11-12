@@ -4,7 +4,7 @@
 
 """Provide common functions shared among different C# code generation modules."""
 import re
-from typing import Final, List, Mapping, Optional, Pattern, Sequence, cast
+from typing import Final, List, Mapping, Optional, Pattern, Sequence, Tuple, cast
 
 from icontract import ensure, require
 
@@ -379,6 +379,59 @@ WARNING: Final[Stripped] = Stripped(
  * Do NOT edit or append.
  */"""
 )
+
+
+_USING_ALIAS_RE = re.compile(r"^using (\w+) = ")
+
+
+@require(
+    lambda directives: all("\n" not in directive for directive in directives),
+    "Each directive is a single line",
+)
+def join_using_directives(directives: Sequence[Stripped]) -> Stripped:
+    """
+    Join the single-line using ``directives`` into a block.
+
+    The aliased directives come first, ordered alphabetically by the alias, and
+    are followed by the other directives in the given order.
+
+    >>> usings = [
+    ...    Stripped("using System.Linq;"),
+    ...    Stripped("using System.Collections.Generic;"),
+    ... ]
+    >>> print(join_using_directives(usings))
+    using System.Linq;
+    using System.Collections.Generic;
+
+    >>> usings = [
+    ...    Stripped("using Nodes = System.Text.Json.Nodes;"),
+    ...    Stripped("using CodeAnalysis = System.Diagnostics.CodeAnalysis;"),
+    ...    Stripped("using System.Collections.Generic;"),
+    ... ]
+    >>> print(join_using_directives(usings))
+    using CodeAnalysis = System.Diagnostics.CodeAnalysis;
+    using Nodes = System.Text.Json.Nodes;
+    <BLANKLINE>
+    using System.Collections.Generic;
+    """
+    aliased: List[Tuple[str, str]] = []
+    others: List[str] = []
+
+    for directive in directives:
+        match = _USING_ALIAS_RE.match(directive)
+        if match is not None:
+            aliased.append((match.group(1), directive))
+        else:
+            others.append(directive)
+
+    aliased.sort(key=lambda pair: pair[0])
+
+    blocks = [
+        "\n".join(directive for _, directive in aliased),
+        "\n".join(others),
+    ]
+
+    return Stripped("\n\n".join(block for block in blocks if block != ""))
 
 
 # fmt: off

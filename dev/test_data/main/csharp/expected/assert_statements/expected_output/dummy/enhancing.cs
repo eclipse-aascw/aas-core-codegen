@@ -4,6 +4,7 @@
  */
 
 using Our = dummy;  // renamed
+
 using System.Collections.Generic;  // can't alias
 
 namespace dummy

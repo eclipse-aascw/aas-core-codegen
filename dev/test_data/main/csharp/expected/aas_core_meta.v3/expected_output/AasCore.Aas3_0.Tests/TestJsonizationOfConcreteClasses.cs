@@ -3,10 +3,9 @@
  * Do NOT edit or append.
  */
 
-using Our = AasCore.Aas3_0;  // renamed
-
 using Directory = System.IO.Directory;
 using Nodes = System.Text.Json.Nodes;
+using Our = AasCore.Aas3_0;  // renamed
 using Path = System.IO.Path;
 
 using System.Collections.Generic;  // can't alias

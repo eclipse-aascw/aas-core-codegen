@@ -3,8 +3,8 @@
  * Do NOT edit or append.
  */
 
-using Our = dummy;  // renamed
 using EnumMemberAttribute = System.Runtime.Serialization.EnumMemberAttribute;
+using Our = dummy;  // renamed
 
 using System.Collections.Generic;  // can't alias
 
@@ -489,7 +489,8 @@ namespace dummy
     }
 
     /// <summary>
-    /// Represent a union of <see cref="IGlobalAttribute" /> and <see cref="ILocalAttribute" />.
+    /// Represent a union of <see cref="IGlobalAttribute" /> and
+    /// <see cref="ILocalAttribute" />.
     /// </summary>
     public class AttributeItem : IUnion<AttributeItem>
     {
@@ -813,7 +814,8 @@ namespace dummy
     }
 
     /// <summary>
-    /// Represent a union of <see cref="IStringLiteral" /> and <see cref="IAttributeOperand" />.
+    /// Represent a union of <see cref="IStringLiteral" /> and
+    /// <see cref="IAttributeOperand" />.
     /// </summary>
     public class StringValue : IUnion<StringValue>
     {
@@ -911,7 +913,8 @@ namespace dummy
     }
 
     /// <summary>
-    /// Represent a union of <see cref="IStringLiteral" />, <see cref="IAttributeOperand" /> and <see cref="INumberLiteral" />.
+    /// Represent a union of <see cref="IStringLiteral" />,
+    /// <see cref="IAttributeOperand" /> and <see cref="INumberLiteral" />.
     /// </summary>
     public class Value : IUnion<Value>
     {
