@@ -1,1 +1,1 @@
-Handling of a non-name or a non-call class decorator has not been implemented: Attribute(value=Name(id='some_module', ctx=Load()), attr='some_decorator', ctx=Load())
+Handling of a non-name or a non-call class decorator has not been implemented: some_module.some_decorator

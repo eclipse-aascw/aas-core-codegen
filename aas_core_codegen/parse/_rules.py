@@ -16,7 +16,12 @@ from typing import Tuple, Optional, List, Mapping, Type, Sequence, Set, Union, c
 
 from icontract import ensure
 
-from aas_core_codegen.common import Identifier, Error, assert_never
+from aas_core_codegen import ast_dump
+from aas_core_codegen.common import (
+    Identifier,
+    Error,
+    assert_never,
+)
 from aas_core_codegen.parse import tree
 
 # noinspection PyTypeChecker
@@ -125,7 +130,7 @@ def _parse_generator(
         return None, Error(
             target,
             f"Expected the target of the generator to be a name, "
-            f"but got: {ast.dump(target)}",
+            f"but got: {ast_dump.dump(target)}",
         )
 
     our_variable, error = ast_node_to_our_node(target)
@@ -223,7 +228,7 @@ class _ParseAnyOrAll(_Parse):
             return None, Error(
                 node,
                 f"Expected a generator expression in ``{node.func.id}``, "
-                f"but got: {ast.dump(node)}",
+                f"but got: {ast_dump.dump(node)}",
             )
 
         generator_exp = node.args[0]
@@ -245,7 +250,8 @@ class _ParseAnyOrAll(_Parse):
         generator = generator_exp.generators[0]
         if not isinstance(generator, ast.comprehension):
             return None, Error(
-                generator, f"Expected a comprehension, but got: {ast.dump(generator)}"
+                generator,
+                f"Expected a comprehension, but got: {ast_dump.dump(generator)}",
             )
 
         our_generator, error = _parse_generator(
@@ -330,7 +336,7 @@ class _ParseIsInstance(_Parse):
                 node.args[1],
                 f"Expected the second argument to ``isinstance`` to be either "
                 f"a class name or a tuple of class names, "
-                f"but got: {ast.dump(node.args[1])}",
+                f"but got: {ast_dump.dump(node.args[1])}",
             )
 
         classes: List[tree.Name] = []
@@ -339,7 +345,7 @@ class _ParseIsInstance(_Parse):
                 return None, Error(
                     class_node,
                     f"Expected a class name in the second argument "
-                    f"to ``isinstance``, but got: {ast.dump(class_node)}",
+                    f"to ``isinstance``, but got: {ast_dump.dump(class_node)}",
                 )
 
             cls, error = ast_node_to_our_node(class_node)
@@ -402,9 +408,10 @@ class _ParseCall(_Parse):
             if error is not None:
                 return None, error
 
-            assert isinstance(
-                member, tree.Member
-            ), f"Expected a member for {ast.dump(node.func)=}, but got: {member=}"
+            assert isinstance(member, tree.Member), (
+                f"Expected a member for {ast_dump.dump(node.func)}, "
+                f"but got: {member=}"
+            )
 
             return tree.MethodCall(member=member, args=args, original_node=node), None
 
@@ -458,7 +465,7 @@ class _ParseConstant(_Parse):
 
         else:
             raise AssertionError(
-                "Unexpected execution path with node: {ast.dump(node)}"
+                f"Unexpected execution path with node: {ast_dump.dump(node)}"
             )
 
 
@@ -907,7 +914,7 @@ class _ParseJoinedStr(_Parse):
                 return None, Error(
                     value_node,
                     f"We do not know how to parse the Python ast.expr "
-                    f"as part of the JoinedStr.values: {ast.dump(value_node)}; "
+                    f"as part of the JoinedStr.values: {ast_dump.dump(value_node)}; "
                     f"please notify the developers.",
                 )
             else:
@@ -1649,5 +1656,5 @@ def ast_node_to_our_node(node: ast.AST) -> Tuple[Optional[tree.Node], Optional[E
     return None, Error(
         node,
         f"The code matched no pattern for transpilation "
-        f"at the parse stage: {ast.dump(node)}",
+        f"at the parse stage: {ast_dump.dump(node)}",
     )

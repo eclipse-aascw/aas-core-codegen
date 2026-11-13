@@ -28,7 +28,7 @@ import docutils.parsers.rst
 import docutils.utils
 from icontract import require, ensure, snapshot
 
-from aas_core_codegen import naming, parse
+from aas_core_codegen import ast_dump, naming, parse
 from aas_core_codegen.common import (
     Error,
     Identifier,
@@ -2291,7 +2291,7 @@ def _to_constant_set_of_primitives(
                     f"The literal at the index {i} of the constant set of "
                     f"primitive values is expected to be a primitive literal. "
                     f"However, we got: {atok.get_text(literal.node)}; "
-                    f"in AST: {ast.dump(literal.node)}",
+                    f"in AST: {ast_dump.dump(literal.node)}",
                 )
             )
             continue
@@ -3015,7 +3015,7 @@ def _fill_in_default_placeholder(
     return None, Error(
         default.parsed.node,
         f"The translation of the default value to the intermediate layer "
-        f"has not been implemented: {ast.dump(default.parsed.node)}",
+        f"has not been implemented: {ast_dump.dump(default.parsed.node)}",
     )
 
 

@@ -18,7 +18,7 @@ from typing import (
 import asttokens
 from icontract import ensure, require, DBC
 
-from aas_core_codegen import parse, stringify
+from aas_core_codegen import ast_dump, parse, stringify
 from aas_core_codegen.common import (
     Identifier,
     Error,
@@ -458,7 +458,7 @@ def _understand_assignment(
                     if_exp.orelse,
                     f"The handling of this default value for "
                     f"the property {target.attr!r} has not been implemented: "
-                    f"{ast.dump(default_node)}",
+                    f"{ast_dump.dump(default_node)}",
                 )
             else:
                 assert isinstance(if_exp.test, ast.Compare)
@@ -476,7 +476,7 @@ def _understand_assignment(
     return None, Error(
         assign,
         f"The handling of the constructor statement "
-        f"has not been implemented: {ast.dump(assign)}; "
+        f"has not been implemented: {ast_dump.dump(assign)}; "
         f"please notify the developers if you really need this feature",
     )
 
