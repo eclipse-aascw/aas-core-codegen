@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-import re
 import unittest
 from typing import Tuple, Optional, Sequence
 
@@ -279,13 +278,11 @@ __xml_namespace__ = "https://dummy.com"
         _, error = understand_constructor_table(source=source)
         assert error is not None
 
-        error_str = tests.common.most_underlying_messages(error)
-        error_str = re.sub(r"Assign\(.*\); ", "Assign(...); ", error_str)
-
         self.assertEqual(
             "The handling of the constructor statement has not been implemented: "
-            "Assign(...); please notify the developers if you really need this feature",
-            error_str,
+            "self.a = <+-operator>; "
+            "please notify the developers if you really need this feature",
+            tests.common.most_underlying_messages(error),
         )
 
     def test_argument_and_property_name_differ(self) -> None:
