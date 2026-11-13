@@ -114,7 +114,8 @@ namespace dummy.Tests
                             that.OptionalTexts,
                             casted.OptionalTexts)
                         : that.OptionalTexts == null && casted.OptionalTexts == null)
-                    && that.OptionalKind == casted.OptionalKind);
+                    && that.OptionalKind == casted.OptionalKind
+                    && that.OptionalFlag == casted.OptionalFlag);
             }
 
             private bool Check_ListOf_INode(
@@ -196,7 +197,8 @@ namespace dummy.Tests
                 && that.OptionalNumber == other.OptionalNumber
                 && that.OptionalItem == other.OptionalItem
                 && that.OptionalTexts == other.OptionalTexts
-                && that.OptionalKind == other.OptionalKind);
+                && that.OptionalKind == other.OptionalKind
+                && that.OptionalFlag == other.OptionalFlag);
         }
 
         [Test]

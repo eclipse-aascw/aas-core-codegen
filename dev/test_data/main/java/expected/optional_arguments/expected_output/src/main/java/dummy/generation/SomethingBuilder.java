@@ -24,6 +24,8 @@ public class SomethingBuilder {
 
   private Kind optionalKind;
 
+  private Boolean optionalFlag;
+
   public SomethingBuilder(IItem item) {
     this.item = Objects.requireNonNull(
       item,
@@ -55,6 +57,11 @@ public class SomethingBuilder {
     return this;
   }
 
+  public SomethingBuilder setOptionalFlag(Boolean optionalFlag) {
+    this.optionalFlag = optionalFlag;
+    return this;
+  }
+
   public Something build() {
     return new Something(
       this.item,
@@ -62,6 +69,7 @@ public class SomethingBuilder {
       this.optionalNumber,
       this.optionalItem,
       this.optionalTexts,
-      this.optionalKind);
+      this.optionalKind,
+      this.optionalFlag);
   }
 }

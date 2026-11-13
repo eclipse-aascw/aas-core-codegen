@@ -910,7 +910,8 @@ enum class OfSomething : std::uint32_t {
   kOptionalNumber,
   kOptionalItem,
   kOptionalTexts,
-  kOptionalKind
+  kOptionalKind,
+  kOptionalFlag
 };  // enum class OfSomething
 
 const std::unordered_map<
@@ -982,6 +983,10 @@ const std::unordered_map<
   {
     "optionalKind",
     OfSomething::kOptionalKind
+  },
+  {
+    "optionalFlag",
+    OfSomething::kOptionalFlag
   }
 };
 
@@ -1805,6 +1810,8 @@ std::pair<
 
   common::optional<types::Kind> the_optional_kind;
 
+  common::optional<bool> the_optional_flag;
+
   common::optional<DeserializationError> error(
     ParseProperties(
       json,
@@ -1856,6 +1863,11 @@ std::pair<
               the_optional_kind,
               DeserializeKind(value)
             );
+          case properties::OfSomething::kOptionalFlag:
+            return ParseInto(
+              the_optional_flag,
+              DeserializeBool(value)
+            );
           default:
             throw UnexpectedPropertyLiteralError(
               "properties::OfSomething",
@@ -1895,7 +1907,8 @@ std::pair<
         std::move(the_optional_number),
         std::move(the_optional_item),
         std::move(the_optional_texts),
-        std::move(the_optional_kind)
+        std::move(the_optional_kind),
+        std::move(the_optional_flag)
       )
     ),
     common::nullopt
@@ -2727,6 +2740,15 @@ std::pair<
   if (maybe_optional_kind.has_value()) {
     result["optionalKind"] = SerializeEnumeration(
       *maybe_optional_kind
+    );
+  }
+
+  const common::optional<bool>& maybe_optional_flag(
+    that.optional_flag()
+  );
+  if (maybe_optional_flag.has_value()) {
+    result["optionalFlag"] = SerializeBool(
+      *maybe_optional_flag
     );
   }
 

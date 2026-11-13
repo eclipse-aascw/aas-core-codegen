@@ -326,6 +326,23 @@ def _dispatch_from_jsonable(
     return parse(mapping)
 
 
+def _bool_from_jsonable(
+    jsonable: Jsonable
+) -> bool:
+    """
+    Parse :paramref:`jsonable` as a boolean.
+
+    :param jsonable: JSON-able structure to be parsed
+    :return: parsed boolean
+    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+    """
+    if not isinstance(jsonable, bool):
+        raise DeserializationException(
+            f"Expected a bool, but got: {type(jsonable)}"
+        )
+    return jsonable
+
+
 def _int_from_jsonable(
     jsonable: Jsonable
 ) -> int:
@@ -690,6 +707,7 @@ def something_from_jsonable(
     the_optional_item: Optional[our_types.Item] = None
     the_optional_texts: Optional[List[str]] = None
     the_optional_kind: Optional[our_types.Kind] = None
+    the_optional_flag: Optional[bool] = None
 
     unexpected_key: Optional[str] = None
 
@@ -707,6 +725,8 @@ def something_from_jsonable(
                 the_optional_texts = _list_of__str_from_jsonable(jsonable_value)
             elif key == 'optionalKind':
                 the_optional_kind = kind_from_jsonable(jsonable_value)
+            elif key == 'optionalFlag':
+                the_optional_flag = _bool_from_jsonable(jsonable_value)
             else:
                 unexpected_key = key
                 break
@@ -732,7 +752,8 @@ def something_from_jsonable(
         the_optional_number,
         the_optional_item,
         the_optional_texts,
-        the_optional_kind
+        the_optional_kind,
+        the_optional_flag
     )
 
 
@@ -947,6 +968,12 @@ def _something_to_jsonable(
             jsonable['optionalKind'] = that.optional_kind.value
         except SerializationException as exception:
             exception._prepend_property('optional_kind')
+            raise
+    if that.optional_flag is not None:
+        try:
+            jsonable['optionalFlag'] = that.optional_flag
+        except SerializationException as exception:
+            exception._prepend_property('optional_flag')
             raise
     return jsonable
 

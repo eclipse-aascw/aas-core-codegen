@@ -342,6 +342,8 @@ class Something(Class):
 
     optional_kind: Optional['Kind']
 
+    optional_flag: Optional[bool]
+
     def over_optional_texts_or_empty(
             self
     ) -> Iterator[str]:
@@ -423,7 +425,8 @@ class Something(Class):
             optional_number: Optional[int] = None,
             optional_item: Optional['Item'] = None,
             optional_texts: Optional[List[str]] = None,
-            optional_kind: Optional['Kind'] = None
+            optional_kind: Optional['Kind'] = None,
+            optional_flag: Optional[bool] = None
     ) -> None:
         """Initialize with the given values."""
         self.item = item
@@ -432,6 +435,7 @@ class Something(Class):
         self.optional_item = optional_item
         self.optional_texts = optional_texts
         self.optional_kind = optional_kind
+        self.optional_flag = optional_flag
 
 
 def _descend_list_of__node(

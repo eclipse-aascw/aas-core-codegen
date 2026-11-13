@@ -38,6 +38,10 @@ public interface ISomething extends IClass {
 
   void setOptionalKind(Kind optionalKind);
 
+  Optional<Boolean> getOptionalFlag();
+
+  void setOptionalFlag(Boolean optionalFlag);
+
   /**
    * Iterate over optionalTexts, if set, and otherwise return an empty enumerable.
    */

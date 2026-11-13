@@ -144,7 +144,8 @@ Something::Something(
   common::optional<
     std::vector<std::wstring>
   > optional_texts,
-  common::optional<Kind> optional_kind
+  common::optional<Kind> optional_kind,
+  common::optional<bool> optional_flag
 ) {
   item_ = std::move(item);
 
@@ -157,6 +158,8 @@ Something::Something(
   optional_texts_ = std::move(optional_texts);
 
   optional_kind_ = std::move(optional_kind);
+
+  optional_flag_ = std::move(optional_flag);
 }
 
 ModelType Something::model_type() const {
@@ -257,6 +260,20 @@ void Something::set_optional_kind(
   common::optional<Kind> value
 ) {
   optional_kind_ = value;
+}
+
+const common::optional<bool>& Something::optional_flag() const {
+  return optional_flag_;
+}
+
+common::optional<bool>& Something::mutable_optional_flag() {
+  return optional_flag_;
+}
+
+void Something::set_optional_flag(
+  common::optional<bool> value
+) {
+  optional_flag_ = value;
 }
 
 // endregion Something

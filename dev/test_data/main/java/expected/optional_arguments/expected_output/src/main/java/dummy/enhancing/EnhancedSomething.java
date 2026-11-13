@@ -90,6 +90,16 @@ public class EnhancedSomething<EnhancementT>
     instance.setOptionalKind(optionalKind);
   }
 
+  @Override
+  public Optional<Boolean> getOptionalFlag() {
+    return instance.getOptionalFlag();
+  }
+
+  @Override
+  public void setOptionalFlag(Boolean optionalFlag) {
+    instance.setOptionalFlag(optionalFlag);
+  }
+
   public Iterable<String> overOptionalTextsOrEmpty() {
     return instance.overOptionalTextsOrEmpty();
   }

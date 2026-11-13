@@ -80,6 +80,12 @@ def item_has_name(item: Optional[Item]) -> bool:
 
 
 @verification
+def flag_is_not_set(flag: Optional[bool]) -> bool:
+    """Check the negation of the optional boolean argument narrowed to non-null."""
+    return flag is None or not flag
+
+
+@verification
 def texts_are_few(texts: Optional[Sequence[str]]) -> bool:
     """Check the optional list argument."""
     return texts is None or len(texts) <= 2
@@ -149,6 +155,7 @@ def node_has_named_item_in_tree(node: "Node") -> bool:
 @invariant(
     lambda self: item_has_name(self.optional_item), "Optional item must have a name"
 )
+@invariant(lambda self: flag_is_not_set(self.optional_flag), "Flag must not be set")
 @invariant(lambda self: texts_are_few(self.optional_texts), "Texts must be few")
 @invariant(lambda self: kind_is_not_gamma(self.optional_kind), "Kind must not be gamma")
 @invariant(lambda self: note_is_short(self.item), "Note of the item must be short")
@@ -159,6 +166,7 @@ class Something(DBC):
     optional_item: Optional[Item]
     optional_texts: Optional[List[str]]
     optional_kind: Optional[Kind]
+    optional_flag: Optional[bool]
 
     def __init__(
         self,
@@ -168,6 +176,7 @@ class Something(DBC):
         optional_item: Optional[Item] = None,
         optional_texts: Optional[List[str]] = None,
         optional_kind: Optional[Kind] = None,
+        optional_flag: Optional[bool] = None,
     ) -> None:
         self.item = item
         self.optional_text = optional_text
@@ -175,6 +184,7 @@ class Something(DBC):
         self.optional_item = optional_item
         self.optional_texts = optional_texts
         self.optional_kind = optional_kind
+        self.optional_flag = optional_flag
 
 
 __version__ = "dummy"

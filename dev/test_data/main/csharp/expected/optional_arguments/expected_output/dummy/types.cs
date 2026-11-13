@@ -351,6 +351,8 @@ namespace dummy
 
         public Kind? OptionalKind { get; set; }
 
+        public bool? OptionalFlag { get; set; }
+
         /// <summary>
         /// Iterate over OptionalTexts, if set, and otherwise return an empty enumerable.
         /// </summary>
@@ -370,6 +372,8 @@ namespace dummy
         public List<string>? OptionalTexts { get; set; }
 
         public Kind? OptionalKind { get; set; }
+
+        public bool? OptionalFlag { get; set; }
 
         /// <summary>
         /// Iterate over OptionalTexts, if set, and otherwise return an empty enumerable.
@@ -465,7 +469,8 @@ namespace dummy
             long? optionalNumber = null,
             IItem? optionalItem = null,
             List<string>? optionalTexts = null,
-            Kind? optionalKind = null)
+            Kind? optionalKind = null,
+            bool? optionalFlag = null)
         {
             Item = item;
             OptionalText = optionalText;
@@ -473,6 +478,7 @@ namespace dummy
             OptionalItem = optionalItem;
             OptionalTexts = optionalTexts;
             OptionalKind = optionalKind;
+            OptionalFlag = optionalFlag;
         }
     }
 

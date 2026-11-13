@@ -31,11 +31,12 @@ enum class Property : std::uint32_t {
   kName = 1,
   kNote = 2,
   kOptionalChildren = 3,
-  kOptionalItem = 4,
-  kOptionalKind = 5,
-  kOptionalNumber = 6,
-  kOptionalText = 7,
-  kOptionalTexts = 8
+  kOptionalFlag = 4,
+  kOptionalItem = 5,
+  kOptionalKind = 6,
+  kOptionalNumber = 7,
+  kOptionalText = 8,
+  kOptionalTexts = 9
 };
 
 std::wstring PropertyToWstring(
