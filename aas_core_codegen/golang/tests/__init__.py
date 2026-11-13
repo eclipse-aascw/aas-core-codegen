@@ -28,6 +28,7 @@ from aas_core_codegen.golang.tests import (
     _generate_verification_test,
     _generate_xmlization_test_concrete_classes_test,
     _generate_xmlization_test_common_test,
+    _generate_xml_rpc_test,
     _generate_xxx_or_default_test,
 )
 
@@ -66,4 +67,7 @@ generate_xmlization_test_concrete_classes_test = (
     _generate_xmlization_test_concrete_classes_test.generate
 )
 generate_xmlization_test_common_test = _generate_xmlization_test_common_test.generate
+
+generate_xml_rpc_test = _generate_xml_rpc_test.generate
+
 generate_xxx_or_default_test = _generate_xxx_or_default_test.generate

@@ -803,6 +803,11 @@ func readElementDispatchedInNamespace[T any](
 		return
 	}
 
+	current, err = SkipEmptyTextWhitespaceAndComments(decoder, current)
+	if err != nil {
+		return
+	}
+
 	err = checkEndElementInNamespace(current, local, ns)
 	if err != nil {
 		return

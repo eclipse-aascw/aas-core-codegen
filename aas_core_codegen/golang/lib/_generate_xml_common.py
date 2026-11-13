@@ -958,6 +958,11 @@ func readElementDispatchedInNamespace[T any](
 {II}return
 {I}}}
 
+{I}current, err = SkipEmptyTextWhitespaceAndComments(decoder, current)
+{I}if err != nil {{
+{II}return
+{I}}}
+
 {I}err = checkEndElementInNamespace(current, local, ns)
 {I}if err != nil {{
 {II}return
