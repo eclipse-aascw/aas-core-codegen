@@ -392,7 +392,7 @@ public class Jsonization {
         Long theNumber = null;
         Long theAOnly = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -462,7 +462,7 @@ public class Jsonization {
       private static Reporting.Result<ChildB> tryChildBFromObject(JsonNode node) {
         Long theNumber = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -508,7 +508,7 @@ public class Jsonization {
         IParent theParent = null;
         String theOptionalText = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();

@@ -313,7 +313,7 @@ public class Jsonization {
         String theLanguage = null;
         String theText = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -365,7 +365,7 @@ public class Jsonization {
 
         List<ILangString> theLangStrings = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -448,7 +448,7 @@ public class Jsonization {
       private static Reporting.Result<IecContent> tryIecContentFromObject(JsonNode node) {
         List<ILangString> theDefinition = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -499,7 +499,7 @@ public class Jsonization {
        * @param node JSON object to be parsed
        */
       private static Reporting.Result<OtherContent> tryOtherContentFromObject(JsonNode node) {
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
 
@@ -527,7 +527,7 @@ public class Jsonization {
 
         IContent theContent = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -568,7 +568,7 @@ public class Jsonization {
         List<ILangStringSet> theLangStringSets = null;
         List<ISpecification> theSpecifications = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
