@@ -139,6 +139,10 @@ public class Operation implements IOperation {
    */
   private List<IOperationVariable> inoutputVariables;
 
+  public Operation() {
+    // Intentionally empty.
+  }
+
   public Operation(
     List<IExtension> extensions,
     String category,

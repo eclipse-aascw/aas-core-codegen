@@ -115,6 +115,10 @@ public class Capability implements ICapability {
    */
   private List<IEmbeddedDataSpecification> embeddedDataSpecifications;
 
+  public Capability() {
+    // Intentionally empty.
+  }
+
   public Capability(
     List<IExtension> extensions,
     String category,

@@ -123,6 +123,10 @@ public class ReferenceElement implements IReferenceElement {
    */
   private IReference value;
 
+  public ReferenceElement() {
+    // Intentionally empty.
+  }
+
   public ReferenceElement(
     List<IExtension> extensions,
     String category,

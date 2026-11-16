@@ -30,6 +30,10 @@ import java.util.Objects;
 public class IecContent implements IIecContent {
   private List<ILangString> definition;
 
+  public IecContent() {
+    // Intentionally empty.
+  }
+
   public IecContent(List<ILangString> definition) {
     this.definition = definition;
   }

@@ -50,6 +50,10 @@ public class Environment implements IEnvironment {
    */
   private List<IConceptDescription> conceptDescriptions;
 
+  public Environment() {
+    // Intentionally empty.
+  }
+
   public Environment(
     List<IAssetAdministrationShell> assetAdministrationShells,
     List<ISubmodel> submodels,
