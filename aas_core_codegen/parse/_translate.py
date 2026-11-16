@@ -33,6 +33,7 @@ import docutils.nodes
 
 from icontract import ensure, require
 
+from aas_core_codegen import ast_dump
 from aas_core_codegen.common import (
     Error,
     Identifier,
@@ -393,7 +394,7 @@ def _ast_constant_string_to_description(
     text = constant.value
     assert isinstance(
         text, str
-    ), f"Expected a string constant node, but got: {ast.dump(constant)!r}"
+    ), f"Expected a string constant node, but got: {ast_dump.dump(constant)}"
 
     dedented = textwrap.dedent(text)
 
@@ -629,7 +630,7 @@ def _parse_constant_set(
             values_arg_node,
             f"Expected the values of a constant set to be a list literal, "
             f"but got: {atok.get_text(values_arg_node)}; "
-            f"in AST: {ast.dump(values_arg_node)}",
+            f"in AST: {ast_dump.dump(values_arg_node)}",
         )
 
     set_literals: List[SetLiteral] = []
@@ -640,7 +641,7 @@ def _parse_constant_set(
                 f"Expected the values of a constant set to be all literals "
                 f"(either an enumeration literal or a literal of a primitive type "
                 f"such as str or int), but got at the index {i}: "
-                f"{atok.get_text(elt)}; in AST: {ast.dump(elt)}",
+                f"{atok.get_text(elt)}; in AST: {ast_dump.dump(elt)}",
             )
 
         set_literals.append(SetLiteral(node=elt))
@@ -659,7 +660,7 @@ def _parse_constant_set(
                 description_arg_node,
                 f"Expected string literal as the ``description`` argument, "
                 f"but got: {atok.get_text(description_arg_node)}; "
-                f"in AST: {ast.dump(description_arg_node)}",
+                f"in AST: {ast_dump.dump(description_arg_node)}",
             )
 
         description, error = _ast_constant_string_to_description(
@@ -685,7 +686,7 @@ def _parse_constant_set(
                 superset_of_arg_node,
                 f"Expected the ``superset_of`` of a constant set to be a list literal, "
                 f"but got: {atok.get_text(superset_of_arg_node)}; "
-                f"in AST: {ast.dump(superset_of_arg_node)}",
+                f"in AST: {ast_dump.dump(superset_of_arg_node)}",
             )
 
         for i, elt in enumerate(superset_of_arg_node.elts):
@@ -695,7 +696,7 @@ def _parse_constant_set(
                     f"Expected the elements of the ``superset_of`` of a constant set "
                     f"to be a list of variables (referring to the other sets), "
                     f"but got at index {i}: "
-                    f"{atok.get_text(elt)}; in AST: {ast.dump(elt)}",
+                    f"{atok.get_text(elt)}; in AST: {ast_dump.dump(elt)}",
                 )
 
             subsets.append(Identifier(elt.id))
@@ -1981,7 +1982,7 @@ def _class_decorator_to_serialization(
                 Error(
                     with_model_type_node,
                     f"Expected the value for ``with_model_type`` parameter "
-                    f"to be a constant, but got: {ast.dump(with_model_type_node)}",
+                    f"to be a constant, but got: {ast_dump.dump(with_model_type_node)}",
                 ),
             )
 
@@ -2126,7 +2127,7 @@ def _parse_class_decorator(
             return None, Error(
                 decorator,
                 f"Expected a name for a decorator function, "
-                f"but got: {ast.dump(decorator.func)}",
+                f"but got: {ast_dump.dump(decorator.func)}",
             )
 
         if not isinstance(decorator.func.ctx, ast.Load):
@@ -2150,7 +2151,7 @@ def _parse_class_decorator(
         return None, Error(
             decorator,
             f"Handling of a non-name or a non-call class decorator "
-            f"has not been implemented: {ast.dump(decorator)}",
+            f"has not been implemented: {ast_dump.dump(decorator)}",
         )
 
 
@@ -3898,7 +3899,7 @@ def _atok_to_symbol_table(
                             Error(
                                 node,
                                 f"We do not know how to interpret "
-                                f"the assignment node: {ast.dump(node)}",
+                                f"the assignment node: {ast_dump.dump(node)}",
                             )
                         )
                         continue
@@ -3948,7 +3949,7 @@ def _atok_to_symbol_table(
                     Error(
                         node,
                         f"We do not know how to parse a multi-target assignment: "
-                        f"{atok.get_text(node)}; in AST: {ast.dump(node)}",
+                        f"{atok.get_text(node)}; in AST: {ast_dump.dump(node)}",
                     )
                 )
                 continue
@@ -3969,7 +3970,8 @@ def _atok_to_symbol_table(
         if not matched:
             underlying_errors.append(
                 Error(
-                    node, f"We do not know how to parse the AST node: {ast.dump(node)}"
+                    node,
+                    f"We do not know how to parse the AST node: {ast_dump.dump(node)}",
                 )
             )
 

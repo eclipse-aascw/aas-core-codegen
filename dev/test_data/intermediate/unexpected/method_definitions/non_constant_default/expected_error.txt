@@ -1,1 +1,1 @@
-The translation of the default value to the intermediate layer has not been implemented: Call(func=Name(id='some_func', ctx=Load()), args=[], keywords=[])
+The translation of the default value to the intermediate layer has not been implemented: some_func()
