@@ -337,6 +337,15 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
                 lambda: (golang_lib.generate_xml_rpc(repo_url=repo_url), None),
             ),
             (
+                base_rel_path / "xmlrpc/test/xmlrpc_test.go",
+                lambda: (
+                    golang_tests.generate_xml_rpc_test(
+                        symbol_table=context.symbol_table, repo_url=repo_url
+                    ),
+                    None,
+                ),
+            ),
+            (
                 base_rel_path / "jsonization/test/json_value_test.go",
                 lambda: (
                     golang_tests.generate_jsonization_test_json_value_test(

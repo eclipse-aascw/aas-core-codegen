@@ -211,7 +211,7 @@ func MustSerializationError(err error) *SerializationError {{
 def _generate_is_whitespace() -> Stripped:
     return Stripped(
         f"""\
-// Check if the string `s` consists only of whitespace.
+// Check if the string `s` consists only of XML whitespace: space, tab, CR or LF.
 //
 // An empty string causes panic — please cover that case before.
 func IsWhitespace(s string) bool {{
@@ -219,7 +219,7 @@ func IsWhitespace(s string) bool {{
 {II}panic("Unexpected empty string")
 {I}}}
 {I}for _, c := range s {{
-{II}if !unicode.IsSpace(c) {{
+{II}if c != ' ' && c != '\\t' && c != '\\r' && c != '\\n' {{
 {III}return false
 {II}}}
 {I}}}
@@ -958,6 +958,11 @@ func readElementDispatchedInNamespace[T any](
 {II}return
 {I}}}
 
+{I}current, err = SkipEmptyTextWhitespaceAndComments(decoder, current)
+{I}if err != nil {{
+{II}return
+{I}}}
+
 {I}err = checkEndElementInNamespace(current, local, ns)
 {I}if err != nil {{
 {II}return
@@ -1423,7 +1428,6 @@ import (
 {I}"regexp"
 {I}"strconv"
 {I}"strings"
-{I}"unicode"
 {I}ourcommon {ourcommon_url_literal}
 {I}ourreporting {ourreporting_url_literal}
 )"""
