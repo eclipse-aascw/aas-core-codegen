@@ -876,6 +876,7 @@ public final class XmlCommon {{
         Stripped("import javax.xml.stream.XMLStreamWriter;"),
         Stripped("import java.util.Optional;"),
         Stripped("import java.util.regex.Pattern;"),
+        Stripped(f"import {package}.types.model.*;"),
         Stripped(f"import {package}.reporting.Reporting;"),
     ]
 
