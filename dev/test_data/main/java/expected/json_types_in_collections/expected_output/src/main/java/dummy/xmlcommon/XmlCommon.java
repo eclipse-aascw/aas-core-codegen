@@ -12,6 +12,7 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import dummy.types.model.*;
 import dummy.reporting.Reporting;
 
 /**
