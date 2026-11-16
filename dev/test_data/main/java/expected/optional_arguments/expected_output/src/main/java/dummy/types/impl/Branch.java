@@ -30,6 +30,10 @@ import java.util.Objects;
 public class Branch implements IBranch {
   private List<INode> optionalChildren;
 
+  public Branch() {
+    // Intentionally empty.
+  }
+
   public Branch(List<INode> optionalChildren) {
     this.optionalChildren = optionalChildren;
   }

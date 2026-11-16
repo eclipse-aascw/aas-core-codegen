@@ -1053,18 +1053,11 @@ def _generate_mandatory_constructor(
     """
     Generate a default constructor for the given concrete class ``cls``.
 
-    Return empty string if there is an empty constructor or no default constructor
-    can be constructed.
+    Return empty string if there is an empty constructor.
     """
     if (
         len(cls.constructor.arguments) == 0
         and len(cls.constructor.inlined_statements) == 0
-    ):
-        return Stripped(""), None
-
-    if all(
-        isinstance(arg.type_annotation, intermediate.OptionalTypeAnnotation)
-        for arg in cls.constructor.arguments
     ):
         return Stripped(""), None
 
@@ -1085,9 +1078,9 @@ def _generate_mandatory_constructor(
 
         arg_codes.append(Stripped(f"{arg_type} {arg_name}"))
 
-    assert len(arg_codes) > 0
-
-    if len(arg_codes) == 1:
+    if len(arg_codes) == 0:
+        blocks.append(f"public {cls_name}() {{")
+    elif len(arg_codes) == 1:
         blocks.append(f"public {cls_name}({arg_codes[0]}) {{")
     else:
         arg_block = ",\n".join(arg_codes)
@@ -1170,7 +1163,10 @@ this.{prop_name} = ({arg_name} != null)
         else:
             assert_never(stmt)
 
-    blocks.append("\n".join(textwrap.indent(stmt_code, I) for stmt_code in body))
+    if len(body) > 0:
+        blocks.append("\n".join(textwrap.indent(stmt_code, I) for stmt_code in body))
+    else:
+        blocks.append(f"{I}// Intentionally empty.")
 
     blocks.append("}")
 

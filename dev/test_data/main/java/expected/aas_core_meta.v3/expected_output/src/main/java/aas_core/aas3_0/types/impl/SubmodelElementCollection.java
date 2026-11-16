@@ -120,6 +120,10 @@ public class SubmodelElementCollection implements ISubmodelElementCollection {
    */
   private List<ISubmodelElement> value;
 
+  public SubmodelElementCollection() {
+    // Intentionally empty.
+  }
+
   public SubmodelElementCollection(
     List<IExtension> extensions,
     String category,

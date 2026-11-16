@@ -135,6 +135,10 @@ public class MultiLanguageProperty implements IMultiLanguageProperty {
    */
   private IReference valueId;
 
+  public MultiLanguageProperty() {
+    // Intentionally empty.
+  }
+
   public MultiLanguageProperty(
     List<IExtension> extensions,
     String category,
