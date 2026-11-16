@@ -12,6 +12,7 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import aas_core.aas3_0.types.model.*;
 import aas_core.aas3_0.reporting.Reporting;
 
 /**
