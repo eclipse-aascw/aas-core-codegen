@@ -4,12 +4,16 @@ package xmlrpc_test
 // Do NOT edit or append.
 
 import (
+	"context"
 	"encoding/xml"
 	ourtypes "github.com/dummy-works/dummy/types"
+	ourxmlization "github.com/dummy-works/dummy/xmlization"
 	ourxmlrpc "github.com/dummy-works/dummy/xmlrpc"
+	"io"
 	"reflect"
 	"strings"
 	"testing"
+	"testing/iotest"
 )
 
 func TestReadValueContentAcceptsWhitespaceBetweenElements(t *testing.T) {
@@ -74,6 +78,8 @@ func TestReadValueContentPreservesStringWhitespace(t *testing.T) {
 		{"spaces", " hello "},
 		{"whitespace_only", " \t\n "},
 		{"mixed", " \thello\n "},
+		{"unicode_whitespace", "\u00a0hello\u2003"},
+		{"unicode_whitespace_only", "\u00a0\u2003"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -103,6 +109,10 @@ func TestReadValueContentRejectsInvalidValueEnd(t *testing.T) {
 	}{
 		{"trailing_text", "unexpected</value></data></array>"},
 		{"text_after_whitespace", "\n  unexpected</value></data></array>"},
+		{"non_breaking_space", "\u00a0</value></data></array>"},
+		{"em_space", "\u2003</value></data></array>"},
+		{"non_breaking_space_reference", "&#xA0;</value></data></array>"},
+		{"em_space_reference", "&#x2003;</value></data></array>"},
 		{"extra_child", "<string>extra</string></value></data></array>"},
 	}
 	for _, c := range cases {
@@ -117,7 +127,112 @@ func TestReadValueContentRejectsInvalidValueEnd(t *testing.T) {
 			if err == nil {
 				t.Fatal("Expected an error, but got none")
 			}
+			if _, ok := err.(*ourxmlrpc.DeserializationError); !ok {
+				t.Fatalf("Expected a deserialization error, but got %T: %v", err, err)
+			}
 		})
+	}
+}
+
+func TestReadValueContentRejectsMalformedXml(t *testing.T) {
+	readers := []struct {
+		name string
+		read func(string) error
+	}{
+		{"xmlrpc", func(text string) error {
+			decoder := xml.NewDecoder(strings.NewReader(text))
+			current, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			_, _, err = ourxmlrpc.ReadValueContent(decoder, current)
+			return err
+		}},
+		{"xmlization", func(text string) error {
+			document := "<something xmlns=\"https://dummy.com\"><optionalValue>" + text
+			if strings.HasSuffix(text, "</array>") {
+				document += "</optionalValue></something>"
+			}
+			decoder := xml.NewDecoder(strings.NewReader(document))
+			_, err := ourxmlization.Unmarshal(decoder)
+			return err
+		}},
+	}
+	separators := []struct {
+		name string
+		text string
+	}{
+		{"whitespace", "\n "},
+		{"comment", "<!-- comment -->"},
+		{"whitespace_and_comment", "\n <!-- comment -->\n "},
+	}
+	endings := []struct {
+		name string
+		text string
+	}{
+		{"truncated", ""},
+		{"mismatched_end", "</wrong></data></array>"},
+		{"invalid_entity", "&invalid;</value></data></array>"},
+	}
+	for _, reader := range readers {
+		for _, separator := range separators {
+			for _, ending := range endings {
+				t.Run(reader.name+"/"+separator.name+"/"+ending.name, func(t *testing.T) {
+					text := `<array xmlns=""><data><value><string>hello</string>` +
+						separator.text + ending.text
+					err := reader.read(text)
+					if err == nil {
+						t.Fatal("Expected an error, but got none")
+					}
+					if _, ok := err.(*xml.SyntaxError); !ok {
+						t.Fatalf("Expected an XML syntax error, but got %T: %v", err, err)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestReadValueContentPreservesReaderError(t *testing.T) {
+	readers := []struct {
+		name string
+		read func(io.Reader) error
+	}{
+		{"xmlrpc", func(reader io.Reader) error {
+			decoder := xml.NewDecoder(reader)
+			current, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			_, _, err = ourxmlrpc.ReadValueContent(decoder, current)
+			return err
+		}},
+		{"xmlization", func(reader io.Reader) error {
+			decoder := xml.NewDecoder(io.MultiReader(strings.NewReader("<something xmlns=\"https://dummy.com\"><optionalValue>"), reader))
+			_, err := ourxmlization.Unmarshal(decoder)
+			return err
+		}},
+	}
+	prefixes := []struct {
+		name string
+		text string
+	}{
+		{"array", `<array xmlns=""><data><value><string>hello</string>`},
+		{"object", `<struct xmlns=""><member><name>key</name><value><string>hello</string>`},
+	}
+	for _, reader := range readers {
+		for _, prefix := range prefixes {
+			t.Run(reader.name+"/"+prefix.name, func(t *testing.T) {
+				input := io.MultiReader(
+					strings.NewReader(prefix.text+"\n "),
+					iotest.ErrReader(context.DeadlineExceeded),
+				)
+				err := reader.read(input)
+				if err != context.DeadlineExceeded {
+					t.Fatalf("Expected the original deadline error, but got %T: %v", err, err)
+				}
+			})
+		}
 	}
 }
 
