@@ -4,12 +4,16 @@ package xmlization_test
 // Do NOT edit or append.
 
 import (
+	"bytes"
+	"encoding/xml"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+
 	ourtesting "github.com/dummy-works/dummy/ourtesting"
 	ourxmlization "github.com/dummy-works/dummy/xmlization"
 )
@@ -125,6 +129,204 @@ func removeWhitespaceWithinTags(text string) string {
 	return result
 }
 
+// Follow the model's XML nesting to recognize string values, including collection
+// items. Container whitespace remains available to the existing indentation cleanup.
+func xmlTextContext(parent string, name xml.Name) string {
+	switch parent {
+	case "class:Iec_content":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "definition"}):
+			return "content:ListOf_ILangString"
+		}
+	case "class:Lang_string":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "language"}):
+			return "text"
+		case (xml.Name{Space: "https://dummy.com", Local: "text"}):
+			return "text"
+		}
+	case "class:Lang_string_set":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "langStrings"}):
+			return "content:ListOf_ILangString"
+		}
+	case "class:Something":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "defaultLanguage"}):
+			return "text"
+		case (xml.Name{Space: "https://dummy.com", Local: "langStringSets"}):
+			return "content:ListOf_ILangStringSet"
+		case (xml.Name{Space: "https://dummy.com", Local: "specifications"}):
+			return "content:ListOf_ISpecification"
+		}
+	case "class:Specification":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "content"}):
+			return "content:IContent"
+		}
+	case "content:IContent":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "iecContent"}):
+			return "class:Iec_content"
+		case (xml.Name{Space: "https://dummy.com", Local: "otherContent"}):
+			return "class:Other_content"
+		}
+	case "content:ListOf_ILangString":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "langString"}):
+			return "class:Lang_string"
+		}
+	case "content:ListOf_ILangStringSet":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "langStringSet"}):
+			return "class:Lang_string_set"
+		}
+	case "content:ListOf_ISpecification":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "specification"}):
+			return "class:Specification"
+		}
+	case "root":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "iecContent"}):
+			return "class:Iec_content"
+		case (xml.Name{Space: "https://dummy.com", Local: "langString"}):
+			return "class:Lang_string"
+		case (xml.Name{Space: "https://dummy.com", Local: "langStringSet"}):
+			return "class:Lang_string_set"
+		case (xml.Name{Space: "https://dummy.com", Local: "otherContent"}):
+			return "class:Other_content"
+		case (xml.Name{Space: "https://dummy.com", Local: "something"}):
+			return "class:Something"
+		case (xml.Name{Space: "https://dummy.com", Local: "specification"}):
+			return "class:Specification"
+		}
+	}
+	return ""
+}
+
+// Normalize escaping in character data while retaining the original markup.
+// Copying tags verbatim avoids changing namespace declarations or prefixes.
+func normalizeXmlTextEscaping(text string) (string, error) {
+	decoder := xml.NewDecoder(strings.NewReader(text))
+	var result bytes.Buffer
+	contexts := []string{"root"}
+	for {
+		start := decoder.InputOffset()
+		token, err := decoder.Token()
+		if err == io.EOF {
+			return result.String(), nil
+		}
+		if err != nil {
+			return "", err
+		}
+		if start, ok := token.(xml.StartElement); ok {
+			contexts = append(contexts, xmlTextContext(contexts[len(contexts)-1], start.Name))
+		}
+		if data, ok := token.(xml.CharData); ok {
+			// Normalize strings consistently, even if they consist only of whitespace.
+			// Keep container indentation available to the existing cleanup.
+			if contexts[len(contexts)-1] != "text" && strings.Trim(string(data), " \t\r\n") == "" {
+				result.WriteString(text[start:decoder.InputOffset()])
+			} else {
+				var escaped bytes.Buffer
+				if err := xml.EscapeText(&escaped, data); err != nil {
+					return "", err
+				}
+				if contexts[len(contexts)-1] == "text" {
+					// Protect spaces as well as tabs and line breaks from the regex cleanup.
+					result.WriteString(strings.ReplaceAll(escaped.String(), " ", "&#32;"))
+				} else {
+					result.Write(escaped.Bytes())
+				}
+			}
+		} else {
+			result.WriteString(text[start:decoder.InputOffset()])
+		}
+		if _, ok := token.(xml.EndElement); ok {
+			contexts = contexts[:len(contexts)-1]
+		}
+	}
+}
+
+func TestNormalizeXmlTextEscaping(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"quotes", `<v>"hello"</v>`, `<v>&#34;hello&#34;</v>`},
+		{"quote_references", `<v>&quot;hello&#x22;</v>`, `<v>&#34;hello&#34;</v>`},
+		{"apostrophes", `<v>'hello'</v>`, `<v>&#39;hello&#39;</v>`},
+		{"tabs", "<v>a\tb</v>", `<v>a&#x9;b</v>`},
+		{"tab_reference", `<v>a&#9;b</v>`, `<v>a&#x9;b</v>`},
+		{"double_escaping", `<v>&amp;#34;</v>`, `<v>&amp;#34;</v>`},
+		{"text_is_not_markup", `<v>&#60;x/&#62;</v>`, `<v>&lt;x/&gt;</v>`},
+		{"string_spaces", `<v> hello </v>`, `<v> hello </v>`},
+		{"markup", `<p:v xmlns:p='urn:test' a='"'/>`, `<p:v xmlns:p='urn:test' a='"'/>`},
+		{"numbers", `<v>1e2</v>`, `<v>1e2</v>`},
+		{"indentation", "<r>\n\t<v/>\n</r>", "<r>\n\t<v/>\n</r>"},
+		{"whitespace_reference", `<v>&#x9;</v>`, `<v>&#x9;</v>`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := normalizeXmlTextEscaping(c.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != c.want {
+				t.Fatalf("Expected %q, got %q", c.want, got)
+			}
+		})
+	}
+}
+
+func canonicalizeXmlForComparison(text string) (string, error) {
+	text = strings.TrimSpace(text)
+	// Escape text before applying the legacy markup cleanup, so a literal
+	// '>' in a value can not make the cleanup remove a preceding space.
+	text, err := normalizeXmlTextEscaping(text)
+	if err != nil {
+		return "", err
+	}
+	text = strings.ReplaceAll(text, "\r", "")
+	text = removeWhitespaceBetweenTags(text)
+	text = forceSelfClosingTags(text)
+	return removeWhitespaceWithinTags(text), nil
+}
+
+func TestXmlComparisonPreservesText(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		expected string
+		actual   string
+		equal    bool
+	}{
+		{"equivalent_escaping", `<v>x ></v>`, `<v>x &gt;</v>`, true},
+		{"lost_space", `<v>x ></v>`, `<v>x&gt;</v>`, false},
+		{"numeric_reference", `<v>x ></v>`, `<v>x &#62;</v>`, true},
+		{"extra_space", `<v>x ></v>`, `<v>x  &gt;</v>`, false},
+		{"tab_vs_newline", `<v>&#x9;</v>`, `<v>&#xA;</v>`, false},
+		{"tab_vs_space", `<v>&#x9;</v>`, `<v>&#32;</v>`, false},
+		{"lost_tab", `<v>&#x9;</v>`, `<v></v>`, false},
+		{"space_vs_literal_tab", `<v>&#32;</v>`, "<v>\t</v>", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			expected, err := canonicalizeXmlForComparison(c.expected)
+			if err != nil {
+				t.Fatal(err)
+			}
+			actual, err := canonicalizeXmlForComparison(c.actual)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (expected == actual) != c.equal {
+				t.Fatalf("Unexpected comparison of %q and %q", expected, actual)
+			}
+		})
+	}
+}
+
 // Assert that the serialization `other`, as XML document, equals the original
 //
 //	XML document `that` read from the `source`.
@@ -136,16 +338,6 @@ func assertSerializationEqualsDeserialization(
 ) (ok bool) {
 	ok = true
 
-	// Remove carriers to avoid problems between Windows, Posix and MacOS
-	canonicalThat := strings.ReplaceAll(that, "\r", "")
-	canonicalOther := strings.ReplaceAll(other, "\r", "")
-
-	canonicalThat = strings.TrimSpace(canonicalThat)
-	canonicalOther = strings.TrimSpace(canonicalOther)
-
-	canonicalThat = forceSelfClosingTags(canonicalThat)
-	canonicalOther = forceSelfClosingTags(canonicalOther)
-
 	// NOTE (mristin):
 	// The following hack is SUPER ugly and unsafe! However, it works. Given Go's
 	// limited support for XML, we gave up on a safer approach :(. We tested
@@ -156,14 +348,16 @@ func assertSerializationEqualsDeserialization(
 	//    element content still has not been de-escaped or consistently escaped in
 	//    a round trip.
 
-	canonicalThat = strings.ReplaceAll(canonicalThat, "'", "&#39;")
-	canonicalOther = strings.ReplaceAll(canonicalOther, "'", "&#39;")
-
-	canonicalThat = removeWhitespaceBetweenTags(canonicalThat)
-	canonicalOther = removeWhitespaceBetweenTags(canonicalOther)
-
-	canonicalThat = removeWhitespaceWithinTags(canonicalThat)
-	canonicalOther = removeWhitespaceWithinTags(canonicalOther)
+	canonicalThat, err := canonicalizeXmlForComparison(that)
+	if err != nil {
+		t.Fatalf("Failed to normalize original XML from %s: %s", source, err)
+		return false
+	}
+	canonicalOther, err := canonicalizeXmlForComparison(other)
+	if err != nil {
+		t.Fatalf("Failed to normalize serialized XML from %s: %s", source, err)
+		return false
+	}
 
 	thatLines := strings.Split(canonicalThat, "\n")
 	otherLines := strings.Split(canonicalOther, "\n")
@@ -290,6 +484,71 @@ func assertIsDeserializationErrorAndEqualsExpectedOrRecord(
 	}
 
 	return
+}
+
+func TestWhitespaceStringRoundTrip(t *testing.T) {
+	canonicalByValue := make(map[string]string)
+	for _, c := range []struct {
+		name string
+		xml  string
+		want string
+	}{
+		{"literal_tab", "\t", "\t"},
+		{"decimal_tab", "&#9;", "\t"},
+		{"hex_tab", "&#x9;", "\t"},
+		{"literal_newline", "\n", "\n"},
+		{"decimal_newline", "&#10;", "\n"},
+		{"hex_newline", "&#xA;", "\n"},
+		{"literal_crlf", "\r\n", "\n"},
+		{"literal_cr", "\r", "\n"},
+		{"referenced_cr", "&#13;", "\r"},
+		{"literal_space", " ", " "},
+		{"decimal_space", "&#32;", " "},
+		{"hex_space", "&#x20;", " "},
+		{"two_spaces", "  ", "  "},
+		{"mixed_whitespace", " &#9;\n", " \t\n"},
+		{"empty", "", ""},
+		{"space_before_angle", "x &gt;", "x >"},
+		{"lost_space_before_angle", "x&gt;", "x>"},
+		{"cdata_tab", "<![CDATA[\t]]>", "\t"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			document := "<langString xmlns=\"https://dummy.com\"><language>" + c.xml + "</language><text></text></langString>"
+			instance, err := ourxmlization.Unmarshal(xml.NewDecoder(strings.NewReader(document)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			typed, ok := instance.(interface{ Language() string })
+			if !ok || typed.Language() != c.want {
+				t.Fatalf("Expected decoded string %q, got %v", c.want, instance)
+			}
+			var serialized bytes.Buffer
+			encoder := xml.NewEncoder(&serialized)
+			encoder.Indent("", "\t")
+			if err := ourxmlization.Marshal(encoder, instance, true); err != nil {
+				t.Fatal(err)
+			}
+			assertSerializationEqualsDeserialization(t, document, serialized.String(), c.name)
+			canonical, err := canonicalizeXmlForComparison(document)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for value, previous := range canonicalByValue {
+				if (canonical == previous) != (c.want == value) {
+					t.Fatalf("Comparison confuses string values %q and %q", c.want, value)
+				}
+			}
+			canonicalByValue[c.want] = canonical
+		})
+	}
+	empty, err := canonicalizeXmlForComparison("<langString xmlns=\"https://dummy.com\"/>")
+	if err != nil {
+		t.Fatal(err)
+	}
+	indented, err := canonicalizeXmlForComparison("<langString xmlns=\"https://dummy.com\">\n\t</langString>")
+	if err != nil || empty != indented {
+		t.Fatalf("Empty container indentation differs: %v", err)
+	}
 }
 
 // This code has been automatically generated by aas-core-codegen.
