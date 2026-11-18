@@ -28,6 +28,7 @@ import dummy.types.enums.*;
 import dummy.types.model.*;
 import dummy.visitation.AbstractTransformer;
 import java.util.List;
+import java.util.Optional;
 
 public class Verification {
   /**
@@ -136,6 +137,8 @@ public class Verification {
       IFirst that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<Kind> thatKind = that.getKind();
+
       if (!that.isCountWithin((long) that.getTexts().size())) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -173,9 +176,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getKind().isPresent()) {
+      if (thatKind.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getKind().get())
+          Stream.of(thatKind.get())
             .flatMap(Verification::verifyKind)
               .map(error -> {
                 error.prependSegment(
@@ -191,6 +194,8 @@ public class Verification {
     public Stream<Reporting.Error> transformSecond(
       ISecond that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
+
+      final Optional<Kind> thatKind = that.getKind();
 
       if (!that.isCountWithin((long) that.getTexts().size())) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
@@ -236,9 +241,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getKind().isPresent()) {
+      if (thatKind.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getKind().get())
+          Stream.of(thatKind.get())
             .flatMap(Verification::verifyKind)
               .map(error -> {
                 error.prependSegment(

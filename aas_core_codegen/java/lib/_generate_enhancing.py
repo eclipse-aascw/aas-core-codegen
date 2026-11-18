@@ -679,7 +679,7 @@ if (that instanceof Enhanced)
         optional = isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
 
         value_wrap = _generate_wrap_expr(
-            f"that.{getter_name}().get()" if optional else f"that.{getter_name}()",
+            "value" if optional else f"that.{getter_name}()",
             intermediate.beneath_optional(prop.type_annotation),
             descendability,
         )
@@ -694,11 +694,12 @@ that.{setter_name}(
             )
 
         if optional:
+            # Call the getter only once as it allocates an ``Optional``.
             stmt = Stripped(
                 f"""\
-if (that.{getter_name}().isPresent()) {{
+that.{getter_name}().ifPresent(value -> {{
 {I}{indent_but_first_line(stmt, I)}
-}}"""
+}});"""
             )
 
         blocks.append(stmt)

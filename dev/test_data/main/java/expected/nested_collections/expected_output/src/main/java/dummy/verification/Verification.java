@@ -28,6 +28,7 @@ import dummy.types.enums.*;
 import dummy.types.model.*;
 import dummy.visitation.AbstractTransformer;
 import java.util.List;
+import java.util.Optional;
 
 public class Verification {
   /**
@@ -214,10 +215,12 @@ public class Verification {
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<List<IAbstractItem>>> thatOptionalGridOfItems = that.getOptionalGridOfItems();
+
       if (!(
-        !(that.getOptionalGridOfItems().isPresent())
+        !(thatOptionalGridOfItems.isPresent())
         || (
-            that.getOptionalGridOfItems().get().stream().allMatch(
+            thatOptionalGridOfItems.get().stream().allMatch(
                 row -> row.size() > 0)
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
@@ -332,9 +335,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getOptionalGridOfItems().isPresent()) {
+      if (thatOptionalGridOfItems.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalGridOfItems().get())
+          Stream.of(thatOptionalGridOfItems.get())
             .flatMap(Verification::verifyListOf_ListOf_IAbstractItem)
               .map(error -> {
                 error.prependSegment(

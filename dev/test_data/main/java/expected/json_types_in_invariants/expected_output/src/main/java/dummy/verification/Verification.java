@@ -32,6 +32,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class Verification {
   /**
@@ -273,9 +274,12 @@ public class Verification {
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<JsonNode> thatOptionalValue = that.getOptionalValue();
+      final Optional<ObjectNode> thatOptionalMapping = that.getOptionalMapping();
+
       if (!(
-        !(that.getOptionalValue().isPresent())
-        || isAcceptable(that.getOptionalValue().orElse(null)))) {
+        !(thatOptionalValue.isPresent())
+        || isAcceptable(thatOptionalValue.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -292,10 +296,10 @@ public class Verification {
       }
 
       if (!(
-        !(that.getOptionalMapping().isPresent())
+        !(thatOptionalMapping.isPresent())
         || (
-            !that.getOptionalMapping().get().has("type")
-            || (!that.getOptionalMapping().get().get("type").isNull())
+            !thatOptionalMapping.get().has("type")
+            || (!thatOptionalMapping.get().get("type").isNull())
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -353,8 +357,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getOptionalMapping().isPresent())
-        || that.getOptionalMapping().get().has("type"))) {
+        !(thatOptionalMapping.isPresent())
+        || thatOptionalMapping.get().has("type"))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -386,9 +390,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getOptionalMapping().isPresent()) {
+      if (thatOptionalMapping.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalMapping().get())
+          Stream.of(thatOptionalMapping.get())
             .flatMap(Verification::verifyJsonObject)
               .map(error -> {
                 error.prependSegment(
@@ -397,9 +401,9 @@ public class Verification {
               }));
       }
 
-      if (that.getOptionalValue().isPresent()) {
+      if (thatOptionalValue.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalValue().get())
+          Stream.of(thatOptionalValue.get())
             .flatMap(Verification::verifyJsonValue)
               .map(error -> {
                 error.prependSegment(

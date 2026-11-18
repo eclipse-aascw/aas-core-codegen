@@ -34,18 +34,17 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getSemanticId().isPresent()) {
-      that.setSemanticId(wrap(that.getSemanticId().get()));
-    }
+    that.getSemanticId().ifPresent(value -> {
+      that.setSemanticId(wrap(value));
+    });
 
-    if (that.getSupplementalSemanticIds().isPresent()) {
-      that.setSupplementalSemanticIds(
-        wrapListOf_IReference(that.getSupplementalSemanticIds().get()));
-    }
+    that.getSupplementalSemanticIds().ifPresent(value -> {
+      that.setSupplementalSemanticIds(wrapListOf_IReference(value));
+    });
 
-    if (that.getRefersTo().isPresent()) {
-      that.setRefersTo(wrapListOf_IReference(that.getRefersTo().get()));
-    }
+    that.getRefersTo().ifPresent(value -> {
+      that.setRefersTo(wrapListOf_IReference(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -67,14 +66,14 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getEmbeddedDataSpecifications().isPresent()) {
+    that.getEmbeddedDataSpecifications().ifPresent(value -> {
       that.setEmbeddedDataSpecifications(
-        wrapListOf_IEmbeddedDataSpecification(that.getEmbeddedDataSpecifications().get()));
-    }
+        wrapListOf_IEmbeddedDataSpecification(value));
+    });
 
-    if (that.getCreator().isPresent()) {
-      that.setCreator(wrap(that.getCreator().get()));
-    }
+    that.getCreator().ifPresent(value -> {
+      that.setCreator(wrap(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -96,18 +95,17 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getSemanticId().isPresent()) {
-      that.setSemanticId(wrap(that.getSemanticId().get()));
-    }
+    that.getSemanticId().ifPresent(value -> {
+      that.setSemanticId(wrap(value));
+    });
 
-    if (that.getSupplementalSemanticIds().isPresent()) {
-      that.setSupplementalSemanticIds(
-        wrapListOf_IReference(that.getSupplementalSemanticIds().get()));
-    }
+    that.getSupplementalSemanticIds().ifPresent(value -> {
+      that.setSupplementalSemanticIds(wrapListOf_IReference(value));
+    });
 
-    if (that.getValueId().isPresent()) {
-      that.setValueId(wrap(that.getValueId().get()));
-    }
+    that.getValueId().ifPresent(value -> {
+      that.setValueId(wrap(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -129,38 +127,36 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getExtensions().isPresent()) {
-      that.setExtensions(wrapListOf_IExtension(that.getExtensions().get()));
-    }
+    that.getExtensions().ifPresent(value -> {
+      that.setExtensions(wrapListOf_IExtension(value));
+    });
 
-    if (that.getDisplayName().isPresent()) {
-      that.setDisplayName(
-        wrapListOf_ILangStringNameType(that.getDisplayName().get()));
-    }
+    that.getDisplayName().ifPresent(value -> {
+      that.setDisplayName(wrapListOf_ILangStringNameType(value));
+    });
 
-    if (that.getDescription().isPresent()) {
-      that.setDescription(
-        wrapListOf_ILangStringTextType(that.getDescription().get()));
-    }
+    that.getDescription().ifPresent(value -> {
+      that.setDescription(wrapListOf_ILangStringTextType(value));
+    });
 
-    if (that.getAdministration().isPresent()) {
-      that.setAdministration(wrap(that.getAdministration().get()));
-    }
+    that.getAdministration().ifPresent(value -> {
+      that.setAdministration(wrap(value));
+    });
 
-    if (that.getEmbeddedDataSpecifications().isPresent()) {
+    that.getEmbeddedDataSpecifications().ifPresent(value -> {
       that.setEmbeddedDataSpecifications(
-        wrapListOf_IEmbeddedDataSpecification(that.getEmbeddedDataSpecifications().get()));
-    }
+        wrapListOf_IEmbeddedDataSpecification(value));
+    });
 
-    if (that.getDerivedFrom().isPresent()) {
-      that.setDerivedFrom(wrap(that.getDerivedFrom().get()));
-    }
+    that.getDerivedFrom().ifPresent(value -> {
+      that.setDerivedFrom(wrap(value));
+    });
 
     that.setAssetInformation(wrap(that.getAssetInformation()));
 
-    if (that.getSubmodels().isPresent()) {
-      that.setSubmodels(wrapListOf_IReference(that.getSubmodels().get()));
-    }
+    that.getSubmodels().ifPresent(value -> {
+      that.setSubmodels(wrapListOf_IReference(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -182,14 +178,13 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getSpecificAssetIds().isPresent()) {
-      that.setSpecificAssetIds(
-        wrapListOf_ISpecificAssetId(that.getSpecificAssetIds().get()));
-    }
+    that.getSpecificAssetIds().ifPresent(value -> {
+      that.setSpecificAssetIds(wrapListOf_ISpecificAssetId(value));
+    });
 
-    if (that.getDefaultThumbnail().isPresent()) {
-      that.setDefaultThumbnail(wrap(that.getDefaultThumbnail().get()));
-    }
+    that.getDefaultThumbnail().ifPresent(value -> {
+      that.setDefaultThumbnail(wrap(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -231,18 +226,17 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getSemanticId().isPresent()) {
-      that.setSemanticId(wrap(that.getSemanticId().get()));
-    }
+    that.getSemanticId().ifPresent(value -> {
+      that.setSemanticId(wrap(value));
+    });
 
-    if (that.getSupplementalSemanticIds().isPresent()) {
-      that.setSupplementalSemanticIds(
-        wrapListOf_IReference(that.getSupplementalSemanticIds().get()));
-    }
+    that.getSupplementalSemanticIds().ifPresent(value -> {
+      that.setSupplementalSemanticIds(wrapListOf_IReference(value));
+    });
 
-    if (that.getExternalSubjectId().isPresent()) {
-      that.setExternalSubjectId(wrap(that.getExternalSubjectId().get()));
-    }
+    that.getExternalSubjectId().ifPresent(value -> {
+      that.setExternalSubjectId(wrap(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -264,46 +258,42 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getExtensions().isPresent()) {
-      that.setExtensions(wrapListOf_IExtension(that.getExtensions().get()));
-    }
+    that.getExtensions().ifPresent(value -> {
+      that.setExtensions(wrapListOf_IExtension(value));
+    });
 
-    if (that.getDisplayName().isPresent()) {
-      that.setDisplayName(
-        wrapListOf_ILangStringNameType(that.getDisplayName().get()));
-    }
+    that.getDisplayName().ifPresent(value -> {
+      that.setDisplayName(wrapListOf_ILangStringNameType(value));
+    });
 
-    if (that.getDescription().isPresent()) {
-      that.setDescription(
-        wrapListOf_ILangStringTextType(that.getDescription().get()));
-    }
+    that.getDescription().ifPresent(value -> {
+      that.setDescription(wrapListOf_ILangStringTextType(value));
+    });
 
-    if (that.getAdministration().isPresent()) {
-      that.setAdministration(wrap(that.getAdministration().get()));
-    }
+    that.getAdministration().ifPresent(value -> {
+      that.setAdministration(wrap(value));
+    });
 
-    if (that.getSemanticId().isPresent()) {
-      that.setSemanticId(wrap(that.getSemanticId().get()));
-    }
+    that.getSemanticId().ifPresent(value -> {
+      that.setSemanticId(wrap(value));
+    });
 
-    if (that.getSupplementalSemanticIds().isPresent()) {
-      that.setSupplementalSemanticIds(
-        wrapListOf_IReference(that.getSupplementalSemanticIds().get()));
-    }
+    that.getSupplementalSemanticIds().ifPresent(value -> {
+      that.setSupplementalSemanticIds(wrapListOf_IReference(value));
+    });
 
-    if (that.getQualifiers().isPresent()) {
-      that.setQualifiers(wrapListOf_IQualifier(that.getQualifiers().get()));
-    }
+    that.getQualifiers().ifPresent(value -> {
+      that.setQualifiers(wrapListOf_IQualifier(value));
+    });
 
-    if (that.getEmbeddedDataSpecifications().isPresent()) {
+    that.getEmbeddedDataSpecifications().ifPresent(value -> {
       that.setEmbeddedDataSpecifications(
-        wrapListOf_IEmbeddedDataSpecification(that.getEmbeddedDataSpecifications().get()));
-    }
+        wrapListOf_IEmbeddedDataSpecification(value));
+    });
 
-    if (that.getSubmodelElements().isPresent()) {
-      that.setSubmodelElements(
-        wrapListOf_ISubmodelElement(that.getSubmodelElements().get()));
-    }
+    that.getSubmodelElements().ifPresent(value -> {
+      that.setSubmodelElements(wrapListOf_ISubmodelElement(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -325,37 +315,34 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getExtensions().isPresent()) {
-      that.setExtensions(wrapListOf_IExtension(that.getExtensions().get()));
-    }
+    that.getExtensions().ifPresent(value -> {
+      that.setExtensions(wrapListOf_IExtension(value));
+    });
 
-    if (that.getDisplayName().isPresent()) {
-      that.setDisplayName(
-        wrapListOf_ILangStringNameType(that.getDisplayName().get()));
-    }
+    that.getDisplayName().ifPresent(value -> {
+      that.setDisplayName(wrapListOf_ILangStringNameType(value));
+    });
 
-    if (that.getDescription().isPresent()) {
-      that.setDescription(
-        wrapListOf_ILangStringTextType(that.getDescription().get()));
-    }
+    that.getDescription().ifPresent(value -> {
+      that.setDescription(wrapListOf_ILangStringTextType(value));
+    });
 
-    if (that.getSemanticId().isPresent()) {
-      that.setSemanticId(wrap(that.getSemanticId().get()));
-    }
+    that.getSemanticId().ifPresent(value -> {
+      that.setSemanticId(wrap(value));
+    });
 
-    if (that.getSupplementalSemanticIds().isPresent()) {
-      that.setSupplementalSemanticIds(
-        wrapListOf_IReference(that.getSupplementalSemanticIds().get()));
-    }
+    that.getSupplementalSemanticIds().ifPresent(value -> {
+      that.setSupplementalSemanticIds(wrapListOf_IReference(value));
+    });
 
-    if (that.getQualifiers().isPresent()) {
-      that.setQualifiers(wrapListOf_IQualifier(that.getQualifiers().get()));
-    }
+    that.getQualifiers().ifPresent(value -> {
+      that.setQualifiers(wrapListOf_IQualifier(value));
+    });
 
-    if (that.getEmbeddedDataSpecifications().isPresent()) {
+    that.getEmbeddedDataSpecifications().ifPresent(value -> {
       that.setEmbeddedDataSpecifications(
-        wrapListOf_IEmbeddedDataSpecification(that.getEmbeddedDataSpecifications().get()));
-    }
+        wrapListOf_IEmbeddedDataSpecification(value));
+    });
 
     that.setFirst(wrap(that.getFirst()));
 
@@ -381,46 +368,42 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getExtensions().isPresent()) {
-      that.setExtensions(wrapListOf_IExtension(that.getExtensions().get()));
-    }
+    that.getExtensions().ifPresent(value -> {
+      that.setExtensions(wrapListOf_IExtension(value));
+    });
 
-    if (that.getDisplayName().isPresent()) {
-      that.setDisplayName(
-        wrapListOf_ILangStringNameType(that.getDisplayName().get()));
-    }
+    that.getDisplayName().ifPresent(value -> {
+      that.setDisplayName(wrapListOf_ILangStringNameType(value));
+    });
 
-    if (that.getDescription().isPresent()) {
-      that.setDescription(
-        wrapListOf_ILangStringTextType(that.getDescription().get()));
-    }
+    that.getDescription().ifPresent(value -> {
+      that.setDescription(wrapListOf_ILangStringTextType(value));
+    });
 
-    if (that.getSemanticId().isPresent()) {
-      that.setSemanticId(wrap(that.getSemanticId().get()));
-    }
+    that.getSemanticId().ifPresent(value -> {
+      that.setSemanticId(wrap(value));
+    });
 
-    if (that.getSupplementalSemanticIds().isPresent()) {
-      that.setSupplementalSemanticIds(
-        wrapListOf_IReference(that.getSupplementalSemanticIds().get()));
-    }
+    that.getSupplementalSemanticIds().ifPresent(value -> {
+      that.setSupplementalSemanticIds(wrapListOf_IReference(value));
+    });
 
-    if (that.getQualifiers().isPresent()) {
-      that.setQualifiers(wrapListOf_IQualifier(that.getQualifiers().get()));
-    }
+    that.getQualifiers().ifPresent(value -> {
+      that.setQualifiers(wrapListOf_IQualifier(value));
+    });
 
-    if (that.getEmbeddedDataSpecifications().isPresent()) {
+    that.getEmbeddedDataSpecifications().ifPresent(value -> {
       that.setEmbeddedDataSpecifications(
-        wrapListOf_IEmbeddedDataSpecification(that.getEmbeddedDataSpecifications().get()));
-    }
+        wrapListOf_IEmbeddedDataSpecification(value));
+    });
 
-    if (that.getSemanticIdListElement().isPresent()) {
-      that.setSemanticIdListElement(
-        wrap(that.getSemanticIdListElement().get()));
-    }
+    that.getSemanticIdListElement().ifPresent(value -> {
+      that.setSemanticIdListElement(wrap(value));
+    });
 
-    if (that.getValue().isPresent()) {
-      that.setValue(wrapListOf_ISubmodelElement(that.getValue().get()));
-    }
+    that.getValue().ifPresent(value -> {
+      that.setValue(wrapListOf_ISubmodelElement(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -442,41 +425,38 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getExtensions().isPresent()) {
-      that.setExtensions(wrapListOf_IExtension(that.getExtensions().get()));
-    }
+    that.getExtensions().ifPresent(value -> {
+      that.setExtensions(wrapListOf_IExtension(value));
+    });
 
-    if (that.getDisplayName().isPresent()) {
-      that.setDisplayName(
-        wrapListOf_ILangStringNameType(that.getDisplayName().get()));
-    }
+    that.getDisplayName().ifPresent(value -> {
+      that.setDisplayName(wrapListOf_ILangStringNameType(value));
+    });
 
-    if (that.getDescription().isPresent()) {
-      that.setDescription(
-        wrapListOf_ILangStringTextType(that.getDescription().get()));
-    }
+    that.getDescription().ifPresent(value -> {
+      that.setDescription(wrapListOf_ILangStringTextType(value));
+    });
 
-    if (that.getSemanticId().isPresent()) {
-      that.setSemanticId(wrap(that.getSemanticId().get()));
-    }
+    that.getSemanticId().ifPresent(value -> {
+      that.setSemanticId(wrap(value));
+    });
 
-    if (that.getSupplementalSemanticIds().isPresent()) {
-      that.setSupplementalSemanticIds(
-        wrapListOf_IReference(that.getSupplementalSemanticIds().get()));
-    }
+    that.getSupplementalSemanticIds().ifPresent(value -> {
+      that.setSupplementalSemanticIds(wrapListOf_IReference(value));
+    });
 
-    if (that.getQualifiers().isPresent()) {
-      that.setQualifiers(wrapListOf_IQualifier(that.getQualifiers().get()));
-    }
+    that.getQualifiers().ifPresent(value -> {
+      that.setQualifiers(wrapListOf_IQualifier(value));
+    });
 
-    if (that.getEmbeddedDataSpecifications().isPresent()) {
+    that.getEmbeddedDataSpecifications().ifPresent(value -> {
       that.setEmbeddedDataSpecifications(
-        wrapListOf_IEmbeddedDataSpecification(that.getEmbeddedDataSpecifications().get()));
-    }
+        wrapListOf_IEmbeddedDataSpecification(value));
+    });
 
-    if (that.getValue().isPresent()) {
-      that.setValue(wrapListOf_ISubmodelElement(that.getValue().get()));
-    }
+    that.getValue().ifPresent(value -> {
+      that.setValue(wrapListOf_ISubmodelElement(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -498,41 +478,38 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getExtensions().isPresent()) {
-      that.setExtensions(wrapListOf_IExtension(that.getExtensions().get()));
-    }
+    that.getExtensions().ifPresent(value -> {
+      that.setExtensions(wrapListOf_IExtension(value));
+    });
 
-    if (that.getDisplayName().isPresent()) {
-      that.setDisplayName(
-        wrapListOf_ILangStringNameType(that.getDisplayName().get()));
-    }
+    that.getDisplayName().ifPresent(value -> {
+      that.setDisplayName(wrapListOf_ILangStringNameType(value));
+    });
 
-    if (that.getDescription().isPresent()) {
-      that.setDescription(
-        wrapListOf_ILangStringTextType(that.getDescription().get()));
-    }
+    that.getDescription().ifPresent(value -> {
+      that.setDescription(wrapListOf_ILangStringTextType(value));
+    });
 
-    if (that.getSemanticId().isPresent()) {
-      that.setSemanticId(wrap(that.getSemanticId().get()));
-    }
+    that.getSemanticId().ifPresent(value -> {
+      that.setSemanticId(wrap(value));
+    });
 
-    if (that.getSupplementalSemanticIds().isPresent()) {
-      that.setSupplementalSemanticIds(
-        wrapListOf_IReference(that.getSupplementalSemanticIds().get()));
-    }
+    that.getSupplementalSemanticIds().ifPresent(value -> {
+      that.setSupplementalSemanticIds(wrapListOf_IReference(value));
+    });
 
-    if (that.getQualifiers().isPresent()) {
-      that.setQualifiers(wrapListOf_IQualifier(that.getQualifiers().get()));
-    }
+    that.getQualifiers().ifPresent(value -> {
+      that.setQualifiers(wrapListOf_IQualifier(value));
+    });
 
-    if (that.getEmbeddedDataSpecifications().isPresent()) {
+    that.getEmbeddedDataSpecifications().ifPresent(value -> {
       that.setEmbeddedDataSpecifications(
-        wrapListOf_IEmbeddedDataSpecification(that.getEmbeddedDataSpecifications().get()));
-    }
+        wrapListOf_IEmbeddedDataSpecification(value));
+    });
 
-    if (that.getValueId().isPresent()) {
-      that.setValueId(wrap(that.getValueId().get()));
-    }
+    that.getValueId().ifPresent(value -> {
+      that.setValueId(wrap(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -554,45 +531,42 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getExtensions().isPresent()) {
-      that.setExtensions(wrapListOf_IExtension(that.getExtensions().get()));
-    }
+    that.getExtensions().ifPresent(value -> {
+      that.setExtensions(wrapListOf_IExtension(value));
+    });
 
-    if (that.getDisplayName().isPresent()) {
-      that.setDisplayName(
-        wrapListOf_ILangStringNameType(that.getDisplayName().get()));
-    }
+    that.getDisplayName().ifPresent(value -> {
+      that.setDisplayName(wrapListOf_ILangStringNameType(value));
+    });
 
-    if (that.getDescription().isPresent()) {
-      that.setDescription(
-        wrapListOf_ILangStringTextType(that.getDescription().get()));
-    }
+    that.getDescription().ifPresent(value -> {
+      that.setDescription(wrapListOf_ILangStringTextType(value));
+    });
 
-    if (that.getSemanticId().isPresent()) {
-      that.setSemanticId(wrap(that.getSemanticId().get()));
-    }
+    that.getSemanticId().ifPresent(value -> {
+      that.setSemanticId(wrap(value));
+    });
 
-    if (that.getSupplementalSemanticIds().isPresent()) {
-      that.setSupplementalSemanticIds(
-        wrapListOf_IReference(that.getSupplementalSemanticIds().get()));
-    }
+    that.getSupplementalSemanticIds().ifPresent(value -> {
+      that.setSupplementalSemanticIds(wrapListOf_IReference(value));
+    });
 
-    if (that.getQualifiers().isPresent()) {
-      that.setQualifiers(wrapListOf_IQualifier(that.getQualifiers().get()));
-    }
+    that.getQualifiers().ifPresent(value -> {
+      that.setQualifiers(wrapListOf_IQualifier(value));
+    });
 
-    if (that.getEmbeddedDataSpecifications().isPresent()) {
+    that.getEmbeddedDataSpecifications().ifPresent(value -> {
       that.setEmbeddedDataSpecifications(
-        wrapListOf_IEmbeddedDataSpecification(that.getEmbeddedDataSpecifications().get()));
-    }
+        wrapListOf_IEmbeddedDataSpecification(value));
+    });
 
-    if (that.getValue().isPresent()) {
-      that.setValue(wrapListOf_ILangStringTextType(that.getValue().get()));
-    }
+    that.getValue().ifPresent(value -> {
+      that.setValue(wrapListOf_ILangStringTextType(value));
+    });
 
-    if (that.getValueId().isPresent()) {
-      that.setValueId(wrap(that.getValueId().get()));
-    }
+    that.getValueId().ifPresent(value -> {
+      that.setValueId(wrap(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -614,37 +588,34 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getExtensions().isPresent()) {
-      that.setExtensions(wrapListOf_IExtension(that.getExtensions().get()));
-    }
+    that.getExtensions().ifPresent(value -> {
+      that.setExtensions(wrapListOf_IExtension(value));
+    });
 
-    if (that.getDisplayName().isPresent()) {
-      that.setDisplayName(
-        wrapListOf_ILangStringNameType(that.getDisplayName().get()));
-    }
+    that.getDisplayName().ifPresent(value -> {
+      that.setDisplayName(wrapListOf_ILangStringNameType(value));
+    });
 
-    if (that.getDescription().isPresent()) {
-      that.setDescription(
-        wrapListOf_ILangStringTextType(that.getDescription().get()));
-    }
+    that.getDescription().ifPresent(value -> {
+      that.setDescription(wrapListOf_ILangStringTextType(value));
+    });
 
-    if (that.getSemanticId().isPresent()) {
-      that.setSemanticId(wrap(that.getSemanticId().get()));
-    }
+    that.getSemanticId().ifPresent(value -> {
+      that.setSemanticId(wrap(value));
+    });
 
-    if (that.getSupplementalSemanticIds().isPresent()) {
-      that.setSupplementalSemanticIds(
-        wrapListOf_IReference(that.getSupplementalSemanticIds().get()));
-    }
+    that.getSupplementalSemanticIds().ifPresent(value -> {
+      that.setSupplementalSemanticIds(wrapListOf_IReference(value));
+    });
 
-    if (that.getQualifiers().isPresent()) {
-      that.setQualifiers(wrapListOf_IQualifier(that.getQualifiers().get()));
-    }
+    that.getQualifiers().ifPresent(value -> {
+      that.setQualifiers(wrapListOf_IQualifier(value));
+    });
 
-    if (that.getEmbeddedDataSpecifications().isPresent()) {
+    that.getEmbeddedDataSpecifications().ifPresent(value -> {
       that.setEmbeddedDataSpecifications(
-        wrapListOf_IEmbeddedDataSpecification(that.getEmbeddedDataSpecifications().get()));
-    }
+        wrapListOf_IEmbeddedDataSpecification(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -666,41 +637,38 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getExtensions().isPresent()) {
-      that.setExtensions(wrapListOf_IExtension(that.getExtensions().get()));
-    }
+    that.getExtensions().ifPresent(value -> {
+      that.setExtensions(wrapListOf_IExtension(value));
+    });
 
-    if (that.getDisplayName().isPresent()) {
-      that.setDisplayName(
-        wrapListOf_ILangStringNameType(that.getDisplayName().get()));
-    }
+    that.getDisplayName().ifPresent(value -> {
+      that.setDisplayName(wrapListOf_ILangStringNameType(value));
+    });
 
-    if (that.getDescription().isPresent()) {
-      that.setDescription(
-        wrapListOf_ILangStringTextType(that.getDescription().get()));
-    }
+    that.getDescription().ifPresent(value -> {
+      that.setDescription(wrapListOf_ILangStringTextType(value));
+    });
 
-    if (that.getSemanticId().isPresent()) {
-      that.setSemanticId(wrap(that.getSemanticId().get()));
-    }
+    that.getSemanticId().ifPresent(value -> {
+      that.setSemanticId(wrap(value));
+    });
 
-    if (that.getSupplementalSemanticIds().isPresent()) {
-      that.setSupplementalSemanticIds(
-        wrapListOf_IReference(that.getSupplementalSemanticIds().get()));
-    }
+    that.getSupplementalSemanticIds().ifPresent(value -> {
+      that.setSupplementalSemanticIds(wrapListOf_IReference(value));
+    });
 
-    if (that.getQualifiers().isPresent()) {
-      that.setQualifiers(wrapListOf_IQualifier(that.getQualifiers().get()));
-    }
+    that.getQualifiers().ifPresent(value -> {
+      that.setQualifiers(wrapListOf_IQualifier(value));
+    });
 
-    if (that.getEmbeddedDataSpecifications().isPresent()) {
+    that.getEmbeddedDataSpecifications().ifPresent(value -> {
       that.setEmbeddedDataSpecifications(
-        wrapListOf_IEmbeddedDataSpecification(that.getEmbeddedDataSpecifications().get()));
-    }
+        wrapListOf_IEmbeddedDataSpecification(value));
+    });
 
-    if (that.getValue().isPresent()) {
-      that.setValue(wrap(that.getValue().get()));
-    }
+    that.getValue().ifPresent(value -> {
+      that.setValue(wrap(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -722,37 +690,34 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getExtensions().isPresent()) {
-      that.setExtensions(wrapListOf_IExtension(that.getExtensions().get()));
-    }
+    that.getExtensions().ifPresent(value -> {
+      that.setExtensions(wrapListOf_IExtension(value));
+    });
 
-    if (that.getDisplayName().isPresent()) {
-      that.setDisplayName(
-        wrapListOf_ILangStringNameType(that.getDisplayName().get()));
-    }
+    that.getDisplayName().ifPresent(value -> {
+      that.setDisplayName(wrapListOf_ILangStringNameType(value));
+    });
 
-    if (that.getDescription().isPresent()) {
-      that.setDescription(
-        wrapListOf_ILangStringTextType(that.getDescription().get()));
-    }
+    that.getDescription().ifPresent(value -> {
+      that.setDescription(wrapListOf_ILangStringTextType(value));
+    });
 
-    if (that.getSemanticId().isPresent()) {
-      that.setSemanticId(wrap(that.getSemanticId().get()));
-    }
+    that.getSemanticId().ifPresent(value -> {
+      that.setSemanticId(wrap(value));
+    });
 
-    if (that.getSupplementalSemanticIds().isPresent()) {
-      that.setSupplementalSemanticIds(
-        wrapListOf_IReference(that.getSupplementalSemanticIds().get()));
-    }
+    that.getSupplementalSemanticIds().ifPresent(value -> {
+      that.setSupplementalSemanticIds(wrapListOf_IReference(value));
+    });
 
-    if (that.getQualifiers().isPresent()) {
-      that.setQualifiers(wrapListOf_IQualifier(that.getQualifiers().get()));
-    }
+    that.getQualifiers().ifPresent(value -> {
+      that.setQualifiers(wrapListOf_IQualifier(value));
+    });
 
-    if (that.getEmbeddedDataSpecifications().isPresent()) {
+    that.getEmbeddedDataSpecifications().ifPresent(value -> {
       that.setEmbeddedDataSpecifications(
-        wrapListOf_IEmbeddedDataSpecification(that.getEmbeddedDataSpecifications().get()));
-    }
+        wrapListOf_IEmbeddedDataSpecification(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -774,37 +739,34 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getExtensions().isPresent()) {
-      that.setExtensions(wrapListOf_IExtension(that.getExtensions().get()));
-    }
+    that.getExtensions().ifPresent(value -> {
+      that.setExtensions(wrapListOf_IExtension(value));
+    });
 
-    if (that.getDisplayName().isPresent()) {
-      that.setDisplayName(
-        wrapListOf_ILangStringNameType(that.getDisplayName().get()));
-    }
+    that.getDisplayName().ifPresent(value -> {
+      that.setDisplayName(wrapListOf_ILangStringNameType(value));
+    });
 
-    if (that.getDescription().isPresent()) {
-      that.setDescription(
-        wrapListOf_ILangStringTextType(that.getDescription().get()));
-    }
+    that.getDescription().ifPresent(value -> {
+      that.setDescription(wrapListOf_ILangStringTextType(value));
+    });
 
-    if (that.getSemanticId().isPresent()) {
-      that.setSemanticId(wrap(that.getSemanticId().get()));
-    }
+    that.getSemanticId().ifPresent(value -> {
+      that.setSemanticId(wrap(value));
+    });
 
-    if (that.getSupplementalSemanticIds().isPresent()) {
-      that.setSupplementalSemanticIds(
-        wrapListOf_IReference(that.getSupplementalSemanticIds().get()));
-    }
+    that.getSupplementalSemanticIds().ifPresent(value -> {
+      that.setSupplementalSemanticIds(wrapListOf_IReference(value));
+    });
 
-    if (that.getQualifiers().isPresent()) {
-      that.setQualifiers(wrapListOf_IQualifier(that.getQualifiers().get()));
-    }
+    that.getQualifiers().ifPresent(value -> {
+      that.setQualifiers(wrapListOf_IQualifier(value));
+    });
 
-    if (that.getEmbeddedDataSpecifications().isPresent()) {
+    that.getEmbeddedDataSpecifications().ifPresent(value -> {
       that.setEmbeddedDataSpecifications(
-        wrapListOf_IEmbeddedDataSpecification(that.getEmbeddedDataSpecifications().get()));
-    }
+        wrapListOf_IEmbeddedDataSpecification(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -826,46 +788,42 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getExtensions().isPresent()) {
-      that.setExtensions(wrapListOf_IExtension(that.getExtensions().get()));
-    }
+    that.getExtensions().ifPresent(value -> {
+      that.setExtensions(wrapListOf_IExtension(value));
+    });
 
-    if (that.getDisplayName().isPresent()) {
-      that.setDisplayName(
-        wrapListOf_ILangStringNameType(that.getDisplayName().get()));
-    }
+    that.getDisplayName().ifPresent(value -> {
+      that.setDisplayName(wrapListOf_ILangStringNameType(value));
+    });
 
-    if (that.getDescription().isPresent()) {
-      that.setDescription(
-        wrapListOf_ILangStringTextType(that.getDescription().get()));
-    }
+    that.getDescription().ifPresent(value -> {
+      that.setDescription(wrapListOf_ILangStringTextType(value));
+    });
 
-    if (that.getSemanticId().isPresent()) {
-      that.setSemanticId(wrap(that.getSemanticId().get()));
-    }
+    that.getSemanticId().ifPresent(value -> {
+      that.setSemanticId(wrap(value));
+    });
 
-    if (that.getSupplementalSemanticIds().isPresent()) {
-      that.setSupplementalSemanticIds(
-        wrapListOf_IReference(that.getSupplementalSemanticIds().get()));
-    }
+    that.getSupplementalSemanticIds().ifPresent(value -> {
+      that.setSupplementalSemanticIds(wrapListOf_IReference(value));
+    });
 
-    if (that.getQualifiers().isPresent()) {
-      that.setQualifiers(wrapListOf_IQualifier(that.getQualifiers().get()));
-    }
+    that.getQualifiers().ifPresent(value -> {
+      that.setQualifiers(wrapListOf_IQualifier(value));
+    });
 
-    if (that.getEmbeddedDataSpecifications().isPresent()) {
+    that.getEmbeddedDataSpecifications().ifPresent(value -> {
       that.setEmbeddedDataSpecifications(
-        wrapListOf_IEmbeddedDataSpecification(that.getEmbeddedDataSpecifications().get()));
-    }
+        wrapListOf_IEmbeddedDataSpecification(value));
+    });
 
     that.setFirst(wrap(that.getFirst()));
 
     that.setSecond(wrap(that.getSecond()));
 
-    if (that.getAnnotations().isPresent()) {
-      that.setAnnotations(
-        wrapListOf_IDataElement(that.getAnnotations().get()));
-    }
+    that.getAnnotations().ifPresent(value -> {
+      that.setAnnotations(wrapListOf_IDataElement(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -887,47 +845,42 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getExtensions().isPresent()) {
-      that.setExtensions(wrapListOf_IExtension(that.getExtensions().get()));
-    }
+    that.getExtensions().ifPresent(value -> {
+      that.setExtensions(wrapListOf_IExtension(value));
+    });
 
-    if (that.getDisplayName().isPresent()) {
-      that.setDisplayName(
-        wrapListOf_ILangStringNameType(that.getDisplayName().get()));
-    }
+    that.getDisplayName().ifPresent(value -> {
+      that.setDisplayName(wrapListOf_ILangStringNameType(value));
+    });
 
-    if (that.getDescription().isPresent()) {
-      that.setDescription(
-        wrapListOf_ILangStringTextType(that.getDescription().get()));
-    }
+    that.getDescription().ifPresent(value -> {
+      that.setDescription(wrapListOf_ILangStringTextType(value));
+    });
 
-    if (that.getSemanticId().isPresent()) {
-      that.setSemanticId(wrap(that.getSemanticId().get()));
-    }
+    that.getSemanticId().ifPresent(value -> {
+      that.setSemanticId(wrap(value));
+    });
 
-    if (that.getSupplementalSemanticIds().isPresent()) {
-      that.setSupplementalSemanticIds(
-        wrapListOf_IReference(that.getSupplementalSemanticIds().get()));
-    }
+    that.getSupplementalSemanticIds().ifPresent(value -> {
+      that.setSupplementalSemanticIds(wrapListOf_IReference(value));
+    });
 
-    if (that.getQualifiers().isPresent()) {
-      that.setQualifiers(wrapListOf_IQualifier(that.getQualifiers().get()));
-    }
+    that.getQualifiers().ifPresent(value -> {
+      that.setQualifiers(wrapListOf_IQualifier(value));
+    });
 
-    if (that.getEmbeddedDataSpecifications().isPresent()) {
+    that.getEmbeddedDataSpecifications().ifPresent(value -> {
       that.setEmbeddedDataSpecifications(
-        wrapListOf_IEmbeddedDataSpecification(that.getEmbeddedDataSpecifications().get()));
-    }
+        wrapListOf_IEmbeddedDataSpecification(value));
+    });
 
-    if (that.getStatements().isPresent()) {
-      that.setStatements(
-        wrapListOf_ISubmodelElement(that.getStatements().get()));
-    }
+    that.getStatements().ifPresent(value -> {
+      that.setStatements(wrapListOf_ISubmodelElement(value));
+    });
 
-    if (that.getSpecificAssetIds().isPresent()) {
-      that.setSpecificAssetIds(
-        wrapListOf_ISpecificAssetId(that.getSpecificAssetIds().get()));
-    }
+    that.getSpecificAssetIds().ifPresent(value -> {
+      that.setSpecificAssetIds(wrapListOf_ISpecificAssetId(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -951,20 +904,19 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
 
     that.setSource(wrap(that.getSource()));
 
-    if (that.getSourceSemanticId().isPresent()) {
-      that.setSourceSemanticId(wrap(that.getSourceSemanticId().get()));
-    }
+    that.getSourceSemanticId().ifPresent(value -> {
+      that.setSourceSemanticId(wrap(value));
+    });
 
     that.setObservableReference(wrap(that.getObservableReference()));
 
-    if (that.getObservableSemanticId().isPresent()) {
-      that.setObservableSemanticId(
-        wrap(that.getObservableSemanticId().get()));
-    }
+    that.getObservableSemanticId().ifPresent(value -> {
+      that.setObservableSemanticId(wrap(value));
+    });
 
-    if (that.getSubjectId().isPresent()) {
-      that.setSubjectId(wrap(that.getSubjectId().get()));
-    }
+    that.getSubjectId().ifPresent(value -> {
+      that.setSubjectId(wrap(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -986,43 +938,40 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getExtensions().isPresent()) {
-      that.setExtensions(wrapListOf_IExtension(that.getExtensions().get()));
-    }
+    that.getExtensions().ifPresent(value -> {
+      that.setExtensions(wrapListOf_IExtension(value));
+    });
 
-    if (that.getDisplayName().isPresent()) {
-      that.setDisplayName(
-        wrapListOf_ILangStringNameType(that.getDisplayName().get()));
-    }
+    that.getDisplayName().ifPresent(value -> {
+      that.setDisplayName(wrapListOf_ILangStringNameType(value));
+    });
 
-    if (that.getDescription().isPresent()) {
-      that.setDescription(
-        wrapListOf_ILangStringTextType(that.getDescription().get()));
-    }
+    that.getDescription().ifPresent(value -> {
+      that.setDescription(wrapListOf_ILangStringTextType(value));
+    });
 
-    if (that.getSemanticId().isPresent()) {
-      that.setSemanticId(wrap(that.getSemanticId().get()));
-    }
+    that.getSemanticId().ifPresent(value -> {
+      that.setSemanticId(wrap(value));
+    });
 
-    if (that.getSupplementalSemanticIds().isPresent()) {
-      that.setSupplementalSemanticIds(
-        wrapListOf_IReference(that.getSupplementalSemanticIds().get()));
-    }
+    that.getSupplementalSemanticIds().ifPresent(value -> {
+      that.setSupplementalSemanticIds(wrapListOf_IReference(value));
+    });
 
-    if (that.getQualifiers().isPresent()) {
-      that.setQualifiers(wrapListOf_IQualifier(that.getQualifiers().get()));
-    }
+    that.getQualifiers().ifPresent(value -> {
+      that.setQualifiers(wrapListOf_IQualifier(value));
+    });
 
-    if (that.getEmbeddedDataSpecifications().isPresent()) {
+    that.getEmbeddedDataSpecifications().ifPresent(value -> {
       that.setEmbeddedDataSpecifications(
-        wrapListOf_IEmbeddedDataSpecification(that.getEmbeddedDataSpecifications().get()));
-    }
+        wrapListOf_IEmbeddedDataSpecification(value));
+    });
 
     that.setObserved(wrap(that.getObserved()));
 
-    if (that.getMessageBroker().isPresent()) {
-      that.setMessageBroker(wrap(that.getMessageBroker().get()));
-    }
+    that.getMessageBroker().ifPresent(value -> {
+      that.setMessageBroker(wrap(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -1044,52 +993,46 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getExtensions().isPresent()) {
-      that.setExtensions(wrapListOf_IExtension(that.getExtensions().get()));
-    }
+    that.getExtensions().ifPresent(value -> {
+      that.setExtensions(wrapListOf_IExtension(value));
+    });
 
-    if (that.getDisplayName().isPresent()) {
-      that.setDisplayName(
-        wrapListOf_ILangStringNameType(that.getDisplayName().get()));
-    }
+    that.getDisplayName().ifPresent(value -> {
+      that.setDisplayName(wrapListOf_ILangStringNameType(value));
+    });
 
-    if (that.getDescription().isPresent()) {
-      that.setDescription(
-        wrapListOf_ILangStringTextType(that.getDescription().get()));
-    }
+    that.getDescription().ifPresent(value -> {
+      that.setDescription(wrapListOf_ILangStringTextType(value));
+    });
 
-    if (that.getSemanticId().isPresent()) {
-      that.setSemanticId(wrap(that.getSemanticId().get()));
-    }
+    that.getSemanticId().ifPresent(value -> {
+      that.setSemanticId(wrap(value));
+    });
 
-    if (that.getSupplementalSemanticIds().isPresent()) {
-      that.setSupplementalSemanticIds(
-        wrapListOf_IReference(that.getSupplementalSemanticIds().get()));
-    }
+    that.getSupplementalSemanticIds().ifPresent(value -> {
+      that.setSupplementalSemanticIds(wrapListOf_IReference(value));
+    });
 
-    if (that.getQualifiers().isPresent()) {
-      that.setQualifiers(wrapListOf_IQualifier(that.getQualifiers().get()));
-    }
+    that.getQualifiers().ifPresent(value -> {
+      that.setQualifiers(wrapListOf_IQualifier(value));
+    });
 
-    if (that.getEmbeddedDataSpecifications().isPresent()) {
+    that.getEmbeddedDataSpecifications().ifPresent(value -> {
       that.setEmbeddedDataSpecifications(
-        wrapListOf_IEmbeddedDataSpecification(that.getEmbeddedDataSpecifications().get()));
-    }
+        wrapListOf_IEmbeddedDataSpecification(value));
+    });
 
-    if (that.getInputVariables().isPresent()) {
-      that.setInputVariables(
-        wrapListOf_IOperationVariable(that.getInputVariables().get()));
-    }
+    that.getInputVariables().ifPresent(value -> {
+      that.setInputVariables(wrapListOf_IOperationVariable(value));
+    });
 
-    if (that.getOutputVariables().isPresent()) {
-      that.setOutputVariables(
-        wrapListOf_IOperationVariable(that.getOutputVariables().get()));
-    }
+    that.getOutputVariables().ifPresent(value -> {
+      that.setOutputVariables(wrapListOf_IOperationVariable(value));
+    });
 
-    if (that.getInoutputVariables().isPresent()) {
-      that.setInoutputVariables(
-        wrapListOf_IOperationVariable(that.getInoutputVariables().get()));
-    }
+    that.getInoutputVariables().ifPresent(value -> {
+      that.setInoutputVariables(wrapListOf_IOperationVariable(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -1133,37 +1076,34 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getExtensions().isPresent()) {
-      that.setExtensions(wrapListOf_IExtension(that.getExtensions().get()));
-    }
+    that.getExtensions().ifPresent(value -> {
+      that.setExtensions(wrapListOf_IExtension(value));
+    });
 
-    if (that.getDisplayName().isPresent()) {
-      that.setDisplayName(
-        wrapListOf_ILangStringNameType(that.getDisplayName().get()));
-    }
+    that.getDisplayName().ifPresent(value -> {
+      that.setDisplayName(wrapListOf_ILangStringNameType(value));
+    });
 
-    if (that.getDescription().isPresent()) {
-      that.setDescription(
-        wrapListOf_ILangStringTextType(that.getDescription().get()));
-    }
+    that.getDescription().ifPresent(value -> {
+      that.setDescription(wrapListOf_ILangStringTextType(value));
+    });
 
-    if (that.getSemanticId().isPresent()) {
-      that.setSemanticId(wrap(that.getSemanticId().get()));
-    }
+    that.getSemanticId().ifPresent(value -> {
+      that.setSemanticId(wrap(value));
+    });
 
-    if (that.getSupplementalSemanticIds().isPresent()) {
-      that.setSupplementalSemanticIds(
-        wrapListOf_IReference(that.getSupplementalSemanticIds().get()));
-    }
+    that.getSupplementalSemanticIds().ifPresent(value -> {
+      that.setSupplementalSemanticIds(wrapListOf_IReference(value));
+    });
 
-    if (that.getQualifiers().isPresent()) {
-      that.setQualifiers(wrapListOf_IQualifier(that.getQualifiers().get()));
-    }
+    that.getQualifiers().ifPresent(value -> {
+      that.setQualifiers(wrapListOf_IQualifier(value));
+    });
 
-    if (that.getEmbeddedDataSpecifications().isPresent()) {
+    that.getEmbeddedDataSpecifications().ifPresent(value -> {
       that.setEmbeddedDataSpecifications(
-        wrapListOf_IEmbeddedDataSpecification(that.getEmbeddedDataSpecifications().get()));
-    }
+        wrapListOf_IEmbeddedDataSpecification(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -1185,32 +1125,30 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getExtensions().isPresent()) {
-      that.setExtensions(wrapListOf_IExtension(that.getExtensions().get()));
-    }
+    that.getExtensions().ifPresent(value -> {
+      that.setExtensions(wrapListOf_IExtension(value));
+    });
 
-    if (that.getDisplayName().isPresent()) {
-      that.setDisplayName(
-        wrapListOf_ILangStringNameType(that.getDisplayName().get()));
-    }
+    that.getDisplayName().ifPresent(value -> {
+      that.setDisplayName(wrapListOf_ILangStringNameType(value));
+    });
 
-    if (that.getDescription().isPresent()) {
-      that.setDescription(
-        wrapListOf_ILangStringTextType(that.getDescription().get()));
-    }
+    that.getDescription().ifPresent(value -> {
+      that.setDescription(wrapListOf_ILangStringTextType(value));
+    });
 
-    if (that.getAdministration().isPresent()) {
-      that.setAdministration(wrap(that.getAdministration().get()));
-    }
+    that.getAdministration().ifPresent(value -> {
+      that.setAdministration(wrap(value));
+    });
 
-    if (that.getEmbeddedDataSpecifications().isPresent()) {
+    that.getEmbeddedDataSpecifications().ifPresent(value -> {
       that.setEmbeddedDataSpecifications(
-        wrapListOf_IEmbeddedDataSpecification(that.getEmbeddedDataSpecifications().get()));
-    }
+        wrapListOf_IEmbeddedDataSpecification(value));
+    });
 
-    if (that.getIsCaseOf().isPresent()) {
-      that.setIsCaseOf(wrapListOf_IReference(that.getIsCaseOf().get()));
-    }
+    that.getIsCaseOf().ifPresent(value -> {
+      that.setIsCaseOf(wrapListOf_IReference(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -1232,9 +1170,9 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getReferredSemanticId().isPresent()) {
-      that.setReferredSemanticId(wrap(that.getReferredSemanticId().get()));
-    }
+    that.getReferredSemanticId().ifPresent(value -> {
+      that.setReferredSemanticId(wrap(value));
+    });
 
     that.setKeys(wrapListOf_IKey(that.getKeys()));
 
@@ -1318,19 +1256,18 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getAssetAdministrationShells().isPresent()) {
+    that.getAssetAdministrationShells().ifPresent(value -> {
       that.setAssetAdministrationShells(
-        wrapListOf_IAssetAdministrationShell(that.getAssetAdministrationShells().get()));
-    }
+        wrapListOf_IAssetAdministrationShell(value));
+    });
 
-    if (that.getSubmodels().isPresent()) {
-      that.setSubmodels(wrapListOf_ISubmodel(that.getSubmodels().get()));
-    }
+    that.getSubmodels().ifPresent(value -> {
+      that.setSubmodels(wrapListOf_ISubmodel(value));
+    });
 
-    if (that.getConceptDescriptions().isPresent()) {
-      that.setConceptDescriptions(
-        wrapListOf_IConceptDescription(that.getConceptDescriptions().get()));
-    }
+    that.getConceptDescriptions().ifPresent(value -> {
+      that.setConceptDescriptions(wrapListOf_IConceptDescription(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -1505,27 +1442,26 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
     that.setPreferredName(
       wrapListOf_ILangStringPreferredNameTypeIec61360(that.getPreferredName()));
 
-    if (that.getShortName().isPresent()) {
-      that.setShortName(
-        wrapListOf_ILangStringShortNameTypeIec61360(that.getShortName().get()));
-    }
+    that.getShortName().ifPresent(value -> {
+      that.setShortName(wrapListOf_ILangStringShortNameTypeIec61360(value));
+    });
 
-    if (that.getUnitId().isPresent()) {
-      that.setUnitId(wrap(that.getUnitId().get()));
-    }
+    that.getUnitId().ifPresent(value -> {
+      that.setUnitId(wrap(value));
+    });
 
-    if (that.getDefinition().isPresent()) {
+    that.getDefinition().ifPresent(value -> {
       that.setDefinition(
-        wrapListOf_ILangStringDefinitionTypeIec61360(that.getDefinition().get()));
-    }
+        wrapListOf_ILangStringDefinitionTypeIec61360(value));
+    });
 
-    if (that.getValueList().isPresent()) {
-      that.setValueList(wrap(that.getValueList().get()));
-    }
+    that.getValueList().ifPresent(value -> {
+      that.setValueList(wrap(value));
+    });
 
-    if (that.getLevelType().isPresent()) {
-      that.setLevelType(wrap(that.getLevelType().get()));
-    }
+    that.getLevelType().ifPresent(value -> {
+      that.setLevelType(wrap(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()

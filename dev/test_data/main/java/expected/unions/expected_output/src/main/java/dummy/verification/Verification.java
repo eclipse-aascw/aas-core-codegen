@@ -28,6 +28,7 @@ import dummy.types.enums.*;
 import dummy.types.model.*;
 import dummy.visitation.AbstractTransformer;
 import java.util.List;
+import java.util.Optional;
 
 public class Verification {
   /**
@@ -190,6 +191,11 @@ public class Verification {
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<StructuralUnion> thatOptionalStructuralProperty = that.getOptionalStructuralProperty();
+      final Optional<MixedUnion> thatOptionalMixedProperty = that.getOptionalMixedProperty();
+      final Optional<ModelTypedUnion> thatOptionalModelTypedProperty = that.getOptionalModelTypedProperty();
+      final Optional<List<OverlappingUnion>> thatOptionalListOverlappingProperty = that.getOptionalListOverlappingProperty();
+
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(that.getStructuralProperty())
           .flatMap(Verification::verifyToErrorStream)
@@ -253,9 +259,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getOptionalStructuralProperty().isPresent()) {
+      if (thatOptionalStructuralProperty.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalStructuralProperty().get())
+          Stream.of(thatOptionalStructuralProperty.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -264,9 +270,9 @@ public class Verification {
               }));
       }
 
-      if (that.getOptionalMixedProperty().isPresent()) {
+      if (thatOptionalMixedProperty.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalMixedProperty().get())
+          Stream.of(thatOptionalMixedProperty.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -275,9 +281,9 @@ public class Verification {
               }));
       }
 
-      if (that.getOptionalModelTypedProperty().isPresent()) {
+      if (thatOptionalModelTypedProperty.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalModelTypedProperty().get())
+          Stream.of(thatOptionalModelTypedProperty.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -286,9 +292,9 @@ public class Verification {
               }));
       }
 
-      if (that.getOptionalListOverlappingProperty().isPresent()) {
+      if (thatOptionalListOverlappingProperty.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalListOverlappingProperty().get())
+          Stream.of(thatOptionalListOverlappingProperty.get())
             .flatMap(Verification::verifyListOf_OverlappingUnion)
               .map(error -> {
                 error.prependSegment(

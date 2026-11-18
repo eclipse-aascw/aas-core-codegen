@@ -511,6 +511,13 @@ public class Verification {
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<String> thatOptionalText = that.getOptionalText();
+      final Optional<ParentOrItem> thatOptionalMember = that.getOptionalMember();
+      final Optional<IParent> thatOptionalParent = that.getOptionalParent();
+      final Optional<List<String>> thatOptionalTexts = that.getOptionalTexts();
+      final Optional<byte[]> thatOptionalData = that.getOptionalData();
+      final Optional<Kind> thatOptionalKind = that.getOptionalKind();
+
       if (!that.firstChildBIsNotFortyTwo()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -559,7 +566,7 @@ public class Verification {
             that.getText(),
             that.getNumber(),
             that.getTexts(),
-            that.getOptionalText(),
+            thatOptionalText,
             that.getParent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -569,7 +576,7 @@ public class Verification {
             "must not be 17")));
       }
 
-      if (!memberIsLucky(that.getOptionalMember())) {
+      if (!memberIsLucky(thatOptionalMember)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -589,7 +596,7 @@ public class Verification {
         tuplesAreConsistent(
             that.getText(),
             that.getNumber(),
-            that.getOptionalParent()))) {
+            thatOptionalParent))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -597,15 +604,14 @@ public class Verification {
             "must be small")));
       }
 
-      if (!(
-        textsAreFew(that.getTexts(), that.getOptionalTexts()))) {
+      if (!textsAreFew(that.getTexts(), thatOptionalTexts)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "Texts must be few")));
       }
 
-      if (!dataIsSmall(that.getOptionalData())) {
+      if (!dataIsSmall(thatOptionalData)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -620,7 +626,7 @@ public class Verification {
       }
 
       if (!(
-        kindsAreConsistent(that.getKind(), that.getOptionalKind()))) {
+        kindsAreConsistent(that.getKind(), thatOptionalKind))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -637,7 +643,7 @@ public class Verification {
       }
 
       if (!(
-        optionalsFromValuesAreSmall(that.getNumber(), that.getOptionalText()))) {
+        optionalsFromValuesAreSmall(that.getNumber(), thatOptionalText))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -659,7 +665,7 @@ public class Verification {
             "The last parent as Child_b must have a non-zero b_only")));
       }
 
-      if (!textIsAllowedUnlessLong(that.getOptionalText())) {
+      if (!textIsAllowedUnlessLong(thatOptionalText)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -727,9 +733,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getOptionalKind().isPresent()) {
+      if (thatOptionalKind.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalKind().get())
+          Stream.of(thatOptionalKind.get())
             .flatMap(Verification::verifyKind)
               .map(error -> {
                 error.prependSegment(
@@ -738,9 +744,9 @@ public class Verification {
               }));
       }
 
-      if (that.getOptionalParent().isPresent()) {
+      if (thatOptionalParent.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalParent().get())
+          Stream.of(thatOptionalParent.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -749,9 +755,9 @@ public class Verification {
               }));
       }
 
-      if (that.getOptionalMember().isPresent()) {
+      if (thatOptionalMember.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalMember().get())
+          Stream.of(thatOptionalMember.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(

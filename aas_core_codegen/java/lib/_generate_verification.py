@@ -7,6 +7,7 @@
 import io
 import textwrap
 from typing import (
+    Dict,
     List,
     Mapping,
     Optional,
@@ -678,6 +679,33 @@ private static class _EnumValueSet {
     return Stripped(writer.getvalue())
 
 
+class _HoistedOptionals:
+    """Collect the ``Optional`` properties of ``that`` which are read once."""
+
+    def __init__(self) -> None:
+        """Initialize with no properties hoisted."""
+        self._declarations: Dict[Identifier, Stripped] = dict()
+        self._locals: Dict[Identifier, Stripped] = dict()
+
+    def hoist(self, prop: intermediate.Property) -> Stripped:
+        """Declare the local variable for ``prop`` and return its name."""
+        local = self._locals.get(prop.name, None)
+        if local is None:
+            local = Stripped(java_naming.variable_name(Identifier(f"that_{prop.name}")))
+            prop_type = java_common.generate_type(prop.type_annotation)
+            getter_name = java_naming.getter_name(prop.name)
+            self._locals[prop.name] = local
+            self._declarations[prop.name] = Stripped(
+                f"final {prop_type} {local} = that.{getter_name}();"
+            )
+
+        return local
+
+    def declarations(self) -> List[Stripped]:
+        """List the declarations of all the hoisted variables."""
+        return list(self._declarations.values())
+
+
 class _InvariantTranspiler(java_transpilation.Transpiler):
     def __init__(
         self,
@@ -691,6 +719,7 @@ class _InvariantTranspiler(java_transpilation.Transpiler):
         environment: intermediate_type_inference.Environment,
         downcast_map: Mapping[parse_tree.Node, intermediate_type_inference.Downcast],
         symbol_table: intermediate.SymbolTable,
+        hoisted: _HoistedOptionals,
     ) -> None:
         """Initialize with the given values."""
         java_transpilation.Transpiler.__init__(
@@ -702,6 +731,38 @@ class _InvariantTranspiler(java_transpilation.Transpiler):
         )
 
         self._symbol_table = symbol_table
+        self._hoisted = hoisted
+
+    def transform_member(
+        self, node: parse_tree.Member
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        code, error = super().transform_member(node)
+        if error is not None:
+            return None, error
+
+        assert code is not None
+
+        # Every call of an optional getter allocates an ``Optional``, so we read
+        # each optional property of ``that`` once and refer to the local variable.
+        if (
+            isinstance(node.instance, parse_tree.Name)
+            and node.instance.identifier == "self"
+            and self._optional_map[node]
+        ):
+            instance_type = intermediate_type_inference.beneath_optional(
+                self.type_map[node.instance]
+            )
+            assert isinstance(
+                instance_type, intermediate_type_inference.OurTypeAnnotation
+            ) and isinstance(instance_type.our_type, intermediate.Class)
+
+            prop = instance_type.our_type.properties_by_name[node.name]
+            local = self._hoisted.hoist(prop)
+            getter_call = f"that.{java_naming.getter_name(prop.name)}()"
+            assert code.startswith(getter_call), code
+            return Stripped(local + code[len(getter_call) :]), None
+
+        return code, None
 
     def transform_name(
         self, node: parse_tree.Name
@@ -742,8 +803,9 @@ def _transpile_invariant(
     invariant: intermediate.Invariant,
     symbol_table: intermediate.SymbolTable,
     type_inference: intermediate_type_inference.TypeInference,
+    hoisted: _HoistedOptionals,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
-    """Translate the invariant from the meta-model into C# code."""
+    """Translate the invariant from the meta-model into Java code."""
     inference = type_inference.by_invariant[invariant]
     environment = inference.environment_with_self
     type_map = inference.type_map
@@ -768,6 +830,7 @@ def _transpile_invariant(
         environment=environment,
         downcast_map=inference.downcast_map,
         symbol_table=symbol_table,
+        hoisted=hoisted,
     )
 
     expr, error = transpiler.transform(invariant.parsed.body)
@@ -1123,6 +1186,7 @@ def _generate_transform_for_class(
     """Generate the transform method to errors for the given concrete class."""
     errors: List[Error] = []
     blocks: List[Stripped] = []
+    hoisted = _HoistedOptionals()
 
     name = java_naming.class_name(cls.name)
 
@@ -1131,6 +1195,7 @@ def _generate_transform_for_class(
             invariant=invariant,
             symbol_table=symbol_table,
             type_inference=type_inference,
+            hoisted=hoisted,
         )
         if error is not None:
             errors.append(
@@ -1159,9 +1224,11 @@ def _generate_transform_for_class(
 
         optional = isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
 
-        source_expr = (
-            f"that.{getter_name}().get()" if optional else f"that.{getter_name}()"
-        )
+        if optional:
+            local = hoisted.hoist(prop)
+            source_expr = f"{local}.get()"
+        else:
+            source_expr = f"that.{getter_name}()"
 
         block = Stripped(
             f"""\
@@ -1178,7 +1245,7 @@ errorStream = Stream.<Reporting.Error>concat(errorStream,
         if optional:
             block = Stripped(
                 f"""\
-if (that.{getter_name}().isPresent()) {{
+if ({local}.isPresent()) {{
 {I}{indent_but_first_line(block, I)}
 }}"""
             )
@@ -1207,6 +1274,13 @@ public Stream<Reporting.Error> {transform_name}(
 
 """
     )
+
+    for declaration in hoisted.declarations():
+        writer.write(textwrap.indent(declaration, I))
+        writer.write("\n")
+
+    if len(hoisted.declarations()) > 0:
+        writer.write("\n")
 
     for i, stmt in enumerate(blocks):
         if i > 0:
@@ -1618,6 +1692,7 @@ def _generate_verify_constrained_primitive(
             invariant=invariant,
             symbol_table=symbol_table,
             type_inference=type_inference,
+            hoisted=_HoistedOptionals(),
         )
         if error is not None:
             errors.append(
@@ -1813,9 +1888,15 @@ def generate(
     ):
         imports.append(Stripped("import java.util.List;"))
 
+    # NOTE:
+    # The verification of a class reads its optional properties as ``Optional``.
     if any(
         isinstance(type_annotation, intermediate.OptionalTypeAnnotation)
         for type_annotation in signature_type_annotations
+    ) or any(
+        isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
+        for cls in symbol_table.concrete_classes
+        for prop in cls.properties
     ):
         imports.append(Stripped("import java.util.Optional;"))
 
