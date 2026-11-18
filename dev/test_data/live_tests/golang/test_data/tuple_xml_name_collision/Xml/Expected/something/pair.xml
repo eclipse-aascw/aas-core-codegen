@@ -1,0 +1,6 @@
+<something xmlns="https://dummy.com">
+  <pair>
+    <v2><text>42.0</text></v2>
+    <v2>42.0</v2>
+  </pair>
+</something>
