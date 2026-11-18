@@ -8,12 +8,15 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
+	xmlcommon "github.com/dummy-works/dummy/internal/xmlcommon"
 	ourtesting "github.com/dummy-works/dummy/ourtesting"
 	ourxmlization "github.com/dummy-works/dummy/xmlization"
 )
@@ -129,9 +132,13 @@ func removeWhitespaceWithinTags(text string) string {
 	return result
 }
 
-// Follow the model's XML nesting to recognize string values, including collection
-// items. Container whitespace remains available to the existing indentation cleanup.
-func xmlTextContext(parent string, name xml.Name) string {
+// Identify class containers, collection containers, and scalar content
+// from each element's position in the model's XML structure.
+func xmlTextContext(parent string, position int, name xml.Name) string {
+	// Different tuple slots can have the same XML name.
+	if strings.HasPrefix(parent, "tuple:") {
+		parent += ":" + strconv.Itoa(position)
+	}
 	switch parent {
 	case "class:Some_item":
 		switch name {
@@ -141,43 +148,13 @@ func xmlTextContext(parent string, name xml.Name) string {
 	case "class:Something":
 		switch name {
 		case (xml.Name{Space: "https://dummy.com", Local: "items"}):
-			return "content:TupleOf2_IAbstractItem_IAbstractItem"
+			return "tuple:TupleOf2_IAbstractItem_IAbstractItem"
 		case (xml.Name{Space: "https://dummy.com", Local: "optionalPair"}):
-			return "content:TupleOf2_string_IAbstractItem"
+			return "tuple:TupleOf2_string_IAbstractItem"
 		case (xml.Name{Space: "https://dummy.com", Local: "pair"}):
-			return "content:TupleOf2_string_long"
+			return "tuple:TupleOf2_string_long"
 		case (xml.Name{Space: "https://dummy.com", Local: "tricky"}):
-			return "content:TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result"
-		}
-	case "content:TupleOf2_IAbstractItem_IAbstractItem":
-		switch name {
-		case (xml.Name{Space: "https://dummy.com", Local: "anotherItem"}):
-			return "class:Another_item"
-		case (xml.Name{Space: "https://dummy.com", Local: "someItem"}):
-			return "class:Some_item"
-		}
-	case "content:TupleOf2_string_IAbstractItem":
-		switch name {
-		case (xml.Name{Space: "https://dummy.com", Local: "anotherItem"}):
-			return "class:Another_item"
-		case (xml.Name{Space: "https://dummy.com", Local: "someItem"}):
-			return "class:Some_item"
-		case (xml.Name{Space: "https://dummy.com", Local: "v1"}):
-			return "text"
-		}
-	case "content:TupleOf2_string_long":
-		switch name {
-		case (xml.Name{Space: "https://dummy.com", Local: "v1"}):
-			return "text"
-		}
-	case "content:TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result":
-		switch name {
-		case (xml.Name{Space: "https://dummy.com", Local: "anotherItem"}):
-			return "class:Another_item"
-		case (xml.Name{Space: "https://dummy.com", Local: "someItem"}):
-			return "class:Some_item"
-		case (xml.Name{Space: "https://dummy.com", Local: "v6"}):
-			return "text"
+			return "tuple:TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result"
 		}
 	case "root":
 		switch name {
@@ -188,39 +165,183 @@ func xmlTextContext(parent string, name xml.Name) string {
 		case (xml.Name{Space: "https://dummy.com", Local: "something"}):
 			return "class:Something"
 		}
+	case "tuple:TupleOf2_IAbstractItem_IAbstractItem:1":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "anotherItem"}):
+			return "class:Another_item"
+		case (xml.Name{Space: "https://dummy.com", Local: "someItem"}):
+			return "class:Some_item"
+		}
+	case "tuple:TupleOf2_IAbstractItem_IAbstractItem:2":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "anotherItem"}):
+			return "class:Another_item"
+		case (xml.Name{Space: "https://dummy.com", Local: "someItem"}):
+			return "class:Some_item"
+		}
+	case "tuple:TupleOf2_string_IAbstractItem:1":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "v1"}):
+			return "text"
+		}
+	case "tuple:TupleOf2_string_IAbstractItem:2":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "anotherItem"}):
+			return "class:Another_item"
+		case (xml.Name{Space: "https://dummy.com", Local: "someItem"}):
+			return "class:Some_item"
+		}
+	case "tuple:TupleOf2_string_long:1":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "v1"}):
+			return "text"
+		}
+	case "tuple:TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result:2":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "someItem"}):
+			return "class:Some_item"
+		}
+	case "tuple:TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result:3":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "anotherItem"}):
+			return "class:Another_item"
+		case (xml.Name{Space: "https://dummy.com", Local: "someItem"}):
+			return "class:Some_item"
+		}
+	case "tuple:TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result:4":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "someItem"}):
+			return "class:Some_item"
+		}
+	case "tuple:TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result:6":
+		switch name {
+		case (xml.Name{Space: "https://dummy.com", Local: "v6"}):
+			return "text"
+		}
 	}
 	return ""
 }
 
-// Normalize escaping in character data while retaining the original markup.
+// Keep numeric markup separate from the normalized XML so a change of number
+// spelling can neither move a comment nor hide a change in its contents.
+type xmlComparison struct {
+	text, numericMarkup string
+}
+
+func normalizeXmlNumericContent(
+	decoder *xml.Decoder, source, context string, numberIndex int, numericMarkup *strings.Builder,
+) (string, error) {
+	var content bytes.Buffer
+	type mark struct {
+		offset int
+		xml    string
+	}
+	var marks []mark
+	for {
+		start := decoder.InputOffset()
+		token, err := decoder.Token()
+		if err != nil {
+			return "", err
+		}
+		switch token := token.(type) {
+		case xml.CharData:
+			content.Write(token)
+		case xml.Comment, xml.ProcInst:
+			raw := source[start:decoder.InputOffset()]
+			marks = append(marks, mark{content.Len(), raw})
+		case xml.EndElement:
+			// Reuse the SDK reader's lexical validation and double-precision conversion.
+			// The sentinel element terminates the supplied character data for ReadText.
+			number, _, err := xmlcommon.ReadTextAs_double(
+				xml.NewDecoder(strings.NewReader("<end/>")), xml.CharData(content.Bytes()))
+			if err != nil {
+				return "", err
+			}
+			if context == "json:double" && (math.IsInf(number, 0) || math.IsNaN(number)) {
+				return "", fmt.Errorf("expected a finite JSON number")
+			}
+			if len(marks) > 0 {
+				// Count decoded numeric characters, excluding surrounding XML whitespace.
+				// Leading and trailing marks stay at the boundaries even if the spelling changes length.
+				text := content.Bytes()
+				first := len(text) - len(bytes.TrimLeft(text, " \t\r\n"))
+				end := len(bytes.TrimRight(text, " \t\r\n"))
+				for _, m := range marks {
+					var position string
+					switch {
+					case m.offset <= first:
+						position = "start"
+					case m.offset >= end:
+						position = "end"
+					default:
+						position = strconv.Itoa(m.offset - first)
+					}
+					raw := strings.ReplaceAll(strings.ReplaceAll(m.xml, "\r\n", "\n"), "\r", "\n")
+					fmt.Fprintf(numericMarkup, "number %d at %s: %q\n", numberIndex, position, raw)
+				}
+			}
+			// FormatFloat preserves every representable value, including signed zero.
+			canonical := strconv.FormatFloat(number, 'g', -1, 64)
+			if math.IsInf(number, 1) {
+				canonical = "INF"
+			} else if math.IsInf(number, -1) {
+				canonical = "-INF"
+			}
+			return canonical + source[start:decoder.InputOffset()], nil
+		default:
+			return "", fmt.Errorf("expected numeric text, got %T", token)
+		}
+	}
+}
+
+// Normalize character escaping and numeric spelling while retaining the markup.
 // Copying tags verbatim avoids changing namespace declarations or prefixes.
-func normalizeXmlTextEscaping(text string) (string, error) {
+func normalizeXmlTextEscaping(text string) (xmlComparison, error) {
 	decoder := xml.NewDecoder(strings.NewReader(text))
 	var result bytes.Buffer
-	contexts := []string{"root"}
+	var numericMarkup strings.Builder
+	numberIndex := 0
+	type frame struct {
+		context  string
+		children int
+	}
+	stack := []frame{{context: "root"}}
 	for {
 		start := decoder.InputOffset()
 		token, err := decoder.Token()
 		if err == io.EOF {
-			return result.String(), nil
+			return xmlComparison{result.String(), numericMarkup.String()}, nil
 		}
 		if err != nil {
-			return "", err
+			return xmlComparison{}, err
 		}
-		if start, ok := token.(xml.StartElement); ok {
-			contexts = append(contexts, xmlTextContext(contexts[len(contexts)-1], start.Name))
+		if element, ok := token.(xml.StartElement); ok {
+			parent := &stack[len(stack)-1]
+			parent.children++
+			context := xmlTextContext(parent.context, parent.children, element.Name)
+			if context == "double" || context == "json:double" {
+				result.WriteString(text[start:decoder.InputOffset()])
+				numberIndex++
+				normalized, err := normalizeXmlNumericContent(decoder, text, context, numberIndex, &numericMarkup)
+				if err != nil {
+					return xmlComparison{}, err
+				}
+				result.WriteString(normalized)
+				continue
+			}
+			stack = append(stack, frame{context: context})
 		}
 		if data, ok := token.(xml.CharData); ok {
 			// Normalize strings consistently, even if they consist only of whitespace.
 			// Keep container indentation available to the existing cleanup.
-			if contexts[len(contexts)-1] != "text" && strings.Trim(string(data), " \t\r\n") == "" {
+			if stack[len(stack)-1].context != "text" && strings.Trim(string(data), " \t\r\n") == "" {
 				result.WriteString(text[start:decoder.InputOffset()])
 			} else {
 				var escaped bytes.Buffer
 				if err := xml.EscapeText(&escaped, data); err != nil {
-					return "", err
+					return xmlComparison{}, err
 				}
-				if contexts[len(contexts)-1] == "text" {
+				if stack[len(stack)-1].context == "text" {
 					// Protect spaces as well as tabs and line breaks from the regex cleanup.
 					result.WriteString(strings.ReplaceAll(escaped.String(), " ", "&#32;"))
 				} else {
@@ -231,8 +352,23 @@ func normalizeXmlTextEscaping(text string) (string, error) {
 			result.WriteString(text[start:decoder.InputOffset()])
 		}
 		if _, ok := token.(xml.EndElement); ok {
-			contexts = contexts[:len(contexts)-1]
+			stack = stack[:len(stack)-1]
 		}
+	}
+}
+
+func TestWritePositiveInfinity(t *testing.T) {
+	var output strings.Builder
+	encoder := xml.NewEncoder(&output)
+	if err := xmlcommon.WriteAsText_double(encoder, math.Inf(1)); err != nil {
+		t.Fatal(err)
+	}
+	if err := encoder.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	// XSD 1.0 requires INF even though the reader also accepts +INF.
+	if got := output.String(); got != "INF" {
+		t.Fatalf("Expected positive infinity as %q, got %q", "INF", got)
 	}
 }
 
@@ -261,25 +397,63 @@ func TestNormalizeXmlTextEscaping(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got != c.want {
+			if got.text != c.want {
 				t.Fatalf("Expected %q, got %q", c.want, got)
 			}
 		})
 	}
 }
 
-func canonicalizeXmlForComparison(text string) (string, error) {
+const xmlComparisonMarker = "GITHUB_COM_DUMMY_WORKS_DUMMY_XML_COMPARISON_PI"
+
+func canonicalizeXmlForComparison(text string) (xmlComparison, error) {
 	text = strings.TrimSpace(text)
 	// Escape text before applying the legacy markup cleanup, so a literal
 	// '>' in a value can not make the cleanup remove a preceding space.
-	text, err := normalizeXmlTextEscaping(text)
+	comparison, err := normalizeXmlTextEscaping(text)
 	if err != nil {
-		return "", err
+		return xmlComparison{}, err
 	}
+	text = comparison.text
+	// Protect processing instructions while the legacy regexes clean up markup.
+	// The marker target is absent even after carriage-return removal.
+	markerPrefix := xmlComparisonMarker
+	withoutCR := strings.ReplaceAll(text, "\r", "")
+	for strings.Contains(withoutCR, markerPrefix) {
+		markerPrefix += "X"
+	}
+	var instructions []string
+	var protected bytes.Buffer
+	decoder := xml.NewDecoder(strings.NewReader(text))
+	for {
+		start := decoder.InputOffset()
+		token, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return xmlComparison{}, err
+		}
+		original := text[start:decoder.InputOffset()]
+		if _, ok := token.(xml.ProcInst); ok {
+			fmt.Fprintf(&protected, "<?%s%d?>", markerPrefix, len(instructions))
+			// XML 1.0 section 2.11 normalizes literal line endings before parsing.
+			original = strings.ReplaceAll(strings.ReplaceAll(original, "\r\n", "\n"), "\r", "\n")
+			instructions = append(instructions, original)
+		} else {
+			protected.WriteString(original)
+		}
+	}
+	text = protected.String()
 	text = strings.ReplaceAll(text, "\r", "")
 	text = removeWhitespaceBetweenTags(text)
 	text = forceSelfClosingTags(text)
-	return removeWhitespaceWithinTags(text), nil
+	text = removeWhitespaceWithinTags(text)
+	for i, original := range instructions {
+		text = strings.ReplaceAll(text, fmt.Sprintf("<?%s%d?>", markerPrefix, i), original)
+	}
+	comparison.text = text
+	return comparison, nil
 }
 
 func TestXmlComparisonPreservesText(t *testing.T) {
@@ -297,6 +471,18 @@ func TestXmlComparisonPreservesText(t *testing.T) {
 		{"tab_vs_space", `<v>&#x9;</v>`, `<v>&#32;</v>`, false},
 		{"lost_tab", `<v>&#x9;</v>`, `<v></v>`, false},
 		{"space_vs_literal_tab", `<v>&#32;</v>`, "<v>\t</v>", false},
+		{"instruction_data", `<v><?p x > y?></v>`, `<v><?p x> y?></v>`, false},
+		{"instruction_markup", `<v><?p <a></a>?></v>`, `<v><?p <a/>?></v>`, false},
+		{"instruction_cr", "<v><?p x\ry?></v>", `<v><?p xy?></v>`, false},
+		{"instruction_cr_as_lf", "<v><?p x\ry?></v>", "<v><?p x\ny?></v>", true},
+		{"instruction_crlf_as_lf", "<v><?p x\r\ny?></v>", "<v><?p x\ny?></v>", true},
+		{"instruction_indentation", "<v>\n<?p x > y?>\n</v>", `<v><?p x > y?></v>`, true},
+		{
+			"instruction_marker",
+			"<v><!--<?" + xmlComparisonMarker + "0?>--><?p x?></v>",
+			"<v><!--<?p x?>--><?p x?></v>",
+			false,
+		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			expected, err := canonicalizeXmlForComparison(c.expected)
@@ -346,10 +532,14 @@ func assertSerializationEqualsDeserialization(
 		return false
 	}
 
-	thatLines := strings.Split(canonicalThat, "\n")
-	otherLines := strings.Split(canonicalOther, "\n")
+	if canonicalThat.numericMarkup != canonicalOther.numericMarkup {
+		t.Fatalf("Numeric XML markup differs in %s:\nORIGINAL:\n%sSERIALIZED:\n%s",
+			source, canonicalThat.numericMarkup, canonicalOther.numericMarkup)
+	}
+	thatLines := strings.Split(canonicalThat.text, "\n")
+	otherLines := strings.Split(canonicalOther.text, "\n")
 
-	if canonicalThat != canonicalOther {
+	if canonicalThat.text != canonicalOther.text {
 		b := new(strings.Builder)
 		minLines := len(thatLines)
 		if minLines > len(otherLines) {
@@ -474,7 +664,7 @@ func assertIsDeserializationErrorAndEqualsExpectedOrRecord(
 }
 
 func TestWhitespaceStringRoundTrip(t *testing.T) {
-	canonicalByValue := make(map[string]string)
+	canonicalByValue := make(map[string]xmlComparison)
 	for _, c := range []struct {
 		name string
 		xml  string
