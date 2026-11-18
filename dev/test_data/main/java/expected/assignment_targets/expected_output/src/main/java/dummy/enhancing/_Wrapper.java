@@ -56,9 +56,9 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
 
     that.setItems(wrapListOf_IItem(that.getItems()));
 
-    if (that.getMaybeItem().isPresent()) {
-      that.setMaybeItem(wrap(that.getMaybeItem().get()));
-    }
+    that.getMaybeItem().ifPresent(value -> {
+      that.setMaybeItem(wrap(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()

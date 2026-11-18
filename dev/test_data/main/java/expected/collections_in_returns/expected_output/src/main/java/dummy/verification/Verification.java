@@ -198,6 +198,8 @@ public class Verification {
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<String>> thatOptionalTexts = that.getOptionalTexts();
+
       if (!(
         that.getKinds().size() == 0
         || that.uniqueKinds().contains(Kind.ALPHA))) {
@@ -214,7 +216,7 @@ public class Verification {
             "Kinds must not contain gamma.")));
       }
 
-      if (!optionalTextsAreUnique(that.getOptionalTexts())) {
+      if (!optionalTextsAreUnique(thatOptionalTexts)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +

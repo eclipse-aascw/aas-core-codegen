@@ -28,6 +28,7 @@ import dummy.types.enums.*;
 import dummy.types.model.*;
 import dummy.visitation.AbstractTransformer;
 import java.util.List;
+import java.util.Optional;
 
 public class Verification {
   /**
@@ -350,9 +351,11 @@ public class Verification {
       IItem that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
-      if (that.getMaybeKind().isPresent()) {
+      final Optional<Kind> thatMaybeKind = that.getMaybeKind();
+
+      if (thatMaybeKind.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getMaybeKind().get())
+          Stream.of(thatMaybeKind.get())
             .flatMap(Verification::verifyKind)
               .map(error -> {
                 error.prependSegment(
@@ -368,6 +371,8 @@ public class Verification {
     public Stream<Reporting.Error> transformSomething(
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
+
+      final Optional<IItem> thatMaybeItem = that.getMaybeItem();
 
       if (!textsAreNotEmpty(that.getItems())) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
@@ -385,9 +390,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getMaybeItem().isPresent()) {
+      if (thatMaybeItem.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getMaybeItem().get())
+          Stream.of(thatMaybeItem.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(

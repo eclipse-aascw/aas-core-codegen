@@ -32,6 +32,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class Verification {
   /**
@@ -253,6 +254,9 @@ public class Verification {
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<ObjectNode>> thatOptionalObjects = that.getOptionalObjects();
+      final Optional<ObjectNode> thatOptionalObject = that.getOptionalObject();
+
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(that.getValues())
           .flatMap(Verification::verifyListOf_jsonValue)
@@ -271,9 +275,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getOptionalObjects().isPresent()) {
+      if (thatOptionalObjects.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalObjects().get())
+          Stream.of(thatOptionalObjects.get())
             .flatMap(Verification::verifyListOf_jsonObject)
               .map(error -> {
                 error.prependSegment(
@@ -282,9 +286,9 @@ public class Verification {
               }));
       }
 
-      if (that.getOptionalObject().isPresent()) {
+      if (thatOptionalObject.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalObject().get())
+          Stream.of(thatOptionalObject.get())
             .flatMap(Verification::verifyJsonObject)
               .map(error -> {
                 error.prependSegment(

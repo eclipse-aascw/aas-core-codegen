@@ -27,6 +27,7 @@ import dummy.reporting.Reporting;
 import dummy.types.enums.*;
 import dummy.types.model.*;
 import dummy.visitation.AbstractTransformer;
+import java.util.Optional;
 
 public class Verification {
   /**

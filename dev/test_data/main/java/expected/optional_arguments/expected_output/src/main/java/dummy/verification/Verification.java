@@ -267,9 +267,11 @@ public class Verification {
       IBranch that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
-      if (that.getOptionalChildren().isPresent()) {
+      final Optional<List<INode>> thatOptionalChildren = that.getOptionalChildren();
+
+      if (thatOptionalChildren.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalChildren().get())
+          Stream.of(thatOptionalChildren.get())
             .flatMap(Verification::verifyListOf_INode)
               .map(error -> {
                 error.prependSegment(
@@ -286,9 +288,11 @@ public class Verification {
       ILeaf that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
-      if (that.getOptionalItem().isPresent()) {
+      final Optional<IItem> thatOptionalItem = that.getOptionalItem();
+
+      if (thatOptionalItem.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalItem().get())
+          Stream.of(thatOptionalItem.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -305,6 +309,13 @@ public class Verification {
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<Kind> thatOptionalKind = that.getOptionalKind();
+      final Optional<List<String>> thatOptionalTexts = that.getOptionalTexts();
+      final Optional<Boolean> thatOptionalFlag = that.getOptionalFlag();
+      final Optional<IItem> thatOptionalItem = that.getOptionalItem();
+      final Optional<Long> thatOptionalNumber = that.getOptionalNumber();
+      final Optional<String> thatOptionalText = that.getOptionalText();
+
       if (!noteIsShort(that.getItem())) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -312,49 +323,49 @@ public class Verification {
             "Note of the item must be short")));
       }
 
-      if (!kindIsNotGamma(that.getOptionalKind())) {
+      if (!kindIsNotGamma(thatOptionalKind)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "Kind must not be gamma")));
       }
 
-      if (!textsAreFew(that.getOptionalTexts())) {
+      if (!textsAreFew(thatOptionalTexts)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "Texts must be few")));
       }
 
-      if (!flagIsNotSet(that.getOptionalFlag())) {
+      if (!flagIsNotSet(thatOptionalFlag)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "Flag must not be set")));
       }
 
-      if (!itemHasName(that.getOptionalItem())) {
+      if (!itemHasName(thatOptionalItem)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "Optional item must have a name")));
       }
 
-      if (!numberIsSmall(that.getOptionalNumber())) {
+      if (!numberIsSmall(thatOptionalNumber)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "Number must be small")));
       }
 
-      if (!forwardsText(that.getOptionalText())) {
+      if (!forwardsText(thatOptionalText)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "Text must not be banned")));
       }
 
-      if (!textIsShort(that.getOptionalText())) {
+      if (!textIsShort(thatOptionalText)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -362,8 +373,8 @@ public class Verification {
       }
 
       if (!(
-        (!that.getOptionalItem().isPresent())
-        || itemIsNamed(that.getOptionalItem().orElse(null)))) {
+        (!thatOptionalItem.isPresent())
+        || itemIsNamed(thatOptionalItem.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -371,8 +382,8 @@ public class Verification {
       }
 
       if (!(
-        (!that.getOptionalNumber().isPresent())
-        || numberIsPositive(that.getOptionalNumber().orElse(null)))) {
+        (!thatOptionalNumber.isPresent())
+        || numberIsPositive(thatOptionalNumber.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -380,8 +391,8 @@ public class Verification {
       }
 
       if (!(
-        (!that.getOptionalKind().isPresent())
-        || kindIsKnown(that.getOptionalKind().orElse(null)))) {
+        (!thatOptionalKind.isPresent())
+        || kindIsKnown(thatOptionalKind.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -397,9 +408,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getOptionalNumber().isPresent()) {
+      if (thatOptionalNumber.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalNumber().get())
+          Stream.of(thatOptionalNumber.get())
             .flatMap(Verification::verify_long)
               .map(error -> {
                 error.prependSegment(
@@ -408,9 +419,9 @@ public class Verification {
               }));
       }
 
-      if (that.getOptionalItem().isPresent()) {
+      if (thatOptionalItem.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalItem().get())
+          Stream.of(thatOptionalItem.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -419,9 +430,9 @@ public class Verification {
               }));
       }
 
-      if (that.getOptionalKind().isPresent()) {
+      if (thatOptionalKind.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalKind().get())
+          Stream.of(thatOptionalKind.get())
             .flatMap(Verification::verifyKind)
               .map(error -> {
                 error.prependSegment(

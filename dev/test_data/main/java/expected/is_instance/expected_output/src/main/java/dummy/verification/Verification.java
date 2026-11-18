@@ -28,6 +28,7 @@ import dummy.types.enums.*;
 import dummy.types.model.*;
 import dummy.visitation.AbstractTransformer;
 import java.util.List;
+import java.util.Optional;
 
 public class Verification {
   /**
@@ -254,6 +255,8 @@ public class Verification {
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<IElement> thatOptionalElement = that.getOptionalElement();
+
       if (!hasLeafInTree(that.getRoot())) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -300,10 +303,10 @@ public class Verification {
 
       if (!(
         !(
-            (that.getOptionalElement().isPresent())
-            && that.getOptionalElement().get() instanceof ILeaf
+            (thatOptionalElement.isPresent())
+            && thatOptionalElement.get() instanceof ILeaf
         )
-        || (StringHelpers.len(((ILeaf) that.getOptionalElement().get()).getText()) > 0))) {
+        || (StringHelpers.len(((ILeaf) thatOptionalElement.get()).getText()) > 0))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -319,9 +322,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getOptionalElement().isPresent()) {
+      if (thatOptionalElement.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalElement().get())
+          Stream.of(thatOptionalElement.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
