@@ -27,6 +27,7 @@ import dummy.reporting.Reporting;
 import dummy.types.enums.*;
 import dummy.types.model.*;
 import dummy.visitation.AbstractTransformer;
+import java.util.Optional;
 
 public class Verification {
   /**
@@ -164,6 +165,9 @@ public class Verification {
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<Long> thatOptionalNumber = that.getOptionalNumber();
+      final Optional<Double> thatOptionalRatio = that.getOptionalRatio();
+
       if (!((Math.floorMod(that.getOffset(), 7L)) == (3))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -239,10 +243,10 @@ public class Verification {
       }
 
       if (!(
-        !(that.getOptionalNumber().isPresent())
+        !(thatOptionalNumber.isPresent())
         || (
-            (Math.floorMod(that.getOptionalNumber().get(), 5L)) == (4)
-            && Math.abs(that.getOptionalNumber().get()) < 100
+            (Math.floorMod(thatOptionalNumber.get(), 5L)) == (4)
+            && Math.abs(thatOptionalNumber.get()) < 100
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -252,10 +256,10 @@ public class Verification {
       }
 
       if (!(
-        !(that.getOptionalRatio().isPresent())
+        !(thatOptionalRatio.isPresent())
         || (
-            (-that.getOptionalRatio().get()) < (0.5)
-            && Math.abs(that.getOptionalRatio().get()) < 2.0
+            (-thatOptionalRatio.get()) < (0.5)
+            && Math.abs(thatOptionalRatio.get()) < 2.0
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -327,9 +331,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getOptionalNumber().isPresent()) {
+      if (thatOptionalNumber.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalNumber().get())
+          Stream.of(thatOptionalNumber.get())
             .flatMap(Verification::verify_long)
               .map(error -> {
                 error.prependSegment(

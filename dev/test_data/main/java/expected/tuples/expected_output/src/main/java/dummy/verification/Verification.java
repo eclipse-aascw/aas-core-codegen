@@ -175,6 +175,8 @@ public class Verification {
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<Tuple2<String, IAbstractItem>> thatOptionalPair = that.getOptionalPair();
+
       if (!(that.getPair().item2() > 0)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -190,8 +192,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getOptionalPair().isPresent())
-        || (that.getOptionalPair().get().size() == 2))) {
+        !(thatOptionalPair.isPresent())
+        || (thatOptionalPair.get().size() == 2))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -225,9 +227,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getOptionalPair().isPresent()) {
+      if (thatOptionalPair.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalPair().get())
+          Stream.of(thatOptionalPair.get())
             .flatMap(Verification::verifyTupleOf2_string_IAbstractItem)
               .map(error -> {
                 error.prependSegment(

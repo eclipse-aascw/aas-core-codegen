@@ -81,10 +81,9 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
     that.setGridOfUnions(
       wrapListOf_ListOf_SomeUnion(that.getGridOfUnions()));
 
-    if (that.getOptionalGridOfItems().isPresent()) {
-      that.setOptionalGridOfItems(
-        wrapListOf_ListOf_IAbstractItem(that.getOptionalGridOfItems().get()));
-    }
+    that.getOptionalGridOfItems().ifPresent(value -> {
+      that.setOptionalGridOfItems(wrapListOf_ListOf_IAbstractItem(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()

@@ -28,6 +28,7 @@ import dummy.types.enums.*;
 import dummy.types.model.*;
 import dummy.visitation.AbstractTransformer;
 import java.util.List;
+import java.util.Optional;
 
 public class Verification {
   /**
@@ -235,6 +236,8 @@ public class Verification {
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<Long> thatMaybeCount = that.getMaybeCount();
+
       if (!(
         !(that.getTexts().size() > 0)
         || (!Objects.equals(that.textAt((long) (that.getTexts().size() - 1)), "")))) {
@@ -323,9 +326,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getMaybeCount().isPresent()) {
+      if (thatMaybeCount.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getMaybeCount().get())
+          Stream.of(thatMaybeCount.get())
             .flatMap(Verification::verify_long)
               .map(error -> {
                 error.prependSegment(

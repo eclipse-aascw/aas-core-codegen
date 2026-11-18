@@ -28,6 +28,7 @@ import dummy.types.enums.*;
 import dummy.types.model.*;
 import dummy.visitation.AbstractTransformer;
 import java.util.List;
+import java.util.Optional;
 
 public class Verification {
   /**
@@ -113,9 +114,11 @@ public class Verification {
       IIecContent that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
-      if (that.getDefinition().isPresent()) {
+      final Optional<List<ILangString>> thatDefinition = that.getDefinition();
+
+      if (thatDefinition.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDefinition().get())
+          Stream.of(thatDefinition.get())
             .flatMap(Verification::verifyListOf_ILangString)
               .map(error -> {
                 error.prependSegment(
@@ -159,9 +162,11 @@ public class Verification {
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<ISpecification>> thatSpecifications = that.getSpecifications();
+
       if (!(
-        !(that.getSpecifications().isPresent())
-        || iecContentsHaveDefinitionInEnglish(that.getSpecifications().orElse(null)))) {
+        !(thatSpecifications.isPresent())
+        || iecContentsHaveDefinitionInEnglish(thatSpecifications.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -197,9 +202,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getSpecifications().isPresent()) {
+      if (thatSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSpecifications().get())
+          Stream.of(thatSpecifications.get())
             .flatMap(Verification::verifyListOf_ISpecification)
               .map(error -> {
                 error.prependSegment(

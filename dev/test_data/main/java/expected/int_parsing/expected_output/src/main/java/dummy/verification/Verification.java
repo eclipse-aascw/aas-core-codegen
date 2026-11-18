@@ -27,6 +27,7 @@ import dummy.reporting.Reporting;
 import dummy.types.enums.*;
 import dummy.types.model.*;
 import dummy.visitation.AbstractTransformer;
+import java.util.Optional;
 
 public class Verification {
   private static Pattern constructMatchesDecimal() {
@@ -177,6 +178,8 @@ public class Verification {
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<String> thatMaybeNumber = that.getMaybeNumber();
+
       if (!isSafeInteger(that.getNumber())) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -235,8 +238,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getMaybeNumber().isPresent())
-        || isSafeInteger(that.getMaybeNumber().orElse(null)))) {
+        !(thatMaybeNumber.isPresent())
+        || isSafeInteger(thatMaybeNumber.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
