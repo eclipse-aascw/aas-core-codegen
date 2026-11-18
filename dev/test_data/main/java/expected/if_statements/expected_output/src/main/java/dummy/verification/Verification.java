@@ -467,9 +467,11 @@ public class Verification {
       IContainer that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
-      if (that.getChildren().isPresent()) {
+      final Optional<List<IParent>> thatChildren = that.getChildren();
+
+      if (thatChildren.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getChildren().get())
+          Stream.of(thatChildren.get())
             .flatMap(Verification::verifyListOf_IParent)
               .map(error -> {
                 error.prependSegment(
@@ -485,6 +487,9 @@ public class Verification {
     public Stream<Reporting.Error> transformSomething(
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
+
+      final Optional<IParent> thatOptionalParent = that.getOptionalParent();
+      final Optional<List<IParent>> thatParents = that.getParents();
 
       if (!ifWithContinueInFor(that.getNumber())) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
@@ -545,8 +550,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getOptionalParent().isPresent())
-        || (!hasMarkerInTree(that.getOptionalParent().orElse(null))))) {
+        !(thatOptionalParent.isPresent())
+        || (!hasMarkerInTree(thatOptionalParent.orElse(null))))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -555,12 +560,12 @@ public class Verification {
 
       if (!(
         !(
-            (that.getOptionalParent().isPresent())
-            && (that.getParents().isPresent())
+            (thatOptionalParent.isPresent())
+            && (thatParents.isPresent())
         )
         || lastChildAIsSmall(
-            that.getOptionalParent().orElse(null),
-            that.getParents().orElse(null)))) {
+            thatOptionalParent.orElse(null),
+            thatParents.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -568,8 +573,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getOptionalParent().isPresent())
-        || textOrDefaultIsShort(that.getOptionalParent().orElse(null)))) {
+        !(thatOptionalParent.isPresent())
+        || textOrDefaultIsShort(thatOptionalParent.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -577,8 +582,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getParents().isPresent())
-        || textsBeforeContainerAreShort(that.getParents().orElse(null)))) {
+        !(thatParents.isPresent())
+        || textsBeforeContainerAreShort(thatParents.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -586,8 +591,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getParents().isPresent())
-        || childAsHaveTexts(that.getParents().orElse(null)))) {
+        !(thatParents.isPresent())
+        || childAsHaveTexts(thatParents.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -595,22 +600,21 @@ public class Verification {
       }
 
       if (!(
-        narrowingAfterTheOnlyCompletingBranch(that.getOptionalParent()))) {
+        narrowingAfterTheOnlyCompletingBranch(thatOptionalParent))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "Optional parent as Child_a must have a_only above minus ten")));
       }
 
-      if (!(
-        narrowingAfterEarlyReturn(that.getOptionalParent()))) {
+      if (!narrowingAfterEarlyReturn(thatOptionalParent)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "Optional parent as Child_b must have a small b_only")));
       }
 
-      if (!narrowingInElifAndElse(that.getOptionalParent())) {
+      if (!narrowingInElifAndElse(thatOptionalParent)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -618,7 +622,7 @@ public class Verification {
             "b_only")));
       }
 
-      if (!narrowingInBody(that.getOptionalParent())) {
+      if (!narrowingInBody(thatOptionalParent)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -652,9 +656,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getOptionalParent().isPresent()) {
+      if (thatOptionalParent.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalParent().get())
+          Stream.of(thatOptionalParent.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -663,9 +667,9 @@ public class Verification {
               }));
       }
 
-      if (that.getParents().isPresent()) {
+      if (thatParents.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getParents().get())
+          Stream.of(thatParents.get())
             .flatMap(Verification::verifyListOf_IParent)
               .map(error -> {
                 error.prependSegment(

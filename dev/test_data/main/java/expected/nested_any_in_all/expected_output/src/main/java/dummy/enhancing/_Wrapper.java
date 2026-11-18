@@ -76,10 +76,9 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getDefinition().isPresent()) {
-      that.setDefinition(
-        wrapListOf_ILangString(that.getDefinition().get()));
-    }
+    that.getDefinition().ifPresent(value -> {
+      that.setDefinition(wrapListOf_ILangString(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -146,10 +145,9 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
     that.setLangStringSets(
       wrapListOf_ILangStringSet(that.getLangStringSets()));
 
-    if (that.getSpecifications().isPresent()) {
-      that.setSpecifications(
-        wrapListOf_ISpecification(that.getSpecifications().get()));
-    }
+    that.getSpecifications().ifPresent(value -> {
+      that.setSpecifications(wrapListOf_ISpecification(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()

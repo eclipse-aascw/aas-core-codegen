@@ -202,9 +202,9 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
 
     that.setRoot(wrap(that.getRoot()));
 
-    if (that.getOptionalElement().isPresent()) {
-      that.setOptionalElement(wrap(that.getOptionalElement().get()));
-    }
+    that.getOptionalElement().ifPresent(value -> {
+      that.setOptionalElement(wrap(value));
+    });
 
     that.setValue(wrap(that.getValue()));
 

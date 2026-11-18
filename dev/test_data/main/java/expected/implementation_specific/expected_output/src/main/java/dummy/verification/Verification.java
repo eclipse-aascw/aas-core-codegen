@@ -28,6 +28,7 @@ import dummy.types.enums.*;
 import dummy.types.model.*;
 import dummy.visitation.AbstractTransformer;
 import java.util.List;
+import java.util.Optional;
 
 public class Verification {
   /**
@@ -113,6 +114,8 @@ public class Verification {
       IBox that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<Color> thatColor = that.getColor();
+
       if (!hasBalancedBrackets(that.getLabel())) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -120,9 +123,9 @@ public class Verification {
             "The square brackets in the label must be balanced.")));
       }
 
-      if (that.getColor().isPresent()) {
+      if (thatColor.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getColor().get())
+          Stream.of(thatColor.get())
             .flatMap(Verification::verifyColor)
               .map(error -> {
                 error.prependSegment(
