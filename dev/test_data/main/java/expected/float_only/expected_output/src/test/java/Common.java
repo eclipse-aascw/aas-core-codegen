@@ -77,8 +77,8 @@ public class Common {
     }
 
     List<Path> result;
-    try (Stream<Path> walk = Files.walk(path)) {
-      result = walk.filter(p -> Files.isDirectory(p)).collect(Collectors.toList());
+    try (Stream<Path> children = Files.list(path)) {
+      result = children.filter(p -> Files.isDirectory(p)).collect(Collectors.toList());
     }
     return result;
   }
