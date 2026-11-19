@@ -54,10 +54,9 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getOptionalChildren().isPresent()) {
-      that.setOptionalChildren(
-        wrapListOf_INode(that.getOptionalChildren().get()));
-    }
+    that.getOptionalChildren().ifPresent(value -> {
+      that.setOptionalChildren(wrapListOf_INode(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -79,9 +78,9 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       );
     }
 
-    if (that.getOptionalItem().isPresent()) {
-      that.setOptionalItem(wrap(that.getOptionalItem().get()));
-    }
+    that.getOptionalItem().ifPresent(value -> {
+      that.setOptionalItem(wrap(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
@@ -105,9 +104,9 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
 
     that.setItem(wrap(that.getItem()));
 
-    if (that.getOptionalItem().isPresent()) {
-      that.setOptionalItem(wrap(that.getOptionalItem().get()));
-    }
+    that.getOptionalItem().ifPresent(value -> {
+      that.setOptionalItem(wrap(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()

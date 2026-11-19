@@ -391,6 +391,9 @@ public class Verification {
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<String>> thatOptionalTexts = that.getOptionalTexts();
+      final Optional<Kind> thatOptionalKind = that.getOptionalKind();
+
       if (!(
         that.optionalTextsAreUniqueIgnoring(Constants.reservedTexts))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
@@ -400,7 +403,7 @@ public class Verification {
       }
 
       if (!(
-        textsAreDisjoint(that.getTexts(), that.getOptionalTexts()))) {
+        textsAreDisjoint(that.getTexts(), thatOptionalTexts))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -472,8 +475,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getOptionalKind().isPresent())
-        || (!Constants.specialKinds.contains(that.getOptionalKind().get())))) {
+        !(thatOptionalKind.isPresent())
+        || (!Constants.specialKinds.contains(thatOptionalKind.get())))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -481,7 +484,7 @@ public class Verification {
       }
 
       if (!(
-        someKindIsNotSpecial(that.getKinds(), that.getOptionalKind()))) {
+        someKindIsNotSpecial(that.getKinds(), thatOptionalKind))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -562,9 +565,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getOptionalKind().isPresent()) {
+      if (thatOptionalKind.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalKind().get())
+          Stream.of(thatOptionalKind.get())
             .flatMap(Verification::verifyKind)
               .map(error -> {
                 error.prependSegment(
@@ -581,6 +584,9 @@ public class Verification {
       ICollection that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<Set<String>> thatOptionalTexts = that.getOptionalTexts();
+      final Optional<Set<Direction>> thatOptionalDirections = that.getOptionalDirections();
+
       if (!that.textsAreNotAllIn(Constants.reservedTexts)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -589,8 +595,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getOptionalTexts().isPresent())
-        || (SetHelpers.intersection(that.getOptionalTexts().get(), that.getTexts()).size() == 0))) {
+        !(thatOptionalTexts.isPresent())
+        || (SetHelpers.intersection(thatOptionalTexts.get(), that.getTexts()).size() == 0))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -656,9 +662,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getOptionalDirections().isPresent()) {
+      if (thatOptionalDirections.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalDirections().get())
+          Stream.of(thatOptionalDirections.get())
             .flatMap(Verification::verifySetOf_Direction)
               .map(error -> {
                 error.prependSegment(

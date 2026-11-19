@@ -103,8 +103,8 @@ public static List<Path> findDirs(Path path) throws IOException {{
 {I}}}
 
 {I}List<Path> result;
-{I}try (Stream<Path> walk = Files.walk(path)) {{
-{II}result = walk.filter(p -> Files.isDirectory(p)).collect(Collectors.toList());
+{I}try (Stream<Path> children = Files.list(path)) {{
+{II}result = children.filter(p -> Files.isDirectory(p)).collect(Collectors.toList());
 {I}}}
 {I}return result;
 }}""",

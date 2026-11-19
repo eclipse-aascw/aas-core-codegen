@@ -240,6 +240,28 @@ public void {test_name}() throws IOException, XMLStreamException {{
     return result
 
 
+def _double_element_names(symbol_table: intermediate.SymbolTable) -> List[str]:
+    """List the names of the XML elements which hold an ``xs:double``."""
+    names = set()
+
+    for cls in symbol_table.concrete_classes:
+        for prop in cls.properties:
+            type_anno = prop.type_annotation
+            if isinstance(type_anno, intermediate.OptionalTypeAnnotation):
+                type_anno = type_anno.value
+
+            if (
+                isinstance(type_anno, intermediate.PrimitiveTypeAnnotation)
+                and type_anno.a_type == intermediate.PrimitiveType.FLOAT
+            ):
+                names.add(str(naming.xml_property(prop.name)))
+
+    if intermediate_uses.json_types(symbol_table):
+        names.add("double")
+
+    return sorted(names)
+
+
 def generate(
     package: java_common.PackageIdentifier,
     symbol_table: intermediate.SymbolTable,
@@ -262,7 +284,51 @@ Xmlization.NAMESPACE.equals(EVENT.getName().getNamespaceURI())
         else Stripped("Xmlization.NAMESPACE.equals(EVENT.getName().getNamespaceURI())")
     )
 
+    double_element_names = ", ".join(
+        java_common.string_literal(name)
+        for name in _double_element_names(symbol_table)
+    )
+
     blocks: List[Stripped] = [
+        Stripped(
+            f"""\
+// An xs:double has several lexical forms, so we compare its values and not
+// the text, which is up to the serializer.
+private static final Set<String> DOUBLE_ELEMENT_NAMES =
+{I}new HashSet<>(Arrays.asList({double_element_names}));"""
+        ),
+        Stripped(
+            f"""\
+private static double parseDouble(String text) {{
+{I}switch (text) {{
+{II}case "INF":
+{III}return Double.POSITIVE_INFINITY;
+{II}case "-INF":
+{III}return Double.NEGATIVE_INFINITY;
+{II}default:
+{III}return Double.parseDouble(text);
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+private static boolean contentsEqual(
+{I}String elementName, String expectedContent, String gotContent) {{
+{I}if (expectedContent.equals(gotContent)) {{
+{II}return true;
+{I}}}
+
+{I}if (!DOUBLE_ELEMENT_NAMES.contains(elementName)) {{
+{II}return false;
+{I}}}
+
+{I}try {{
+{II}return Double.compare(parseDouble(expectedContent), parseDouble(gotContent)) == 0;
+{I}}} catch (NumberFormatException exception) {{
+{II}return false;
+{I}}}
+}}"""
+        ),
         Stripped(
             f"""\
 public static Optional<Reporting.Error> checkElementsEqual(
@@ -282,7 +348,7 @@ public static Optional<Reporting.Error> checkElementsEqual(
 {IIIIIIIIII}.getName()
 {IIIIIIIIII}.getLocalPart()
 {IIIIIIIIII}.equals(expectedName))
-{IIIIII}.filter(entry -> entry.getValue().equals(expectedContent))
+{IIIIII}.filter(entry -> contentsEqual(expectedName, expectedContent, entry.getValue()))
 {IIIIIII}.findAny();
 {IIII}if (!got.isPresent()) {{
 {IIIII}final Reporting.Error error =
@@ -670,10 +736,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import javax.xml.stream.*;
 import javax.xml.stream.events.XMLEvent;
 import org.junit.jupiter.api.Test;
