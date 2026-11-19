@@ -36,6 +36,9 @@ public class QueryCondition implements IQueryCondition {
    */
   private String notEq;
 
+  public QueryCondition() {
+  }
+
   public QueryCondition(
     String eq,
     String notEq) {

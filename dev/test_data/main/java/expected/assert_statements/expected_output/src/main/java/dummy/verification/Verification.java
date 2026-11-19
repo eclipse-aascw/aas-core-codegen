@@ -242,6 +242,8 @@ public class Verification {
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<String> thatOptionalText = that.getOptionalText();
+
       if (!(that.doubledNumber() != 666)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -274,8 +276,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getOptionalText().isPresent())
-        || optionalTextIsShort(that.getOptionalText()))) {
+        !(thatOptionalText.isPresent())
+        || optionalTextIsShort(thatOptionalText))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +

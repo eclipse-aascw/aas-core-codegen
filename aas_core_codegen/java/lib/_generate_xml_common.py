@@ -670,7 +670,7 @@ public static <T> void writeElement(
  * <p>This is what an item of a list or of a tuple is written with. It
  * contributes no segment to the error path: its container has already
  * contributed the item's index, and the index selects this very element
- * (see {{@link #writeListOf}} in the generated writers).
+ * (see {{@code writeListOf}} in the generated writers).
  */
 public static <T> void writeElement(
 {I}String name,
@@ -876,6 +876,7 @@ public final class XmlCommon {{
         Stripped("import javax.xml.stream.XMLStreamWriter;"),
         Stripped("import java.util.Optional;"),
         Stripped("import java.util.regex.Pattern;"),
+        Stripped(f"import {package}.types.model.*;"),
         Stripped(f"import {package}.reporting.Reporting;"),
     ]
 

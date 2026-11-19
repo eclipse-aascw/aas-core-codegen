@@ -32,6 +32,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class Verification {
   /**
@@ -253,6 +254,10 @@ public class Verification {
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<JsonNode> thatOptionalValue = that.getOptionalValue();
+      final Optional<ArrayNode> thatOptionalValues = that.getOptionalValues();
+      final Optional<ObjectNode> thatOptionalMapping = that.getOptionalMapping();
+
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(that.getValue())
           .flatMap(Verification::verifyJsonValue)
@@ -289,9 +294,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getOptionalValue().isPresent()) {
+      if (thatOptionalValue.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalValue().get())
+          Stream.of(thatOptionalValue.get())
             .flatMap(Verification::verifyJsonValue)
               .map(error -> {
                 error.prependSegment(
@@ -300,9 +305,9 @@ public class Verification {
               }));
       }
 
-      if (that.getOptionalValues().isPresent()) {
+      if (thatOptionalValues.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalValues().get())
+          Stream.of(thatOptionalValues.get())
             .flatMap(Verification::verifyJsonArray)
               .map(error -> {
                 error.prependSegment(
@@ -311,9 +316,9 @@ public class Verification {
               }));
       }
 
-      if (that.getOptionalMapping().isPresent()) {
+      if (thatOptionalMapping.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOptionalMapping().get())
+          Stream.of(thatOptionalMapping.get())
             .flatMap(Verification::verifyJsonObject)
               .map(error -> {
                 error.prependSegment(

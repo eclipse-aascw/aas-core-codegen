@@ -432,11 +432,13 @@ public class Verification {
       IContainer that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<ISpecialItem>> thatSpecialItems = that.getSpecialItems();
+
       if (!(
-        !(that.getSpecialItems().isPresent())
+        !(thatSpecialItems.isPresent())
         || (
-            that.getSpecialItems().get().stream().allMatch(
-                specialItem -> containsSpecialItem(specialItem, that.getSpecialItems().orElse(null)))
+            thatSpecialItems.get().stream().allMatch(
+                specialItem -> containsSpecialItem(specialItem, thatSpecialItems.orElse(null)))
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -463,7 +465,7 @@ public class Verification {
       }
 
       if (!(
-        aliasedNamesAreUnique(that.getSomeItems(), that.getSpecialItems()))) {
+        aliasedNamesAreUnique(that.getSomeItems(), thatSpecialItems))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -512,7 +514,7 @@ public class Verification {
             "Count of the items must match the number of the items.")));
       }
 
-      if (!optionalNamesAreUnique(that.getSpecialItems())) {
+      if (!optionalNamesAreUnique(thatSpecialItems)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -520,8 +522,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSpecialItems().isPresent())
-        || firstIsSpecial(that.getSpecialItems().orElse(null)))) {
+        !(thatSpecialItems.isPresent())
+        || firstIsSpecial(thatSpecialItems.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -529,8 +531,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSpecialItems().isPresent())
-        || levelsArePositive(that.getSpecialItems().orElse(null)))) {
+        !(thatSpecialItems.isPresent())
+        || levelsArePositive(thatSpecialItems.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -555,7 +557,7 @@ public class Verification {
       }
 
       if (!(
-        someNamesAreUnique(that.getSomeItems(), that.getSpecialItems()))) {
+        someNamesAreUnique(that.getSomeItems(), thatSpecialItems))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -587,9 +589,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getSpecialItems().isPresent()) {
+      if (thatSpecialItems.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSpecialItems().get())
+          Stream.of(thatSpecialItems.get())
             .flatMap(Verification::verifyListOf_ISpecialItem)
               .map(error -> {
                 error.prependSegment(

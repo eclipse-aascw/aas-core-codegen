@@ -232,25 +232,22 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
     that.setTupleProperty(
       wrapTupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(that.getTupleProperty()));
 
-    if (that.getOptionalStructuralProperty().isPresent()) {
-      that.setOptionalStructuralProperty(
-        wrap(that.getOptionalStructuralProperty().get()));
-    }
+    that.getOptionalStructuralProperty().ifPresent(value -> {
+      that.setOptionalStructuralProperty(wrap(value));
+    });
 
-    if (that.getOptionalMixedProperty().isPresent()) {
-      that.setOptionalMixedProperty(
-        wrap(that.getOptionalMixedProperty().get()));
-    }
+    that.getOptionalMixedProperty().ifPresent(value -> {
+      that.setOptionalMixedProperty(wrap(value));
+    });
 
-    if (that.getOptionalModelTypedProperty().isPresent()) {
-      that.setOptionalModelTypedProperty(
-        wrap(that.getOptionalModelTypedProperty().get()));
-    }
+    that.getOptionalModelTypedProperty().ifPresent(value -> {
+      that.setOptionalModelTypedProperty(wrap(value));
+    });
 
-    if (that.getOptionalListOverlappingProperty().isPresent()) {
+    that.getOptionalListOverlappingProperty().ifPresent(value -> {
       that.setOptionalListOverlappingProperty(
-        wrapListOf_OverlappingUnion(that.getOptionalListOverlappingProperty().get()));
-    }
+        wrapListOf_OverlappingUnion(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
