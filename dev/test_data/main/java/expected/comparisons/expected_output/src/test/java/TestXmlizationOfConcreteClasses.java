@@ -33,6 +33,39 @@ import javax.xml.stream.events.XMLEvent;
 import org.junit.jupiter.api.Test;
 
 public class TestXmlizationOfConcreteClasses {
+  // An xs:double has several lexical forms, so we compare its values and not
+  // the text, which is up to the serializer.
+  private static final java.util.Set<String> DOUBLE_ELEMENT_NAMES =
+    new java.util.HashSet<>(java.util.Arrays.asList("ratio"));
+
+  private static double parseDouble(String text) {
+    switch (text) {
+      case "INF":
+        return java.lang.Double.POSITIVE_INFINITY;
+      case "-INF":
+        return java.lang.Double.NEGATIVE_INFINITY;
+      default:
+        return java.lang.Double.parseDouble(text);
+    }
+  }
+
+  private static boolean contentsEqual(
+    String elementName, String expectedContent, String gotContent) {
+    if (expectedContent.equals(gotContent)) {
+      return true;
+    }
+
+    if (!DOUBLE_ELEMENT_NAMES.contains(elementName)) {
+      return false;
+    }
+
+    try {
+      return java.lang.Double.compare(parseDouble(expectedContent), parseDouble(gotContent)) == 0;
+    } catch (java.lang.NumberFormatException exception) {
+      return false;
+    }
+  }
+
   public static Optional<Reporting.Error> checkElementsEqual(
     XMLEvent expected, String expectedContent, Map<XMLEvent, String> outputMap) {
     switch (expected.getEventType()) {
@@ -50,7 +83,7 @@ public class TestXmlizationOfConcreteClasses {
                       .getName()
                       .getLocalPart()
                       .equals(expectedName))
-              .filter(entry -> entry.getValue().equals(expectedContent))
+              .filter(entry -> contentsEqual(expectedName, expectedContent, entry.getValue()))
                 .findAny();
           if (!got.isPresent()) {
             final Reporting.Error error =
