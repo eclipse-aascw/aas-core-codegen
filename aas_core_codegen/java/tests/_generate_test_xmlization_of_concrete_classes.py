@@ -240,6 +240,36 @@ public void {test_name}() throws IOException, XMLStreamException {{
     return result
 
 
+def _double_element_names(symbol_table: intermediate.SymbolTable) -> List[str]:
+    """
+    List the XML elements which hold an ``xs:double``.
+
+    Each element is identified as ``<parent>/<name>``, since different classes
+    can have properties of the same name, but of different types.
+    """
+    names = set()
+
+    for cls in symbol_table.concrete_classes:
+        for prop in cls.properties:
+            type_anno = prop.type_annotation
+            if isinstance(type_anno, intermediate.OptionalTypeAnnotation):
+                type_anno = type_anno.value
+
+            if (
+                isinstance(type_anno, intermediate.PrimitiveTypeAnnotation)
+                and type_anno.a_type == intermediate.PrimitiveType.FLOAT
+            ):
+                names.add(
+                    f"{naming.xml_class_name(cls.name)}/"
+                    f"{naming.xml_property(prop.name)}"
+                )
+
+    if intermediate_uses.json_types(symbol_table):
+        names.add("value/double")
+
+    return sorted(names)
+
+
 def generate(
     package: java_common.PackageIdentifier,
     symbol_table: intermediate.SymbolTable,
@@ -262,11 +292,59 @@ Xmlization.NAMESPACE.equals(EVENT.getName().getNamespaceURI())
         else Stripped("Xmlization.NAMESPACE.equals(EVENT.getName().getNamespaceURI())")
     )
 
+    double_element_names = ", ".join(
+        java_common.string_literal(name) for name in _double_element_names(symbol_table)
+    )
+
     blocks: List[Stripped] = [
         Stripped(
             f"""\
+// An xs:double has several lexical forms, so we compare its values and not
+// the text, which is up to the serializer. The elements are given as
+// "parent/name" since property names are unique only within a class.
+private static final java.util.Set<String> DOUBLE_ELEMENT_NAMES =
+{I}new java.util.HashSet<>(java.util.Arrays.asList({double_element_names}));"""
+        ),
+        Stripped(
+            f"""\
+private static double parseDouble(String text) {{
+{I}switch (text) {{
+{II}case "INF":
+{III}return java.lang.Double.POSITIVE_INFINITY;
+{II}case "-INF":
+{III}return java.lang.Double.NEGATIVE_INFINITY;
+{II}default:
+{III}return java.lang.Double.parseDouble(text);
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+private static boolean contentsEqual(
+{I}String qualifiedName, String expectedContent, String gotContent) {{
+{I}if (expectedContent.equals(gotContent)) {{
+{II}return true;
+{I}}}
+
+{I}if (!DOUBLE_ELEMENT_NAMES.contains(qualifiedName)) {{
+{II}return false;
+{I}}}
+
+{I}try {{
+{II}return java.lang.Double.compare(parseDouble(expectedContent), parseDouble(gotContent)) == 0;
+{I}}} catch (java.lang.NumberFormatException exception) {{
+{II}return false;
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
 public static Optional<Reporting.Error> checkElementsEqual(
-{I}XMLEvent expected, String expectedContent, Map<XMLEvent, String> outputMap) {{
+{I}XMLEvent expected,
+{I}String expectedContent,
+{I}String expectedParent,
+{I}Map<XMLEvent, String> outputMap,
+{I}Map<XMLEvent, String> outputParents) {{
 {I}switch (expected.getEventType()) {{
 {II}case XMLStreamConstants.START_ELEMENT:
 {III}{{
@@ -281,8 +359,12 @@ public static Optional<Reporting.Error> checkElementsEqual(
 {IIIIIIIIII}.asStartElement()
 {IIIIIIIIII}.getName()
 {IIIIIIIIII}.getLocalPart()
-{IIIIIIIIII}.equals(expectedName))
-{IIIIII}.filter(entry -> entry.getValue().equals(expectedContent))
+{IIIIIIIIII}.equals(expectedName)
+{IIIIIIIII}&& outputParents.get(entry.getKey()).equals(expectedParent))
+{IIIIII}.filter(
+{IIIIIII}entry ->
+{IIIIIIII}contentsEqual(
+{IIIIIIIII}expectedParent + "/" + expectedName, expectedContent, entry.getValue()))
 {IIIIIII}.findAny();
 {IIII}if (!got.isPresent()) {{
 {IIIII}final Reporting.Error error =
@@ -344,13 +426,18 @@ private static String readContent(XMLEventReader reader) throws XMLStreamExcepti
         ),
         Stripped(
             f"""\
-private static Map<XMLEvent, String> buildElementsMap(XMLEventReader reader) throws XMLStreamException {{
+private static Map<XMLEvent, String> buildElementsMap(
+{I}XMLEventReader reader, Map<XMLEvent, String> parents) throws XMLStreamException {{
 {I}final Map<XMLEvent, String> result = new LinkedHashMap<>();
+{I}final java.util.ArrayDeque<String> stack = new java.util.ArrayDeque<>();
 {I}while (reader.hasNext()) {{
 {II}final XMLEvent current = reader.nextEvent();
 {II}if (current.isStartElement()) {{
+{III}parents.put(current, stack.isEmpty() ? "" : stack.peek());
+{III}stack.push(current.asStartElement().getName().getLocalPart());
 {III}result.put(current, readContent(reader));
 {II}}} else if (current.isEndElement()) {{
+{III}stack.pop();
 {III}result.put(current, "");
 {II}}}
 {I}}}
@@ -374,7 +461,8 @@ private static void assertSerializeDeserializeEqualsOriginal(IClass instance, Pa
 final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
 final XMLEventReader outputReader =
 {I}xmlInputFactory.createXMLEventReader(new StringReader(outputText));
-final Map<XMLEvent, String> outputMap = buildElementsMap(outputReader);
+final Map<XMLEvent, String> outputParents = new java.util.HashMap<>();
+final Map<XMLEvent, String> outputMap = buildElementsMap(outputReader, outputParents);
 
 // check the namespace of the output
 for (XMLEvent event : outputMap.keySet()) {{
@@ -392,7 +480,8 @@ for (XMLEvent event : outputMap.keySet()) {{
 
 final XMLEventReader expectedReader =
 {I}xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
-final Map<XMLEvent, String> expectedMap = buildElementsMap(expectedReader);
+final Map<XMLEvent, String> expectedParents = new java.util.HashMap<>();
+final Map<XMLEvent, String> expectedMap = buildElementsMap(expectedReader, expectedParents);
 
 if (expectedMap.size() != outputMap.size()) {{
 {I}fail(
@@ -405,7 +494,8 @@ if (expectedMap.size() != outputMap.size()) {{
 expectedMap.forEach(
 {I}(xmlEvent, content) -> {{
 {II}final Optional<Reporting.Error> inequalityError =
-{IIII}checkElementsEqual(xmlEvent, content, outputMap);
+{IIII}checkElementsEqual(
+{IIIIII}xmlEvent, content, expectedParents.get(xmlEvent), outputMap, outputParents);
 {II}inequalityError.ifPresent(
 {III}error ->
 {IIII}fail(

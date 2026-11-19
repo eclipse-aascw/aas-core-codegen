@@ -33,8 +33,46 @@ import javax.xml.stream.events.XMLEvent;
 import org.junit.jupiter.api.Test;
 
 public class TestXmlizationOfConcreteClasses {
+  // An xs:double has several lexical forms, so we compare its values and not
+  // the text, which is up to the serializer. The elements are given as
+  // "parent/name" since property names are unique only within a class.
+  private static final java.util.Set<String> DOUBLE_ELEMENT_NAMES =
+    new java.util.HashSet<>(java.util.Arrays.asList("value/double"));
+
+  private static double parseDouble(String text) {
+    switch (text) {
+      case "INF":
+        return java.lang.Double.POSITIVE_INFINITY;
+      case "-INF":
+        return java.lang.Double.NEGATIVE_INFINITY;
+      default:
+        return java.lang.Double.parseDouble(text);
+    }
+  }
+
+  private static boolean contentsEqual(
+    String qualifiedName, String expectedContent, String gotContent) {
+    if (expectedContent.equals(gotContent)) {
+      return true;
+    }
+
+    if (!DOUBLE_ELEMENT_NAMES.contains(qualifiedName)) {
+      return false;
+    }
+
+    try {
+      return java.lang.Double.compare(parseDouble(expectedContent), parseDouble(gotContent)) == 0;
+    } catch (java.lang.NumberFormatException exception) {
+      return false;
+    }
+  }
+
   public static Optional<Reporting.Error> checkElementsEqual(
-    XMLEvent expected, String expectedContent, Map<XMLEvent, String> outputMap) {
+    XMLEvent expected,
+    String expectedContent,
+    String expectedParent,
+    Map<XMLEvent, String> outputMap,
+    Map<XMLEvent, String> outputParents) {
     switch (expected.getEventType()) {
       case XMLStreamConstants.START_ELEMENT:
         {
@@ -49,8 +87,12 @@ public class TestXmlizationOfConcreteClasses {
                       .asStartElement()
                       .getName()
                       .getLocalPart()
-                      .equals(expectedName))
-              .filter(entry -> entry.getValue().equals(expectedContent))
+                      .equals(expectedName)
+                    && outputParents.get(entry.getKey()).equals(expectedParent))
+              .filter(
+                entry ->
+                  contentsEqual(
+                    expectedParent + "/" + expectedName, expectedContent, entry.getValue()))
                 .findAny();
           if (!got.isPresent()) {
             final Reporting.Error error =
@@ -108,13 +150,18 @@ public class TestXmlizationOfConcreteClasses {
     return content.toString();
   }
 
-  private static Map<XMLEvent, String> buildElementsMap(XMLEventReader reader) throws XMLStreamException {
+  private static Map<XMLEvent, String> buildElementsMap(
+    XMLEventReader reader, Map<XMLEvent, String> parents) throws XMLStreamException {
     final Map<XMLEvent, String> result = new LinkedHashMap<>();
+    final java.util.ArrayDeque<String> stack = new java.util.ArrayDeque<>();
     while (reader.hasNext()) {
       final XMLEvent current = reader.nextEvent();
       if (current.isStartElement()) {
+        parents.put(current, stack.isEmpty() ? "" : stack.peek());
+        stack.push(current.asStartElement().getName().getLocalPart());
         result.put(current, readContent(reader));
       } else if (current.isEndElement()) {
+        stack.pop();
         result.put(current, "");
       }
     }
@@ -136,7 +183,8 @@ public class TestXmlizationOfConcreteClasses {
   final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
   final XMLEventReader outputReader =
     xmlInputFactory.createXMLEventReader(new StringReader(outputText));
-  final Map<XMLEvent, String> outputMap = buildElementsMap(outputReader);
+  final Map<XMLEvent, String> outputParents = new java.util.HashMap<>();
+  final Map<XMLEvent, String> outputMap = buildElementsMap(outputReader, outputParents);
 
   // check the namespace of the output
   for (XMLEvent event : outputMap.keySet()) {
@@ -156,7 +204,8 @@ public class TestXmlizationOfConcreteClasses {
 
   final XMLEventReader expectedReader =
     xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
-  final Map<XMLEvent, String> expectedMap = buildElementsMap(expectedReader);
+  final Map<XMLEvent, String> expectedParents = new java.util.HashMap<>();
+  final Map<XMLEvent, String> expectedMap = buildElementsMap(expectedReader, expectedParents);
 
   if (expectedMap.size() != outputMap.size()) {
     fail(
@@ -169,7 +218,8 @@ public class TestXmlizationOfConcreteClasses {
   expectedMap.forEach(
     (xmlEvent, content) -> {
       final Optional<Reporting.Error> inequalityError =
-          checkElementsEqual(xmlEvent, content, outputMap);
+          checkElementsEqual(
+              xmlEvent, content, expectedParents.get(xmlEvent), outputMap, outputParents);
       inequalityError.ifPresent(
         error ->
           fail(
