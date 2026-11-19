@@ -80,10 +80,9 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
     that.setTricky(
       wrapTupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result(that.getTricky()));
 
-    if (that.getOptionalPair().isPresent()) {
-      that.setOptionalPair(
-        wrapTupleOf2_string_IAbstractItem(that.getOptionalPair().get()));
-    }
+    that.getOptionalPair().ifPresent(value -> {
+      that.setOptionalPair(wrapTupleOf2_string_IAbstractItem(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()

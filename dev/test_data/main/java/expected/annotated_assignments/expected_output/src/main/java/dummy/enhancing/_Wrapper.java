@@ -100,13 +100,13 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
 
     that.setParents(wrapListOf_IParent(that.getParents()));
 
-    if (that.getOptionalParent().isPresent()) {
-      that.setOptionalParent(wrap(that.getOptionalParent().get()));
-    }
+    that.getOptionalParent().ifPresent(value -> {
+      that.setOptionalParent(wrap(value));
+    });
 
-    if (that.getOptionalMember().isPresent()) {
-      that.setOptionalMember(wrap(that.getOptionalMember().get()));
-    }
+    that.getOptionalMember().ifPresent(value -> {
+      that.setOptionalMember(wrap(value));
+    });
 
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()

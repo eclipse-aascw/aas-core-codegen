@@ -2076,9 +2076,15 @@ public class Verification {
       IExtension that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IReference>> thatSupplementalSemanticIds = that.getSupplementalSemanticIds();
+      final Optional<IReference> thatSemanticId = that.getSemanticId();
+      final Optional<List<IReference>> thatRefersTo = that.getRefersTo();
+      final Optional<String> thatValue = that.getValue();
+      final Optional<DataTypeDefXsd> thatValueType = that.getValueType();
+
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSupplementalSemanticIds().get().size() >= 1))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSupplementalSemanticIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2087,8 +2093,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSemanticId().isPresent()))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSemanticId.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2097,8 +2103,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getRefersTo().isPresent())
-        || (that.getRefersTo().get().size() >= 1))) {
+        !(thatRefersTo.isPresent())
+        || (thatRefersTo.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2106,19 +2112,17 @@ public class Verification {
       }
 
       if (!(
-        !(that.getValue().isPresent())
-        || valueConsistentWithXsdType(
-            that.getValue().orElse(null),
-            that.valueTypeOrDefault()))) {
+        !(thatValue.isPresent())
+        || valueConsistentWithXsdType(thatValue.orElse(null), that.valueTypeOrDefault()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "The value must match the value type.")));
       }
 
-      if (that.getSemanticId().isPresent()) {
+      if (thatSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticId().get())
+          Stream.of(thatSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -2127,9 +2131,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
+      if (thatSupplementalSemanticIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSupplementalSemanticIds().get())
+          Stream.of(thatSupplementalSemanticIds.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -2147,9 +2151,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getValueType().isPresent()) {
+      if (thatValueType.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getValueType().get())
+          Stream.of(thatValueType.get())
             .flatMap(Verification::verifyDataTypeDefXsd)
               .map(error -> {
                 error.prependSegment(
@@ -2158,9 +2162,9 @@ public class Verification {
               }));
       }
 
-      if (that.getValue().isPresent()) {
+      if (thatValue.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getValue().get())
+          Stream.of(thatValue.get())
             .flatMap(Verification::verifyValueDataType)
               .map(error -> {
                 error.prependSegment(
@@ -2169,9 +2173,9 @@ public class Verification {
               }));
       }
 
-      if (that.getRefersTo().isPresent()) {
+      if (thatRefersTo.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getRefersTo().get())
+          Stream.of(thatRefersTo.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -2188,9 +2192,15 @@ public class Verification {
       IAdministrativeInformation that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IEmbeddedDataSpecification>> thatEmbeddedDataSpecifications = that.getEmbeddedDataSpecifications();
+      final Optional<String> thatRevision = that.getRevision();
+      final Optional<String> thatVersion = that.getVersion();
+      final Optional<IReference> thatCreator = that.getCreator();
+      final Optional<String> thatTemplateId = that.getTemplateId();
+
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
-        || (that.getEmbeddedDataSpecifications().get().size() >= 1))) {
+        !(thatEmbeddedDataSpecifications.isPresent())
+        || (thatEmbeddedDataSpecifications.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2199,8 +2209,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getRevision().isPresent())
-        || (that.getVersion().isPresent()))) {
+        !(thatRevision.isPresent())
+        || (thatVersion.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2210,9 +2220,9 @@ public class Verification {
             "revision either. Revision is optional.")));
       }
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
+      if (thatEmbeddedDataSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getEmbeddedDataSpecifications().get())
+          Stream.of(thatEmbeddedDataSpecifications.get())
             .flatMap(Verification::verifyListOf_IEmbeddedDataSpecification)
               .map(error -> {
                 error.prependSegment(
@@ -2221,9 +2231,9 @@ public class Verification {
               }));
       }
 
-      if (that.getVersion().isPresent()) {
+      if (thatVersion.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getVersion().get())
+          Stream.of(thatVersion.get())
             .flatMap(Verification::verifyVersionType)
               .map(error -> {
                 error.prependSegment(
@@ -2232,9 +2242,9 @@ public class Verification {
               }));
       }
 
-      if (that.getRevision().isPresent()) {
+      if (thatRevision.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getRevision().get())
+          Stream.of(thatRevision.get())
             .flatMap(Verification::verifyRevisionType)
               .map(error -> {
                 error.prependSegment(
@@ -2243,9 +2253,9 @@ public class Verification {
               }));
       }
 
-      if (that.getCreator().isPresent()) {
+      if (thatCreator.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getCreator().get())
+          Stream.of(thatCreator.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -2254,9 +2264,9 @@ public class Verification {
               }));
       }
 
-      if (that.getTemplateId().isPresent()) {
+      if (thatTemplateId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getTemplateId().get())
+          Stream.of(thatTemplateId.get())
             .flatMap(Verification::verifyIdentifier)
               .map(error -> {
                 error.prependSegment(
@@ -2273,9 +2283,15 @@ public class Verification {
       IQualifier that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IReference>> thatSupplementalSemanticIds = that.getSupplementalSemanticIds();
+      final Optional<IReference> thatSemanticId = that.getSemanticId();
+      final Optional<String> thatValue = that.getValue();
+      final Optional<QualifierKind> thatKind = that.getKind();
+      final Optional<IReference> thatValueId = that.getValueId();
+
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSupplementalSemanticIds().get().size() >= 1))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSupplementalSemanticIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2284,8 +2300,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSemanticId().isPresent()))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSemanticId.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2294,8 +2310,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getValue().isPresent())
-        || valueConsistentWithXsdType(that.getValue().orElse(null), that.getValueType()))) {
+        !(thatValue.isPresent())
+        || valueConsistentWithXsdType(thatValue.orElse(null), that.getValueType()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2303,9 +2319,9 @@ public class Verification {
             "the data type as defined in value type.")));
       }
 
-      if (that.getSemanticId().isPresent()) {
+      if (thatSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticId().get())
+          Stream.of(thatSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -2314,9 +2330,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
+      if (thatSupplementalSemanticIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSupplementalSemanticIds().get())
+          Stream.of(thatSupplementalSemanticIds.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -2325,9 +2341,9 @@ public class Verification {
               }));
       }
 
-      if (that.getKind().isPresent()) {
+      if (thatKind.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getKind().get())
+          Stream.of(thatKind.get())
             .flatMap(Verification::verifyQualifierKind)
               .map(error -> {
                 error.prependSegment(
@@ -2354,9 +2370,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getValue().isPresent()) {
+      if (thatValue.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getValue().get())
+          Stream.of(thatValue.get())
             .flatMap(Verification::verifyValueDataType)
               .map(error -> {
                 error.prependSegment(
@@ -2365,9 +2381,9 @@ public class Verification {
               }));
       }
 
-      if (that.getValueId().isPresent()) {
+      if (thatValueId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getValueId().get())
+          Stream.of(thatValueId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -2384,9 +2400,19 @@ public class Verification {
       IAssetAdministrationShell that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IExtension>> thatExtensions = that.getExtensions();
+      final Optional<List<ILangStringTextType>> thatDescription = that.getDescription();
+      final Optional<List<ILangStringNameType>> thatDisplayName = that.getDisplayName();
+      final Optional<List<IEmbeddedDataSpecification>> thatEmbeddedDataSpecifications = that.getEmbeddedDataSpecifications();
+      final Optional<List<IReference>> thatSubmodels = that.getSubmodels();
+      final Optional<IReference> thatDerivedFrom = that.getDerivedFrom();
+      final Optional<String> thatCategory = that.getCategory();
+      final Optional<String> thatIdShort = that.getIdShort();
+      final Optional<IAdministrativeInformation> thatAdministration = that.getAdministration();
+
       if (!(
-        !(that.getExtensions().isPresent())
-        || (that.getExtensions().get().size() >= 1))) {
+        !(thatExtensions.isPresent())
+        || (thatExtensions.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2394,8 +2420,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getExtensions().isPresent())
-        || extensionNamesAreUnique(that.getExtensions().orElse(null)))) {
+        !(thatExtensions.isPresent())
+        || extensionNamesAreUnique(thatExtensions.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2404,8 +2430,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || (that.getDescription().get().size() >= 1))) {
+        !(thatDescription.isPresent())
+        || (thatDescription.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2414,8 +2440,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDescription().orElse(null)))) {
+        !(thatDescription.isPresent())
+        || langStringsHaveUniqueLanguages(thatDescription.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2423,8 +2449,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || (that.getDisplayName().get().size() >= 1))) {
+        !(thatDisplayName.isPresent())
+        || (thatDisplayName.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2433,8 +2459,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDisplayName().orElse(null)))) {
+        !(thatDisplayName.isPresent())
+        || langStringsHaveUniqueLanguages(thatDisplayName.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2442,8 +2468,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
-        || (that.getEmbeddedDataSpecifications().get().size() >= 1))) {
+        !(thatEmbeddedDataSpecifications.isPresent())
+        || (thatEmbeddedDataSpecifications.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2452,8 +2478,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSubmodels().isPresent())
-        || (that.getSubmodels().get().size() >= 1))) {
+        !(thatSubmodels.isPresent())
+        || (thatSubmodels.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2461,9 +2487,9 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDerivedFrom().isPresent())
+        !(thatDerivedFrom.isPresent())
         || isModelReferenceTo(
-            that.getDerivedFrom().orElse(null),
+            thatDerivedFrom.orElse(null),
             KeyTypes.ASSET_ADMINISTRATION_SHELL))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -2473,9 +2499,9 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSubmodels().isPresent())
+        !(thatSubmodels.isPresent())
         || (
-            that.getSubmodels().get().stream().allMatch(
+            thatSubmodels.get().stream().allMatch(
                 reference -> isModelReferenceTo(reference, KeyTypes.SUBMODEL))
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
@@ -2484,9 +2510,9 @@ public class Verification {
             "All submodels must be model references to a submodel.")));
       }
 
-      if (that.getExtensions().isPresent()) {
+      if (thatExtensions.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getExtensions().get())
+          Stream.of(thatExtensions.get())
             .flatMap(Verification::verifyListOf_IExtension)
               .map(error -> {
                 error.prependSegment(
@@ -2495,9 +2521,9 @@ public class Verification {
               }));
       }
 
-      if (that.getCategory().isPresent()) {
+      if (thatCategory.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getCategory().get())
+          Stream.of(thatCategory.get())
             .flatMap(Verification::verifyNameType)
               .map(error -> {
                 error.prependSegment(
@@ -2506,9 +2532,9 @@ public class Verification {
               }));
       }
 
-      if (that.getIdShort().isPresent()) {
+      if (thatIdShort.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getIdShort().get())
+          Stream.of(thatIdShort.get())
             .flatMap(Verification::verifyIdShortType)
               .map(error -> {
                 error.prependSegment(
@@ -2517,9 +2543,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDisplayName().isPresent()) {
+      if (thatDisplayName.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDisplayName().get())
+          Stream.of(thatDisplayName.get())
             .flatMap(Verification::verifyListOf_ILangStringNameType)
               .map(error -> {
                 error.prependSegment(
@@ -2528,9 +2554,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDescription().isPresent()) {
+      if (thatDescription.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDescription().get())
+          Stream.of(thatDescription.get())
             .flatMap(Verification::verifyListOf_ILangStringTextType)
               .map(error -> {
                 error.prependSegment(
@@ -2539,9 +2565,9 @@ public class Verification {
               }));
       }
 
-      if (that.getAdministration().isPresent()) {
+      if (thatAdministration.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getAdministration().get())
+          Stream.of(thatAdministration.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -2559,9 +2585,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
+      if (thatEmbeddedDataSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getEmbeddedDataSpecifications().get())
+          Stream.of(thatEmbeddedDataSpecifications.get())
             .flatMap(Verification::verifyListOf_IEmbeddedDataSpecification)
               .map(error -> {
                 error.prependSegment(
@@ -2570,9 +2596,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDerivedFrom().isPresent()) {
+      if (thatDerivedFrom.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDerivedFrom().get())
+          Stream.of(thatDerivedFrom.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -2590,9 +2616,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getSubmodels().isPresent()) {
+      if (thatSubmodels.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSubmodels().get())
+          Stream.of(thatSubmodels.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -2609,15 +2635,20 @@ public class Verification {
       IAssetInformation that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<ISpecificAssetId>> thatSpecificAssetIds = that.getSpecificAssetIds();
+      final Optional<String> thatGlobalAssetId = that.getGlobalAssetId();
+      final Optional<String> thatAssetType = that.getAssetType();
+      final Optional<IResource> thatDefaultThumbnail = that.getDefaultThumbnail();
+
       if (!(
-        !(that.getSpecificAssetIds().isPresent())
+        !(thatSpecificAssetIds.isPresent())
         || (
-            that.getSpecificAssetIds().get().stream().allMatch(
+            thatSpecificAssetIds.get().stream().allMatch(
                 specificAssetId -> !Objects.equals(specificAssetId.getName(), "globalAssetId")
                     || (
-                        (that.getGlobalAssetId().isPresent())
+                        (thatGlobalAssetId.isPresent())
                         && Objects.equals(specificAssetId.getName(), "globalAssetId")
-                        && Objects.equals(specificAssetId.getValue(), that.getGlobalAssetId().get())
+                        && Objects.equals(specificAssetId.getValue(), thatGlobalAssetId.get())
                     ))
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
@@ -2631,12 +2662,12 @@ public class Verification {
 
       if (!(
         (
-            (that.getGlobalAssetId().isPresent())
-            || (that.getSpecificAssetIds().isPresent())
+            (thatGlobalAssetId.isPresent())
+            || (thatSpecificAssetIds.isPresent())
         )
         && (
-            !(that.getSpecificAssetIds().isPresent())
-            || (that.getSpecificAssetIds().get().size() >= 1)
+            !(thatSpecificAssetIds.isPresent())
+            || (thatSpecificAssetIds.get().size() >= 1)
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -2646,8 +2677,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSpecificAssetIds().isPresent())
-        || (that.getSpecificAssetIds().get().size() >= 1))) {
+        !(thatSpecificAssetIds.isPresent())
+        || (thatSpecificAssetIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2664,9 +2695,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getGlobalAssetId().isPresent()) {
+      if (thatGlobalAssetId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getGlobalAssetId().get())
+          Stream.of(thatGlobalAssetId.get())
             .flatMap(Verification::verifyIdentifier)
               .map(error -> {
                 error.prependSegment(
@@ -2675,9 +2706,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSpecificAssetIds().isPresent()) {
+      if (thatSpecificAssetIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSpecificAssetIds().get())
+          Stream.of(thatSpecificAssetIds.get())
             .flatMap(Verification::verifyListOf_ISpecificAssetId)
               .map(error -> {
                 error.prependSegment(
@@ -2686,9 +2717,9 @@ public class Verification {
               }));
       }
 
-      if (that.getAssetType().isPresent()) {
+      if (thatAssetType.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getAssetType().get())
+          Stream.of(thatAssetType.get())
             .flatMap(Verification::verifyIdentifier)
               .map(error -> {
                 error.prependSegment(
@@ -2697,9 +2728,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDefaultThumbnail().isPresent()) {
+      if (thatDefaultThumbnail.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDefaultThumbnail().get())
+          Stream.of(thatDefaultThumbnail.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -2716,6 +2747,8 @@ public class Verification {
       IResource that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<String> thatContentType = that.getContentType();
+
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(that.getPath())
           .flatMap(Verification::verifyPathType)
@@ -2725,9 +2758,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getContentType().isPresent()) {
+      if (thatContentType.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getContentType().get())
+          Stream.of(thatContentType.get())
             .flatMap(Verification::verifyContentType)
               .map(error -> {
                 error.prependSegment(
@@ -2744,9 +2777,13 @@ public class Verification {
       ISpecificAssetId that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IReference>> thatSupplementalSemanticIds = that.getSupplementalSemanticIds();
+      final Optional<IReference> thatSemanticId = that.getSemanticId();
+      final Optional<IReference> thatExternalSubjectId = that.getExternalSubjectId();
+
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSupplementalSemanticIds().get().size() >= 1))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSupplementalSemanticIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2755,8 +2792,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSemanticId().isPresent()))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSemanticId.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2765,8 +2802,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getExternalSubjectId().isPresent())
-        || (that.getExternalSubjectId().get().getType() == ReferenceTypes.EXTERNAL_REFERENCE))) {
+        !(thatExternalSubjectId.isPresent())
+        || (thatExternalSubjectId.get().getType() == ReferenceTypes.EXTERNAL_REFERENCE))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2774,9 +2811,9 @@ public class Verification {
             "an external reference.")));
       }
 
-      if (that.getSemanticId().isPresent()) {
+      if (thatSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticId().get())
+          Stream.of(thatSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -2785,9 +2822,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
+      if (thatSupplementalSemanticIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSupplementalSemanticIds().get())
+          Stream.of(thatSupplementalSemanticIds.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -2814,9 +2851,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getExternalSubjectId().isPresent()) {
+      if (thatExternalSubjectId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getExternalSubjectId().get())
+          Stream.of(thatExternalSubjectId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -2833,9 +2870,22 @@ public class Verification {
       ISubmodel that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IExtension>> thatExtensions = that.getExtensions();
+      final Optional<List<ILangStringTextType>> thatDescription = that.getDescription();
+      final Optional<List<ILangStringNameType>> thatDisplayName = that.getDisplayName();
+      final Optional<List<IReference>> thatSupplementalSemanticIds = that.getSupplementalSemanticIds();
+      final Optional<IReference> thatSemanticId = that.getSemanticId();
+      final Optional<List<IQualifier>> thatQualifiers = that.getQualifiers();
+      final Optional<List<IEmbeddedDataSpecification>> thatEmbeddedDataSpecifications = that.getEmbeddedDataSpecifications();
+      final Optional<List<ISubmodelElement>> thatSubmodelElements = that.getSubmodelElements();
+      final Optional<String> thatCategory = that.getCategory();
+      final Optional<String> thatIdShort = that.getIdShort();
+      final Optional<IAdministrativeInformation> thatAdministration = that.getAdministration();
+      final Optional<ModellingKind> thatKind = that.getKind();
+
       if (!(
-        !(that.getExtensions().isPresent())
-        || (that.getExtensions().get().size() >= 1))) {
+        !(thatExtensions.isPresent())
+        || (thatExtensions.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2843,8 +2893,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getExtensions().isPresent())
-        || extensionNamesAreUnique(that.getExtensions().orElse(null)))) {
+        !(thatExtensions.isPresent())
+        || extensionNamesAreUnique(thatExtensions.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2853,8 +2903,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || (that.getDescription().get().size() >= 1))) {
+        !(thatDescription.isPresent())
+        || (thatDescription.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2863,8 +2913,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDescription().orElse(null)))) {
+        !(thatDescription.isPresent())
+        || langStringsHaveUniqueLanguages(thatDescription.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2872,8 +2922,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || (that.getDisplayName().get().size() >= 1))) {
+        !(thatDisplayName.isPresent())
+        || (thatDisplayName.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2882,8 +2932,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDisplayName().orElse(null)))) {
+        !(thatDisplayName.isPresent())
+        || langStringsHaveUniqueLanguages(thatDisplayName.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2891,8 +2941,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSupplementalSemanticIds().get().size() >= 1))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSupplementalSemanticIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2901,8 +2951,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSemanticId().isPresent()))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSemanticId.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2911,8 +2961,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || (that.getQualifiers().get().size() >= 1))) {
+        !(thatQualifiers.isPresent())
+        || (thatQualifiers.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2920,8 +2970,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || qualifierTypesAreUnique(that.getQualifiers().orElse(null)))) {
+        !(thatQualifiers.isPresent())
+        || qualifierTypesAreUnique(thatQualifiers.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2930,8 +2980,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
-        || (that.getEmbeddedDataSpecifications().get().size() >= 1))) {
+        !(thatEmbeddedDataSpecifications.isPresent())
+        || (thatEmbeddedDataSpecifications.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2940,8 +2990,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSubmodelElements().isPresent())
-        || (that.getSubmodelElements().get().size() >= 1))) {
+        !(thatSubmodelElements.isPresent())
+        || (thatSubmodelElements.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2950,9 +3000,9 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSubmodelElements().isPresent())
+        !(thatSubmodelElements.isPresent())
         || (
-            that.getSubmodelElements().get().stream().allMatch(
+            thatSubmodelElements.get().stream().allMatch(
                 item -> item.getIdShort().isPresent())
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
@@ -2965,8 +3015,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSubmodelElements().isPresent())
-        || idShortsAreUnique(that.getSubmodelElements().orElse(null)))) {
+        !(thatSubmodelElements.isPresent())
+        || idShortsAreUnique(thatSubmodelElements.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -2976,11 +3026,11 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSubmodelElements().isPresent())
+        !(thatSubmodelElements.isPresent())
         || (
             !(that.kindOrDefault() != ModellingKind.TEMPLATE)
             || (
-                that.getSubmodelElements().get().stream().allMatch(
+                thatSubmodelElements.get().stream().allMatch(
                     submodelElement -> !(submodelElement.getQualifiers().isPresent())
                         || (
                             submodelElement.getQualifiers().get().stream().allMatch(
@@ -3000,10 +3050,10 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
+        !(thatQualifiers.isPresent())
         || (
             !(
-                that.getQualifiers().get().stream().anyMatch(
+                thatQualifiers.get().stream().anyMatch(
                     qualifier -> qualifier.kindOrDefault() == QualifierKind.TEMPLATE_QUALIFIER)
             )
             || (that.kindOrDefault() == ModellingKind.TEMPLATE)
@@ -3017,9 +3067,9 @@ public class Verification {
             "shall be of kind template.")));
       }
 
-      if (that.getExtensions().isPresent()) {
+      if (thatExtensions.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getExtensions().get())
+          Stream.of(thatExtensions.get())
             .flatMap(Verification::verifyListOf_IExtension)
               .map(error -> {
                 error.prependSegment(
@@ -3028,9 +3078,9 @@ public class Verification {
               }));
       }
 
-      if (that.getCategory().isPresent()) {
+      if (thatCategory.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getCategory().get())
+          Stream.of(thatCategory.get())
             .flatMap(Verification::verifyNameType)
               .map(error -> {
                 error.prependSegment(
@@ -3039,9 +3089,9 @@ public class Verification {
               }));
       }
 
-      if (that.getIdShort().isPresent()) {
+      if (thatIdShort.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getIdShort().get())
+          Stream.of(thatIdShort.get())
             .flatMap(Verification::verifyIdShortType)
               .map(error -> {
                 error.prependSegment(
@@ -3050,9 +3100,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDisplayName().isPresent()) {
+      if (thatDisplayName.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDisplayName().get())
+          Stream.of(thatDisplayName.get())
             .flatMap(Verification::verifyListOf_ILangStringNameType)
               .map(error -> {
                 error.prependSegment(
@@ -3061,9 +3111,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDescription().isPresent()) {
+      if (thatDescription.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDescription().get())
+          Stream.of(thatDescription.get())
             .flatMap(Verification::verifyListOf_ILangStringTextType)
               .map(error -> {
                 error.prependSegment(
@@ -3072,9 +3122,9 @@ public class Verification {
               }));
       }
 
-      if (that.getAdministration().isPresent()) {
+      if (thatAdministration.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getAdministration().get())
+          Stream.of(thatAdministration.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -3092,9 +3142,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getKind().isPresent()) {
+      if (thatKind.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getKind().get())
+          Stream.of(thatKind.get())
             .flatMap(Verification::verifyModellingKind)
               .map(error -> {
                 error.prependSegment(
@@ -3103,9 +3153,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSemanticId().isPresent()) {
+      if (thatSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticId().get())
+          Stream.of(thatSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -3114,9 +3164,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
+      if (thatSupplementalSemanticIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSupplementalSemanticIds().get())
+          Stream.of(thatSupplementalSemanticIds.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -3125,9 +3175,9 @@ public class Verification {
               }));
       }
 
-      if (that.getQualifiers().isPresent()) {
+      if (thatQualifiers.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getQualifiers().get())
+          Stream.of(thatQualifiers.get())
             .flatMap(Verification::verifyListOf_IQualifier)
               .map(error -> {
                 error.prependSegment(
@@ -3136,9 +3186,9 @@ public class Verification {
               }));
       }
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
+      if (thatEmbeddedDataSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getEmbeddedDataSpecifications().get())
+          Stream.of(thatEmbeddedDataSpecifications.get())
             .flatMap(Verification::verifyListOf_IEmbeddedDataSpecification)
               .map(error -> {
                 error.prependSegment(
@@ -3147,9 +3197,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSubmodelElements().isPresent()) {
+      if (thatSubmodelElements.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSubmodelElements().get())
+          Stream.of(thatSubmodelElements.get())
             .flatMap(Verification::verifyListOf_ISubmodelElement)
               .map(error -> {
                 error.prependSegment(
@@ -3166,9 +3216,19 @@ public class Verification {
       IRelationshipElement that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IExtension>> thatExtensions = that.getExtensions();
+      final Optional<List<ILangStringTextType>> thatDescription = that.getDescription();
+      final Optional<List<ILangStringNameType>> thatDisplayName = that.getDisplayName();
+      final Optional<List<IReference>> thatSupplementalSemanticIds = that.getSupplementalSemanticIds();
+      final Optional<IReference> thatSemanticId = that.getSemanticId();
+      final Optional<List<IQualifier>> thatQualifiers = that.getQualifiers();
+      final Optional<List<IEmbeddedDataSpecification>> thatEmbeddedDataSpecifications = that.getEmbeddedDataSpecifications();
+      final Optional<String> thatCategory = that.getCategory();
+      final Optional<String> thatIdShort = that.getIdShort();
+
       if (!(
-        !(that.getExtensions().isPresent())
-        || (that.getExtensions().get().size() >= 1))) {
+        !(thatExtensions.isPresent())
+        || (thatExtensions.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3176,8 +3236,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getExtensions().isPresent())
-        || extensionNamesAreUnique(that.getExtensions().orElse(null)))) {
+        !(thatExtensions.isPresent())
+        || extensionNamesAreUnique(thatExtensions.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3186,8 +3246,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || (that.getDescription().get().size() >= 1))) {
+        !(thatDescription.isPresent())
+        || (thatDescription.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3196,8 +3256,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDescription().orElse(null)))) {
+        !(thatDescription.isPresent())
+        || langStringsHaveUniqueLanguages(thatDescription.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3205,8 +3265,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || (that.getDisplayName().get().size() >= 1))) {
+        !(thatDisplayName.isPresent())
+        || (thatDisplayName.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3215,8 +3275,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDisplayName().orElse(null)))) {
+        !(thatDisplayName.isPresent())
+        || langStringsHaveUniqueLanguages(thatDisplayName.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3224,8 +3284,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSupplementalSemanticIds().get().size() >= 1))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSupplementalSemanticIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3234,8 +3294,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSemanticId().isPresent()))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSemanticId.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3244,8 +3304,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || (that.getQualifiers().get().size() >= 1))) {
+        !(thatQualifiers.isPresent())
+        || (thatQualifiers.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3253,8 +3313,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || qualifierTypesAreUnique(that.getQualifiers().orElse(null)))) {
+        !(thatQualifiers.isPresent())
+        || qualifierTypesAreUnique(thatQualifiers.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3263,8 +3323,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
-        || (that.getEmbeddedDataSpecifications().get().size() >= 1))) {
+        !(thatEmbeddedDataSpecifications.isPresent())
+        || (thatEmbeddedDataSpecifications.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3272,9 +3332,9 @@ public class Verification {
             "at least one item.")));
       }
 
-      if (that.getExtensions().isPresent()) {
+      if (thatExtensions.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getExtensions().get())
+          Stream.of(thatExtensions.get())
             .flatMap(Verification::verifyListOf_IExtension)
               .map(error -> {
                 error.prependSegment(
@@ -3283,9 +3343,9 @@ public class Verification {
               }));
       }
 
-      if (that.getCategory().isPresent()) {
+      if (thatCategory.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getCategory().get())
+          Stream.of(thatCategory.get())
             .flatMap(Verification::verifyNameType)
               .map(error -> {
                 error.prependSegment(
@@ -3294,9 +3354,9 @@ public class Verification {
               }));
       }
 
-      if (that.getIdShort().isPresent()) {
+      if (thatIdShort.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getIdShort().get())
+          Stream.of(thatIdShort.get())
             .flatMap(Verification::verifyIdShortType)
               .map(error -> {
                 error.prependSegment(
@@ -3305,9 +3365,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDisplayName().isPresent()) {
+      if (thatDisplayName.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDisplayName().get())
+          Stream.of(thatDisplayName.get())
             .flatMap(Verification::verifyListOf_ILangStringNameType)
               .map(error -> {
                 error.prependSegment(
@@ -3316,9 +3376,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDescription().isPresent()) {
+      if (thatDescription.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDescription().get())
+          Stream.of(thatDescription.get())
             .flatMap(Verification::verifyListOf_ILangStringTextType)
               .map(error -> {
                 error.prependSegment(
@@ -3327,9 +3387,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSemanticId().isPresent()) {
+      if (thatSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticId().get())
+          Stream.of(thatSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -3338,9 +3398,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
+      if (thatSupplementalSemanticIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSupplementalSemanticIds().get())
+          Stream.of(thatSupplementalSemanticIds.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -3349,9 +3409,9 @@ public class Verification {
               }));
       }
 
-      if (that.getQualifiers().isPresent()) {
+      if (thatQualifiers.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getQualifiers().get())
+          Stream.of(thatQualifiers.get())
             .flatMap(Verification::verifyListOf_IQualifier)
               .map(error -> {
                 error.prependSegment(
@@ -3360,9 +3420,9 @@ public class Verification {
               }));
       }
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
+      if (thatEmbeddedDataSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getEmbeddedDataSpecifications().get())
+          Stream.of(thatEmbeddedDataSpecifications.get())
             .flatMap(Verification::verifyListOf_IEmbeddedDataSpecification)
               .map(error -> {
                 error.prependSegment(
@@ -3397,9 +3457,22 @@ public class Verification {
       ISubmodelElementList that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IExtension>> thatExtensions = that.getExtensions();
+      final Optional<List<ILangStringTextType>> thatDescription = that.getDescription();
+      final Optional<List<ILangStringNameType>> thatDisplayName = that.getDisplayName();
+      final Optional<List<IReference>> thatSupplementalSemanticIds = that.getSupplementalSemanticIds();
+      final Optional<IReference> thatSemanticId = that.getSemanticId();
+      final Optional<List<IQualifier>> thatQualifiers = that.getQualifiers();
+      final Optional<List<IEmbeddedDataSpecification>> thatEmbeddedDataSpecifications = that.getEmbeddedDataSpecifications();
+      final Optional<List<ISubmodelElement>> thatValue = that.getValue();
+      final Optional<IReference> thatSemanticIdListElement = that.getSemanticIdListElement();
+      final Optional<DataTypeDefXsd> thatValueTypeListElement = that.getValueTypeListElement();
+      final Optional<String> thatCategory = that.getCategory();
+      final Optional<String> thatIdShort = that.getIdShort();
+
       if (!(
-        !(that.getExtensions().isPresent())
-        || (that.getExtensions().get().size() >= 1))) {
+        !(thatExtensions.isPresent())
+        || (thatExtensions.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3407,8 +3480,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getExtensions().isPresent())
-        || extensionNamesAreUnique(that.getExtensions().orElse(null)))) {
+        !(thatExtensions.isPresent())
+        || extensionNamesAreUnique(thatExtensions.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3417,8 +3490,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || (that.getDescription().get().size() >= 1))) {
+        !(thatDescription.isPresent())
+        || (thatDescription.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3427,8 +3500,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDescription().orElse(null)))) {
+        !(thatDescription.isPresent())
+        || langStringsHaveUniqueLanguages(thatDescription.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3436,8 +3509,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || (that.getDisplayName().get().size() >= 1))) {
+        !(thatDisplayName.isPresent())
+        || (thatDisplayName.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3446,8 +3519,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDisplayName().orElse(null)))) {
+        !(thatDisplayName.isPresent())
+        || langStringsHaveUniqueLanguages(thatDisplayName.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3455,8 +3528,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSupplementalSemanticIds().get().size() >= 1))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSupplementalSemanticIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3465,8 +3538,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSemanticId().isPresent()))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSemanticId.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3475,8 +3548,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || (that.getQualifiers().get().size() >= 1))) {
+        !(thatQualifiers.isPresent())
+        || (thatQualifiers.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3484,8 +3557,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || qualifierTypesAreUnique(that.getQualifiers().orElse(null)))) {
+        !(thatQualifiers.isPresent())
+        || qualifierTypesAreUnique(thatQualifiers.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3494,8 +3567,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
-        || (that.getEmbeddedDataSpecifications().get().size() >= 1))) {
+        !(thatEmbeddedDataSpecifications.isPresent())
+        || (thatEmbeddedDataSpecifications.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3504,8 +3577,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getValue().isPresent())
-        || (that.getValue().get().size() >= 1))) {
+        !(thatValue.isPresent())
+        || (thatValue.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3514,15 +3587,15 @@ public class Verification {
 
       if (!(
         !(
-            (that.getValue().isPresent())
-            && (that.getSemanticIdListElement().isPresent())
+            (thatValue.isPresent())
+            && (thatSemanticIdListElement.isPresent())
         )
         || (
-            that.getValue().get().stream().allMatch(
+            thatValue.get().stream().allMatch(
                 child -> !(child.getSemanticId().isPresent())
                     || referenceKeyValuesEqual(
                         child.getSemanticId().orElse(null),
-                        that.getSemanticIdListElement().orElse(null)))
+                        thatSemanticIdListElement.orElse(null)))
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -3533,8 +3606,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getValue().isPresent())
-        || submodelElementsHaveIdenticalSemanticIds(that.getValue().orElse(null)))) {
+        !(thatValue.isPresent())
+        || submodelElementsHaveIdenticalSemanticIds(thatValue.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3543,9 +3616,9 @@ public class Verification {
       }
 
       if (!(
-        !(that.getValue().isPresent())
+        !(thatValue.isPresent())
         || (
-            that.getValue().get().stream().allMatch(
+            thatValue.get().stream().allMatch(
                 element -> submodelElementIsOfType(element, that.getTypeValueListElement()))
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
@@ -3562,12 +3635,12 @@ public class Verification {
             || that.getTypeValueListElement() == AasSubmodelElements.RANGE
         )
         || (
-            (that.getValueTypeListElement().isPresent())
+            (thatValueTypeListElement.isPresent())
             && (
-                (!that.getValue().isPresent())
+                (!thatValue.isPresent())
                 || propertiesOrRangesHaveValueType(
-                    that.getValue().orElse(null),
-                    that.getValueTypeListElement().orElse(null))
+                    thatValue.orElse(null),
+                    thatValueTypeListElement.orElse(null))
             )
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
@@ -3580,9 +3653,9 @@ public class Verification {
       }
 
       if (!(
-        !(that.getValue().isPresent())
+        !(thatValue.isPresent())
         || (
-            that.getValue().get().stream().allMatch(
+            thatValue.get().stream().allMatch(
                 element -> !element.getIdShort().isPresent())
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
@@ -3593,9 +3666,9 @@ public class Verification {
             "specified.")));
       }
 
-      if (that.getExtensions().isPresent()) {
+      if (thatExtensions.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getExtensions().get())
+          Stream.of(thatExtensions.get())
             .flatMap(Verification::verifyListOf_IExtension)
               .map(error -> {
                 error.prependSegment(
@@ -3604,9 +3677,9 @@ public class Verification {
               }));
       }
 
-      if (that.getCategory().isPresent()) {
+      if (thatCategory.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getCategory().get())
+          Stream.of(thatCategory.get())
             .flatMap(Verification::verifyNameType)
               .map(error -> {
                 error.prependSegment(
@@ -3615,9 +3688,9 @@ public class Verification {
               }));
       }
 
-      if (that.getIdShort().isPresent()) {
+      if (thatIdShort.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getIdShort().get())
+          Stream.of(thatIdShort.get())
             .flatMap(Verification::verifyIdShortType)
               .map(error -> {
                 error.prependSegment(
@@ -3626,9 +3699,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDisplayName().isPresent()) {
+      if (thatDisplayName.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDisplayName().get())
+          Stream.of(thatDisplayName.get())
             .flatMap(Verification::verifyListOf_ILangStringNameType)
               .map(error -> {
                 error.prependSegment(
@@ -3637,9 +3710,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDescription().isPresent()) {
+      if (thatDescription.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDescription().get())
+          Stream.of(thatDescription.get())
             .flatMap(Verification::verifyListOf_ILangStringTextType)
               .map(error -> {
                 error.prependSegment(
@@ -3648,9 +3721,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSemanticId().isPresent()) {
+      if (thatSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticId().get())
+          Stream.of(thatSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -3659,9 +3732,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
+      if (thatSupplementalSemanticIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSupplementalSemanticIds().get())
+          Stream.of(thatSupplementalSemanticIds.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -3670,9 +3743,9 @@ public class Verification {
               }));
       }
 
-      if (that.getQualifiers().isPresent()) {
+      if (thatQualifiers.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getQualifiers().get())
+          Stream.of(thatQualifiers.get())
             .flatMap(Verification::verifyListOf_IQualifier)
               .map(error -> {
                 error.prependSegment(
@@ -3681,9 +3754,9 @@ public class Verification {
               }));
       }
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
+      if (thatEmbeddedDataSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getEmbeddedDataSpecifications().get())
+          Stream.of(thatEmbeddedDataSpecifications.get())
             .flatMap(Verification::verifyListOf_IEmbeddedDataSpecification)
               .map(error -> {
                 error.prependSegment(
@@ -3692,9 +3765,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSemanticIdListElement().isPresent()) {
+      if (thatSemanticIdListElement.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticIdListElement().get())
+          Stream.of(thatSemanticIdListElement.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -3712,9 +3785,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getValueTypeListElement().isPresent()) {
+      if (thatValueTypeListElement.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getValueTypeListElement().get())
+          Stream.of(thatValueTypeListElement.get())
             .flatMap(Verification::verifyDataTypeDefXsd)
               .map(error -> {
                 error.prependSegment(
@@ -3723,9 +3796,9 @@ public class Verification {
               }));
       }
 
-      if (that.getValue().isPresent()) {
+      if (thatValue.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getValue().get())
+          Stream.of(thatValue.get())
             .flatMap(Verification::verifyListOf_ISubmodelElement)
               .map(error -> {
                 error.prependSegment(
@@ -3742,9 +3815,20 @@ public class Verification {
       ISubmodelElementCollection that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IExtension>> thatExtensions = that.getExtensions();
+      final Optional<List<ILangStringTextType>> thatDescription = that.getDescription();
+      final Optional<List<ILangStringNameType>> thatDisplayName = that.getDisplayName();
+      final Optional<List<IReference>> thatSupplementalSemanticIds = that.getSupplementalSemanticIds();
+      final Optional<IReference> thatSemanticId = that.getSemanticId();
+      final Optional<List<IQualifier>> thatQualifiers = that.getQualifiers();
+      final Optional<List<IEmbeddedDataSpecification>> thatEmbeddedDataSpecifications = that.getEmbeddedDataSpecifications();
+      final Optional<List<ISubmodelElement>> thatValue = that.getValue();
+      final Optional<String> thatCategory = that.getCategory();
+      final Optional<String> thatIdShort = that.getIdShort();
+
       if (!(
-        !(that.getExtensions().isPresent())
-        || (that.getExtensions().get().size() >= 1))) {
+        !(thatExtensions.isPresent())
+        || (thatExtensions.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3752,8 +3836,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getExtensions().isPresent())
-        || extensionNamesAreUnique(that.getExtensions().orElse(null)))) {
+        !(thatExtensions.isPresent())
+        || extensionNamesAreUnique(thatExtensions.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3762,8 +3846,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || (that.getDescription().get().size() >= 1))) {
+        !(thatDescription.isPresent())
+        || (thatDescription.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3772,8 +3856,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDescription().orElse(null)))) {
+        !(thatDescription.isPresent())
+        || langStringsHaveUniqueLanguages(thatDescription.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3781,8 +3865,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || (that.getDisplayName().get().size() >= 1))) {
+        !(thatDisplayName.isPresent())
+        || (thatDisplayName.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3791,8 +3875,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDisplayName().orElse(null)))) {
+        !(thatDisplayName.isPresent())
+        || langStringsHaveUniqueLanguages(thatDisplayName.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3800,8 +3884,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSupplementalSemanticIds().get().size() >= 1))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSupplementalSemanticIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3810,8 +3894,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSemanticId().isPresent()))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSemanticId.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3820,8 +3904,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || (that.getQualifiers().get().size() >= 1))) {
+        !(thatQualifiers.isPresent())
+        || (thatQualifiers.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3829,8 +3913,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || qualifierTypesAreUnique(that.getQualifiers().orElse(null)))) {
+        !(thatQualifiers.isPresent())
+        || qualifierTypesAreUnique(thatQualifiers.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3839,8 +3923,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
-        || (that.getEmbeddedDataSpecifications().get().size() >= 1))) {
+        !(thatEmbeddedDataSpecifications.isPresent())
+        || (thatEmbeddedDataSpecifications.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3849,8 +3933,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getValue().isPresent())
-        || (that.getValue().get().size() >= 1))) {
+        !(thatValue.isPresent())
+        || (thatValue.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -3858,9 +3942,9 @@ public class Verification {
       }
 
       if (!(
-        !(that.getValue().isPresent())
+        !(thatValue.isPresent())
         || (
-            that.getValue().get().stream().allMatch(
+            thatValue.get().stream().allMatch(
                 item -> item.getIdShort().isPresent())
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
@@ -3873,17 +3957,17 @@ public class Verification {
       }
 
       if (!(
-        !(that.getValue().isPresent())
-        || idShortsAreUnique(that.getValue().orElse(null)))) {
+        !(thatValue.isPresent())
+        || idShortsAreUnique(thatValue.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "ID-shorts of the value must be unique.")));
       }
 
-      if (that.getExtensions().isPresent()) {
+      if (thatExtensions.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getExtensions().get())
+          Stream.of(thatExtensions.get())
             .flatMap(Verification::verifyListOf_IExtension)
               .map(error -> {
                 error.prependSegment(
@@ -3892,9 +3976,9 @@ public class Verification {
               }));
       }
 
-      if (that.getCategory().isPresent()) {
+      if (thatCategory.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getCategory().get())
+          Stream.of(thatCategory.get())
             .flatMap(Verification::verifyNameType)
               .map(error -> {
                 error.prependSegment(
@@ -3903,9 +3987,9 @@ public class Verification {
               }));
       }
 
-      if (that.getIdShort().isPresent()) {
+      if (thatIdShort.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getIdShort().get())
+          Stream.of(thatIdShort.get())
             .flatMap(Verification::verifyIdShortType)
               .map(error -> {
                 error.prependSegment(
@@ -3914,9 +3998,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDisplayName().isPresent()) {
+      if (thatDisplayName.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDisplayName().get())
+          Stream.of(thatDisplayName.get())
             .flatMap(Verification::verifyListOf_ILangStringNameType)
               .map(error -> {
                 error.prependSegment(
@@ -3925,9 +4009,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDescription().isPresent()) {
+      if (thatDescription.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDescription().get())
+          Stream.of(thatDescription.get())
             .flatMap(Verification::verifyListOf_ILangStringTextType)
               .map(error -> {
                 error.prependSegment(
@@ -3936,9 +4020,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSemanticId().isPresent()) {
+      if (thatSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticId().get())
+          Stream.of(thatSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -3947,9 +4031,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
+      if (thatSupplementalSemanticIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSupplementalSemanticIds().get())
+          Stream.of(thatSupplementalSemanticIds.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -3958,9 +4042,9 @@ public class Verification {
               }));
       }
 
-      if (that.getQualifiers().isPresent()) {
+      if (thatQualifiers.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getQualifiers().get())
+          Stream.of(thatQualifiers.get())
             .flatMap(Verification::verifyListOf_IQualifier)
               .map(error -> {
                 error.prependSegment(
@@ -3969,9 +4053,9 @@ public class Verification {
               }));
       }
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
+      if (thatEmbeddedDataSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getEmbeddedDataSpecifications().get())
+          Stream.of(thatEmbeddedDataSpecifications.get())
             .flatMap(Verification::verifyListOf_IEmbeddedDataSpecification)
               .map(error -> {
                 error.prependSegment(
@@ -3980,9 +4064,9 @@ public class Verification {
               }));
       }
 
-      if (that.getValue().isPresent()) {
+      if (thatValue.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getValue().get())
+          Stream.of(thatValue.get())
             .flatMap(Verification::verifyListOf_ISubmodelElement)
               .map(error -> {
                 error.prependSegment(
@@ -3999,9 +4083,21 @@ public class Verification {
       IProperty that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IExtension>> thatExtensions = that.getExtensions();
+      final Optional<List<ILangStringTextType>> thatDescription = that.getDescription();
+      final Optional<List<ILangStringNameType>> thatDisplayName = that.getDisplayName();
+      final Optional<List<IReference>> thatSupplementalSemanticIds = that.getSupplementalSemanticIds();
+      final Optional<IReference> thatSemanticId = that.getSemanticId();
+      final Optional<List<IQualifier>> thatQualifiers = that.getQualifiers();
+      final Optional<List<IEmbeddedDataSpecification>> thatEmbeddedDataSpecifications = that.getEmbeddedDataSpecifications();
+      final Optional<String> thatCategory = that.getCategory();
+      final Optional<String> thatValue = that.getValue();
+      final Optional<String> thatIdShort = that.getIdShort();
+      final Optional<IReference> thatValueId = that.getValueId();
+
       if (!(
-        !(that.getExtensions().isPresent())
-        || (that.getExtensions().get().size() >= 1))) {
+        !(thatExtensions.isPresent())
+        || (thatExtensions.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4009,8 +4105,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getExtensions().isPresent())
-        || extensionNamesAreUnique(that.getExtensions().orElse(null)))) {
+        !(thatExtensions.isPresent())
+        || extensionNamesAreUnique(thatExtensions.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4019,8 +4115,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || (that.getDescription().get().size() >= 1))) {
+        !(thatDescription.isPresent())
+        || (thatDescription.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4029,8 +4125,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDescription().orElse(null)))) {
+        !(thatDescription.isPresent())
+        || langStringsHaveUniqueLanguages(thatDescription.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4038,8 +4134,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || (that.getDisplayName().get().size() >= 1))) {
+        !(thatDisplayName.isPresent())
+        || (thatDisplayName.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4048,8 +4144,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDisplayName().orElse(null)))) {
+        !(thatDisplayName.isPresent())
+        || langStringsHaveUniqueLanguages(thatDisplayName.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4057,8 +4153,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSupplementalSemanticIds().get().size() >= 1))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSupplementalSemanticIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4067,8 +4163,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSemanticId().isPresent()))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSemanticId.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4077,8 +4173,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || (that.getQualifiers().get().size() >= 1))) {
+        !(thatQualifiers.isPresent())
+        || (thatQualifiers.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4086,8 +4182,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || qualifierTypesAreUnique(that.getQualifiers().orElse(null)))) {
+        !(thatQualifiers.isPresent())
+        || qualifierTypesAreUnique(thatQualifiers.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4096,8 +4192,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
-        || (that.getEmbeddedDataSpecifications().get().size() >= 1))) {
+        !(thatEmbeddedDataSpecifications.isPresent())
+        || (thatEmbeddedDataSpecifications.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4106,8 +4202,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getCategory().isPresent())
-        || Constants.validCategoriesForDataElement.contains(that.getCategory().get()))) {
+        !(thatCategory.isPresent())
+        || Constants.validCategoriesForDataElement.contains(thatCategory.get()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4117,17 +4213,17 @@ public class Verification {
       }
 
       if (!(
-        !(that.getValue().isPresent())
-        || valueConsistentWithXsdType(that.getValue().orElse(null), that.getValueType()))) {
+        !(thatValue.isPresent())
+        || valueConsistentWithXsdType(thatValue.orElse(null), that.getValueType()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "Value must be consistent with the value type.")));
       }
 
-      if (that.getExtensions().isPresent()) {
+      if (thatExtensions.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getExtensions().get())
+          Stream.of(thatExtensions.get())
             .flatMap(Verification::verifyListOf_IExtension)
               .map(error -> {
                 error.prependSegment(
@@ -4136,9 +4232,9 @@ public class Verification {
               }));
       }
 
-      if (that.getCategory().isPresent()) {
+      if (thatCategory.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getCategory().get())
+          Stream.of(thatCategory.get())
             .flatMap(Verification::verifyNameType)
               .map(error -> {
                 error.prependSegment(
@@ -4147,9 +4243,9 @@ public class Verification {
               }));
       }
 
-      if (that.getIdShort().isPresent()) {
+      if (thatIdShort.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getIdShort().get())
+          Stream.of(thatIdShort.get())
             .flatMap(Verification::verifyIdShortType)
               .map(error -> {
                 error.prependSegment(
@@ -4158,9 +4254,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDisplayName().isPresent()) {
+      if (thatDisplayName.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDisplayName().get())
+          Stream.of(thatDisplayName.get())
             .flatMap(Verification::verifyListOf_ILangStringNameType)
               .map(error -> {
                 error.prependSegment(
@@ -4169,9 +4265,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDescription().isPresent()) {
+      if (thatDescription.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDescription().get())
+          Stream.of(thatDescription.get())
             .flatMap(Verification::verifyListOf_ILangStringTextType)
               .map(error -> {
                 error.prependSegment(
@@ -4180,9 +4276,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSemanticId().isPresent()) {
+      if (thatSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticId().get())
+          Stream.of(thatSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -4191,9 +4287,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
+      if (thatSupplementalSemanticIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSupplementalSemanticIds().get())
+          Stream.of(thatSupplementalSemanticIds.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -4202,9 +4298,9 @@ public class Verification {
               }));
       }
 
-      if (that.getQualifiers().isPresent()) {
+      if (thatQualifiers.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getQualifiers().get())
+          Stream.of(thatQualifiers.get())
             .flatMap(Verification::verifyListOf_IQualifier)
               .map(error -> {
                 error.prependSegment(
@@ -4213,9 +4309,9 @@ public class Verification {
               }));
       }
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
+      if (thatEmbeddedDataSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getEmbeddedDataSpecifications().get())
+          Stream.of(thatEmbeddedDataSpecifications.get())
             .flatMap(Verification::verifyListOf_IEmbeddedDataSpecification)
               .map(error -> {
                 error.prependSegment(
@@ -4233,9 +4329,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getValue().isPresent()) {
+      if (thatValue.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getValue().get())
+          Stream.of(thatValue.get())
             .flatMap(Verification::verifyValueDataType)
               .map(error -> {
                 error.prependSegment(
@@ -4244,9 +4340,9 @@ public class Verification {
               }));
       }
 
-      if (that.getValueId().isPresent()) {
+      if (thatValueId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getValueId().get())
+          Stream.of(thatValueId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -4263,9 +4359,21 @@ public class Verification {
       IMultiLanguageProperty that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IExtension>> thatExtensions = that.getExtensions();
+      final Optional<List<ILangStringTextType>> thatDescription = that.getDescription();
+      final Optional<List<ILangStringNameType>> thatDisplayName = that.getDisplayName();
+      final Optional<List<IReference>> thatSupplementalSemanticIds = that.getSupplementalSemanticIds();
+      final Optional<IReference> thatSemanticId = that.getSemanticId();
+      final Optional<List<IQualifier>> thatQualifiers = that.getQualifiers();
+      final Optional<List<IEmbeddedDataSpecification>> thatEmbeddedDataSpecifications = that.getEmbeddedDataSpecifications();
+      final Optional<String> thatCategory = that.getCategory();
+      final Optional<List<ILangStringTextType>> thatValue = that.getValue();
+      final Optional<String> thatIdShort = that.getIdShort();
+      final Optional<IReference> thatValueId = that.getValueId();
+
       if (!(
-        !(that.getExtensions().isPresent())
-        || (that.getExtensions().get().size() >= 1))) {
+        !(thatExtensions.isPresent())
+        || (thatExtensions.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4273,8 +4381,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getExtensions().isPresent())
-        || extensionNamesAreUnique(that.getExtensions().orElse(null)))) {
+        !(thatExtensions.isPresent())
+        || extensionNamesAreUnique(thatExtensions.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4283,8 +4391,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || (that.getDescription().get().size() >= 1))) {
+        !(thatDescription.isPresent())
+        || (thatDescription.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4293,8 +4401,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDescription().orElse(null)))) {
+        !(thatDescription.isPresent())
+        || langStringsHaveUniqueLanguages(thatDescription.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4302,8 +4410,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || (that.getDisplayName().get().size() >= 1))) {
+        !(thatDisplayName.isPresent())
+        || (thatDisplayName.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4312,8 +4420,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDisplayName().orElse(null)))) {
+        !(thatDisplayName.isPresent())
+        || langStringsHaveUniqueLanguages(thatDisplayName.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4321,8 +4429,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSupplementalSemanticIds().get().size() >= 1))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSupplementalSemanticIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4331,8 +4439,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSemanticId().isPresent()))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSemanticId.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4341,8 +4449,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || (that.getQualifiers().get().size() >= 1))) {
+        !(thatQualifiers.isPresent())
+        || (thatQualifiers.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4350,8 +4458,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || qualifierTypesAreUnique(that.getQualifiers().orElse(null)))) {
+        !(thatQualifiers.isPresent())
+        || qualifierTypesAreUnique(thatQualifiers.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4360,8 +4468,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
-        || (that.getEmbeddedDataSpecifications().get().size() >= 1))) {
+        !(thatEmbeddedDataSpecifications.isPresent())
+        || (thatEmbeddedDataSpecifications.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4370,8 +4478,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getCategory().isPresent())
-        || Constants.validCategoriesForDataElement.contains(that.getCategory().get()))) {
+        !(thatCategory.isPresent())
+        || Constants.validCategoriesForDataElement.contains(thatCategory.get()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4381,8 +4489,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getValue().isPresent())
-        || langStringsHaveUniqueLanguages(that.getValue().orElse(null)))) {
+        !(thatValue.isPresent())
+        || langStringsHaveUniqueLanguages(thatValue.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4390,17 +4498,17 @@ public class Verification {
       }
 
       if (!(
-        !(that.getValue().isPresent())
-        || (that.getValue().get().size() >= 1))) {
+        !(thatValue.isPresent())
+        || (thatValue.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "Value must be either not set or have at least one item.")));
       }
 
-      if (that.getExtensions().isPresent()) {
+      if (thatExtensions.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getExtensions().get())
+          Stream.of(thatExtensions.get())
             .flatMap(Verification::verifyListOf_IExtension)
               .map(error -> {
                 error.prependSegment(
@@ -4409,9 +4517,9 @@ public class Verification {
               }));
       }
 
-      if (that.getCategory().isPresent()) {
+      if (thatCategory.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getCategory().get())
+          Stream.of(thatCategory.get())
             .flatMap(Verification::verifyNameType)
               .map(error -> {
                 error.prependSegment(
@@ -4420,9 +4528,9 @@ public class Verification {
               }));
       }
 
-      if (that.getIdShort().isPresent()) {
+      if (thatIdShort.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getIdShort().get())
+          Stream.of(thatIdShort.get())
             .flatMap(Verification::verifyIdShortType)
               .map(error -> {
                 error.prependSegment(
@@ -4431,9 +4539,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDisplayName().isPresent()) {
+      if (thatDisplayName.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDisplayName().get())
+          Stream.of(thatDisplayName.get())
             .flatMap(Verification::verifyListOf_ILangStringNameType)
               .map(error -> {
                 error.prependSegment(
@@ -4442,9 +4550,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDescription().isPresent()) {
+      if (thatDescription.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDescription().get())
+          Stream.of(thatDescription.get())
             .flatMap(Verification::verifyListOf_ILangStringTextType)
               .map(error -> {
                 error.prependSegment(
@@ -4453,9 +4561,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSemanticId().isPresent()) {
+      if (thatSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticId().get())
+          Stream.of(thatSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -4464,9 +4572,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
+      if (thatSupplementalSemanticIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSupplementalSemanticIds().get())
+          Stream.of(thatSupplementalSemanticIds.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -4475,9 +4583,9 @@ public class Verification {
               }));
       }
 
-      if (that.getQualifiers().isPresent()) {
+      if (thatQualifiers.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getQualifiers().get())
+          Stream.of(thatQualifiers.get())
             .flatMap(Verification::verifyListOf_IQualifier)
               .map(error -> {
                 error.prependSegment(
@@ -4486,9 +4594,9 @@ public class Verification {
               }));
       }
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
+      if (thatEmbeddedDataSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getEmbeddedDataSpecifications().get())
+          Stream.of(thatEmbeddedDataSpecifications.get())
             .flatMap(Verification::verifyListOf_IEmbeddedDataSpecification)
               .map(error -> {
                 error.prependSegment(
@@ -4497,9 +4605,9 @@ public class Verification {
               }));
       }
 
-      if (that.getValue().isPresent()) {
+      if (thatValue.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getValue().get())
+          Stream.of(thatValue.get())
             .flatMap(Verification::verifyListOf_ILangStringTextType)
               .map(error -> {
                 error.prependSegment(
@@ -4508,9 +4616,9 @@ public class Verification {
               }));
       }
 
-      if (that.getValueId().isPresent()) {
+      if (thatValueId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getValueId().get())
+          Stream.of(thatValueId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -4527,9 +4635,21 @@ public class Verification {
       IRange that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IExtension>> thatExtensions = that.getExtensions();
+      final Optional<List<ILangStringTextType>> thatDescription = that.getDescription();
+      final Optional<List<ILangStringNameType>> thatDisplayName = that.getDisplayName();
+      final Optional<List<IReference>> thatSupplementalSemanticIds = that.getSupplementalSemanticIds();
+      final Optional<IReference> thatSemanticId = that.getSemanticId();
+      final Optional<List<IQualifier>> thatQualifiers = that.getQualifiers();
+      final Optional<List<IEmbeddedDataSpecification>> thatEmbeddedDataSpecifications = that.getEmbeddedDataSpecifications();
+      final Optional<String> thatCategory = that.getCategory();
+      final Optional<String> thatMax = that.getMax();
+      final Optional<String> thatMin = that.getMin();
+      final Optional<String> thatIdShort = that.getIdShort();
+
       if (!(
-        !(that.getExtensions().isPresent())
-        || (that.getExtensions().get().size() >= 1))) {
+        !(thatExtensions.isPresent())
+        || (thatExtensions.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4537,8 +4657,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getExtensions().isPresent())
-        || extensionNamesAreUnique(that.getExtensions().orElse(null)))) {
+        !(thatExtensions.isPresent())
+        || extensionNamesAreUnique(thatExtensions.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4547,8 +4667,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || (that.getDescription().get().size() >= 1))) {
+        !(thatDescription.isPresent())
+        || (thatDescription.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4557,8 +4677,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDescription().orElse(null)))) {
+        !(thatDescription.isPresent())
+        || langStringsHaveUniqueLanguages(thatDescription.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4566,8 +4686,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || (that.getDisplayName().get().size() >= 1))) {
+        !(thatDisplayName.isPresent())
+        || (thatDisplayName.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4576,8 +4696,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDisplayName().orElse(null)))) {
+        !(thatDisplayName.isPresent())
+        || langStringsHaveUniqueLanguages(thatDisplayName.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4585,8 +4705,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSupplementalSemanticIds().get().size() >= 1))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSupplementalSemanticIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4595,8 +4715,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSemanticId().isPresent()))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSemanticId.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4605,8 +4725,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || (that.getQualifiers().get().size() >= 1))) {
+        !(thatQualifiers.isPresent())
+        || (thatQualifiers.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4614,8 +4734,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || qualifierTypesAreUnique(that.getQualifiers().orElse(null)))) {
+        !(thatQualifiers.isPresent())
+        || qualifierTypesAreUnique(thatQualifiers.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4624,8 +4744,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
-        || (that.getEmbeddedDataSpecifications().get().size() >= 1))) {
+        !(thatEmbeddedDataSpecifications.isPresent())
+        || (thatEmbeddedDataSpecifications.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4634,8 +4754,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getCategory().isPresent())
-        || Constants.validCategoriesForDataElement.contains(that.getCategory().get()))) {
+        !(thatCategory.isPresent())
+        || Constants.validCategoriesForDataElement.contains(thatCategory.get()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4645,8 +4765,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getMax().isPresent())
-        || valueConsistentWithXsdType(that.getMax().orElse(null), that.getValueType()))) {
+        !(thatMax.isPresent())
+        || valueConsistentWithXsdType(thatMax.orElse(null), that.getValueType()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4654,17 +4774,17 @@ public class Verification {
       }
 
       if (!(
-        !(that.getMin().isPresent())
-        || valueConsistentWithXsdType(that.getMin().orElse(null), that.getValueType()))) {
+        !(thatMin.isPresent())
+        || valueConsistentWithXsdType(thatMin.orElse(null), that.getValueType()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "Min must be consistent with the value type.")));
       }
 
-      if (that.getExtensions().isPresent()) {
+      if (thatExtensions.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getExtensions().get())
+          Stream.of(thatExtensions.get())
             .flatMap(Verification::verifyListOf_IExtension)
               .map(error -> {
                 error.prependSegment(
@@ -4673,9 +4793,9 @@ public class Verification {
               }));
       }
 
-      if (that.getCategory().isPresent()) {
+      if (thatCategory.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getCategory().get())
+          Stream.of(thatCategory.get())
             .flatMap(Verification::verifyNameType)
               .map(error -> {
                 error.prependSegment(
@@ -4684,9 +4804,9 @@ public class Verification {
               }));
       }
 
-      if (that.getIdShort().isPresent()) {
+      if (thatIdShort.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getIdShort().get())
+          Stream.of(thatIdShort.get())
             .flatMap(Verification::verifyIdShortType)
               .map(error -> {
                 error.prependSegment(
@@ -4695,9 +4815,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDisplayName().isPresent()) {
+      if (thatDisplayName.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDisplayName().get())
+          Stream.of(thatDisplayName.get())
             .flatMap(Verification::verifyListOf_ILangStringNameType)
               .map(error -> {
                 error.prependSegment(
@@ -4706,9 +4826,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDescription().isPresent()) {
+      if (thatDescription.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDescription().get())
+          Stream.of(thatDescription.get())
             .flatMap(Verification::verifyListOf_ILangStringTextType)
               .map(error -> {
                 error.prependSegment(
@@ -4717,9 +4837,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSemanticId().isPresent()) {
+      if (thatSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticId().get())
+          Stream.of(thatSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -4728,9 +4848,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
+      if (thatSupplementalSemanticIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSupplementalSemanticIds().get())
+          Stream.of(thatSupplementalSemanticIds.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -4739,9 +4859,9 @@ public class Verification {
               }));
       }
 
-      if (that.getQualifiers().isPresent()) {
+      if (thatQualifiers.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getQualifiers().get())
+          Stream.of(thatQualifiers.get())
             .flatMap(Verification::verifyListOf_IQualifier)
               .map(error -> {
                 error.prependSegment(
@@ -4750,9 +4870,9 @@ public class Verification {
               }));
       }
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
+      if (thatEmbeddedDataSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getEmbeddedDataSpecifications().get())
+          Stream.of(thatEmbeddedDataSpecifications.get())
             .flatMap(Verification::verifyListOf_IEmbeddedDataSpecification)
               .map(error -> {
                 error.prependSegment(
@@ -4770,9 +4890,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getMin().isPresent()) {
+      if (thatMin.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getMin().get())
+          Stream.of(thatMin.get())
             .flatMap(Verification::verifyValueDataType)
               .map(error -> {
                 error.prependSegment(
@@ -4781,9 +4901,9 @@ public class Verification {
               }));
       }
 
-      if (that.getMax().isPresent()) {
+      if (thatMax.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getMax().get())
+          Stream.of(thatMax.get())
             .flatMap(Verification::verifyValueDataType)
               .map(error -> {
                 error.prependSegment(
@@ -4800,9 +4920,20 @@ public class Verification {
       IReferenceElement that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IExtension>> thatExtensions = that.getExtensions();
+      final Optional<List<ILangStringTextType>> thatDescription = that.getDescription();
+      final Optional<List<ILangStringNameType>> thatDisplayName = that.getDisplayName();
+      final Optional<List<IReference>> thatSupplementalSemanticIds = that.getSupplementalSemanticIds();
+      final Optional<IReference> thatSemanticId = that.getSemanticId();
+      final Optional<List<IQualifier>> thatQualifiers = that.getQualifiers();
+      final Optional<List<IEmbeddedDataSpecification>> thatEmbeddedDataSpecifications = that.getEmbeddedDataSpecifications();
+      final Optional<String> thatCategory = that.getCategory();
+      final Optional<String> thatIdShort = that.getIdShort();
+      final Optional<IReference> thatValue = that.getValue();
+
       if (!(
-        !(that.getExtensions().isPresent())
-        || (that.getExtensions().get().size() >= 1))) {
+        !(thatExtensions.isPresent())
+        || (thatExtensions.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4810,8 +4941,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getExtensions().isPresent())
-        || extensionNamesAreUnique(that.getExtensions().orElse(null)))) {
+        !(thatExtensions.isPresent())
+        || extensionNamesAreUnique(thatExtensions.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4820,8 +4951,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || (that.getDescription().get().size() >= 1))) {
+        !(thatDescription.isPresent())
+        || (thatDescription.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4830,8 +4961,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDescription().orElse(null)))) {
+        !(thatDescription.isPresent())
+        || langStringsHaveUniqueLanguages(thatDescription.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4839,8 +4970,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || (that.getDisplayName().get().size() >= 1))) {
+        !(thatDisplayName.isPresent())
+        || (thatDisplayName.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4849,8 +4980,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDisplayName().orElse(null)))) {
+        !(thatDisplayName.isPresent())
+        || langStringsHaveUniqueLanguages(thatDisplayName.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4858,8 +4989,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSupplementalSemanticIds().get().size() >= 1))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSupplementalSemanticIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4868,8 +4999,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSemanticId().isPresent()))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSemanticId.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4878,8 +5009,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || (that.getQualifiers().get().size() >= 1))) {
+        !(thatQualifiers.isPresent())
+        || (thatQualifiers.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4887,8 +5018,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || qualifierTypesAreUnique(that.getQualifiers().orElse(null)))) {
+        !(thatQualifiers.isPresent())
+        || qualifierTypesAreUnique(thatQualifiers.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4897,8 +5028,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
-        || (that.getEmbeddedDataSpecifications().get().size() >= 1))) {
+        !(thatEmbeddedDataSpecifications.isPresent())
+        || (thatEmbeddedDataSpecifications.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4907,8 +5038,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getCategory().isPresent())
-        || Constants.validCategoriesForDataElement.contains(that.getCategory().get()))) {
+        !(thatCategory.isPresent())
+        || Constants.validCategoriesForDataElement.contains(thatCategory.get()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -4917,9 +5048,9 @@ public class Verification {
             "VARIABLE.")));
       }
 
-      if (that.getExtensions().isPresent()) {
+      if (thatExtensions.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getExtensions().get())
+          Stream.of(thatExtensions.get())
             .flatMap(Verification::verifyListOf_IExtension)
               .map(error -> {
                 error.prependSegment(
@@ -4928,9 +5059,9 @@ public class Verification {
               }));
       }
 
-      if (that.getCategory().isPresent()) {
+      if (thatCategory.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getCategory().get())
+          Stream.of(thatCategory.get())
             .flatMap(Verification::verifyNameType)
               .map(error -> {
                 error.prependSegment(
@@ -4939,9 +5070,9 @@ public class Verification {
               }));
       }
 
-      if (that.getIdShort().isPresent()) {
+      if (thatIdShort.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getIdShort().get())
+          Stream.of(thatIdShort.get())
             .flatMap(Verification::verifyIdShortType)
               .map(error -> {
                 error.prependSegment(
@@ -4950,9 +5081,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDisplayName().isPresent()) {
+      if (thatDisplayName.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDisplayName().get())
+          Stream.of(thatDisplayName.get())
             .flatMap(Verification::verifyListOf_ILangStringNameType)
               .map(error -> {
                 error.prependSegment(
@@ -4961,9 +5092,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDescription().isPresent()) {
+      if (thatDescription.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDescription().get())
+          Stream.of(thatDescription.get())
             .flatMap(Verification::verifyListOf_ILangStringTextType)
               .map(error -> {
                 error.prependSegment(
@@ -4972,9 +5103,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSemanticId().isPresent()) {
+      if (thatSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticId().get())
+          Stream.of(thatSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -4983,9 +5114,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
+      if (thatSupplementalSemanticIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSupplementalSemanticIds().get())
+          Stream.of(thatSupplementalSemanticIds.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -4994,9 +5125,9 @@ public class Verification {
               }));
       }
 
-      if (that.getQualifiers().isPresent()) {
+      if (thatQualifiers.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getQualifiers().get())
+          Stream.of(thatQualifiers.get())
             .flatMap(Verification::verifyListOf_IQualifier)
               .map(error -> {
                 error.prependSegment(
@@ -5005,9 +5136,9 @@ public class Verification {
               }));
       }
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
+      if (thatEmbeddedDataSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getEmbeddedDataSpecifications().get())
+          Stream.of(thatEmbeddedDataSpecifications.get())
             .flatMap(Verification::verifyListOf_IEmbeddedDataSpecification)
               .map(error -> {
                 error.prependSegment(
@@ -5016,9 +5147,9 @@ public class Verification {
               }));
       }
 
-      if (that.getValue().isPresent()) {
+      if (thatValue.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getValue().get())
+          Stream.of(thatValue.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -5035,9 +5166,20 @@ public class Verification {
       IBlob that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IExtension>> thatExtensions = that.getExtensions();
+      final Optional<List<ILangStringTextType>> thatDescription = that.getDescription();
+      final Optional<List<ILangStringNameType>> thatDisplayName = that.getDisplayName();
+      final Optional<List<IReference>> thatSupplementalSemanticIds = that.getSupplementalSemanticIds();
+      final Optional<IReference> thatSemanticId = that.getSemanticId();
+      final Optional<List<IQualifier>> thatQualifiers = that.getQualifiers();
+      final Optional<List<IEmbeddedDataSpecification>> thatEmbeddedDataSpecifications = that.getEmbeddedDataSpecifications();
+      final Optional<String> thatCategory = that.getCategory();
+      final Optional<String> thatIdShort = that.getIdShort();
+      final Optional<byte[]> thatValue = that.getValue();
+
       if (!(
-        !(that.getExtensions().isPresent())
-        || (that.getExtensions().get().size() >= 1))) {
+        !(thatExtensions.isPresent())
+        || (thatExtensions.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5045,8 +5187,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getExtensions().isPresent())
-        || extensionNamesAreUnique(that.getExtensions().orElse(null)))) {
+        !(thatExtensions.isPresent())
+        || extensionNamesAreUnique(thatExtensions.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5055,8 +5197,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || (that.getDescription().get().size() >= 1))) {
+        !(thatDescription.isPresent())
+        || (thatDescription.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5065,8 +5207,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDescription().orElse(null)))) {
+        !(thatDescription.isPresent())
+        || langStringsHaveUniqueLanguages(thatDescription.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5074,8 +5216,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || (that.getDisplayName().get().size() >= 1))) {
+        !(thatDisplayName.isPresent())
+        || (thatDisplayName.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5084,8 +5226,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDisplayName().orElse(null)))) {
+        !(thatDisplayName.isPresent())
+        || langStringsHaveUniqueLanguages(thatDisplayName.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5093,8 +5235,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSupplementalSemanticIds().get().size() >= 1))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSupplementalSemanticIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5103,8 +5245,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSemanticId().isPresent()))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSemanticId.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5113,8 +5255,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || (that.getQualifiers().get().size() >= 1))) {
+        !(thatQualifiers.isPresent())
+        || (thatQualifiers.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5122,8 +5264,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || qualifierTypesAreUnique(that.getQualifiers().orElse(null)))) {
+        !(thatQualifiers.isPresent())
+        || qualifierTypesAreUnique(thatQualifiers.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5132,8 +5274,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
-        || (that.getEmbeddedDataSpecifications().get().size() >= 1))) {
+        !(thatEmbeddedDataSpecifications.isPresent())
+        || (thatEmbeddedDataSpecifications.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5142,8 +5284,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getCategory().isPresent())
-        || Constants.validCategoriesForDataElement.contains(that.getCategory().get()))) {
+        !(thatCategory.isPresent())
+        || Constants.validCategoriesForDataElement.contains(thatCategory.get()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5152,9 +5294,9 @@ public class Verification {
             "VARIABLE.")));
       }
 
-      if (that.getExtensions().isPresent()) {
+      if (thatExtensions.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getExtensions().get())
+          Stream.of(thatExtensions.get())
             .flatMap(Verification::verifyListOf_IExtension)
               .map(error -> {
                 error.prependSegment(
@@ -5163,9 +5305,9 @@ public class Verification {
               }));
       }
 
-      if (that.getCategory().isPresent()) {
+      if (thatCategory.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getCategory().get())
+          Stream.of(thatCategory.get())
             .flatMap(Verification::verifyNameType)
               .map(error -> {
                 error.prependSegment(
@@ -5174,9 +5316,9 @@ public class Verification {
               }));
       }
 
-      if (that.getIdShort().isPresent()) {
+      if (thatIdShort.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getIdShort().get())
+          Stream.of(thatIdShort.get())
             .flatMap(Verification::verifyIdShortType)
               .map(error -> {
                 error.prependSegment(
@@ -5185,9 +5327,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDisplayName().isPresent()) {
+      if (thatDisplayName.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDisplayName().get())
+          Stream.of(thatDisplayName.get())
             .flatMap(Verification::verifyListOf_ILangStringNameType)
               .map(error -> {
                 error.prependSegment(
@@ -5196,9 +5338,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDescription().isPresent()) {
+      if (thatDescription.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDescription().get())
+          Stream.of(thatDescription.get())
             .flatMap(Verification::verifyListOf_ILangStringTextType)
               .map(error -> {
                 error.prependSegment(
@@ -5207,9 +5349,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSemanticId().isPresent()) {
+      if (thatSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticId().get())
+          Stream.of(thatSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -5218,9 +5360,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
+      if (thatSupplementalSemanticIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSupplementalSemanticIds().get())
+          Stream.of(thatSupplementalSemanticIds.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -5229,9 +5371,9 @@ public class Verification {
               }));
       }
 
-      if (that.getQualifiers().isPresent()) {
+      if (thatQualifiers.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getQualifiers().get())
+          Stream.of(thatQualifiers.get())
             .flatMap(Verification::verifyListOf_IQualifier)
               .map(error -> {
                 error.prependSegment(
@@ -5240,9 +5382,9 @@ public class Verification {
               }));
       }
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
+      if (thatEmbeddedDataSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getEmbeddedDataSpecifications().get())
+          Stream.of(thatEmbeddedDataSpecifications.get())
             .flatMap(Verification::verifyListOf_IEmbeddedDataSpecification)
               .map(error -> {
                 error.prependSegment(
@@ -5251,9 +5393,9 @@ public class Verification {
               }));
       }
 
-      if (that.getValue().isPresent()) {
+      if (thatValue.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getValue().get())
+          Stream.of(thatValue.get())
             .flatMap(Verification::verifyBlobType)
               .map(error -> {
                 error.prependSegment(
@@ -5279,9 +5421,20 @@ public class Verification {
       IFile that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IExtension>> thatExtensions = that.getExtensions();
+      final Optional<List<ILangStringTextType>> thatDescription = that.getDescription();
+      final Optional<List<ILangStringNameType>> thatDisplayName = that.getDisplayName();
+      final Optional<List<IReference>> thatSupplementalSemanticIds = that.getSupplementalSemanticIds();
+      final Optional<IReference> thatSemanticId = that.getSemanticId();
+      final Optional<List<IQualifier>> thatQualifiers = that.getQualifiers();
+      final Optional<List<IEmbeddedDataSpecification>> thatEmbeddedDataSpecifications = that.getEmbeddedDataSpecifications();
+      final Optional<String> thatCategory = that.getCategory();
+      final Optional<String> thatIdShort = that.getIdShort();
+      final Optional<String> thatValue = that.getValue();
+
       if (!(
-        !(that.getExtensions().isPresent())
-        || (that.getExtensions().get().size() >= 1))) {
+        !(thatExtensions.isPresent())
+        || (thatExtensions.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5289,8 +5442,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getExtensions().isPresent())
-        || extensionNamesAreUnique(that.getExtensions().orElse(null)))) {
+        !(thatExtensions.isPresent())
+        || extensionNamesAreUnique(thatExtensions.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5299,8 +5452,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || (that.getDescription().get().size() >= 1))) {
+        !(thatDescription.isPresent())
+        || (thatDescription.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5309,8 +5462,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDescription().orElse(null)))) {
+        !(thatDescription.isPresent())
+        || langStringsHaveUniqueLanguages(thatDescription.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5318,8 +5471,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || (that.getDisplayName().get().size() >= 1))) {
+        !(thatDisplayName.isPresent())
+        || (thatDisplayName.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5328,8 +5481,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDisplayName().orElse(null)))) {
+        !(thatDisplayName.isPresent())
+        || langStringsHaveUniqueLanguages(thatDisplayName.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5337,8 +5490,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSupplementalSemanticIds().get().size() >= 1))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSupplementalSemanticIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5347,8 +5500,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSemanticId().isPresent()))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSemanticId.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5357,8 +5510,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || (that.getQualifiers().get().size() >= 1))) {
+        !(thatQualifiers.isPresent())
+        || (thatQualifiers.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5366,8 +5519,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || qualifierTypesAreUnique(that.getQualifiers().orElse(null)))) {
+        !(thatQualifiers.isPresent())
+        || qualifierTypesAreUnique(thatQualifiers.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5376,8 +5529,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
-        || (that.getEmbeddedDataSpecifications().get().size() >= 1))) {
+        !(thatEmbeddedDataSpecifications.isPresent())
+        || (thatEmbeddedDataSpecifications.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5386,8 +5539,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getCategory().isPresent())
-        || Constants.validCategoriesForDataElement.contains(that.getCategory().get()))) {
+        !(thatCategory.isPresent())
+        || Constants.validCategoriesForDataElement.contains(thatCategory.get()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5396,9 +5549,9 @@ public class Verification {
             "VARIABLE.")));
       }
 
-      if (that.getExtensions().isPresent()) {
+      if (thatExtensions.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getExtensions().get())
+          Stream.of(thatExtensions.get())
             .flatMap(Verification::verifyListOf_IExtension)
               .map(error -> {
                 error.prependSegment(
@@ -5407,9 +5560,9 @@ public class Verification {
               }));
       }
 
-      if (that.getCategory().isPresent()) {
+      if (thatCategory.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getCategory().get())
+          Stream.of(thatCategory.get())
             .flatMap(Verification::verifyNameType)
               .map(error -> {
                 error.prependSegment(
@@ -5418,9 +5571,9 @@ public class Verification {
               }));
       }
 
-      if (that.getIdShort().isPresent()) {
+      if (thatIdShort.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getIdShort().get())
+          Stream.of(thatIdShort.get())
             .flatMap(Verification::verifyIdShortType)
               .map(error -> {
                 error.prependSegment(
@@ -5429,9 +5582,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDisplayName().isPresent()) {
+      if (thatDisplayName.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDisplayName().get())
+          Stream.of(thatDisplayName.get())
             .flatMap(Verification::verifyListOf_ILangStringNameType)
               .map(error -> {
                 error.prependSegment(
@@ -5440,9 +5593,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDescription().isPresent()) {
+      if (thatDescription.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDescription().get())
+          Stream.of(thatDescription.get())
             .flatMap(Verification::verifyListOf_ILangStringTextType)
               .map(error -> {
                 error.prependSegment(
@@ -5451,9 +5604,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSemanticId().isPresent()) {
+      if (thatSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticId().get())
+          Stream.of(thatSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -5462,9 +5615,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
+      if (thatSupplementalSemanticIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSupplementalSemanticIds().get())
+          Stream.of(thatSupplementalSemanticIds.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -5473,9 +5626,9 @@ public class Verification {
               }));
       }
 
-      if (that.getQualifiers().isPresent()) {
+      if (thatQualifiers.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getQualifiers().get())
+          Stream.of(thatQualifiers.get())
             .flatMap(Verification::verifyListOf_IQualifier)
               .map(error -> {
                 error.prependSegment(
@@ -5484,9 +5637,9 @@ public class Verification {
               }));
       }
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
+      if (thatEmbeddedDataSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getEmbeddedDataSpecifications().get())
+          Stream.of(thatEmbeddedDataSpecifications.get())
             .flatMap(Verification::verifyListOf_IEmbeddedDataSpecification)
               .map(error -> {
                 error.prependSegment(
@@ -5495,9 +5648,9 @@ public class Verification {
               }));
       }
 
-      if (that.getValue().isPresent()) {
+      if (thatValue.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getValue().get())
+          Stream.of(thatValue.get())
             .flatMap(Verification::verifyPathType)
               .map(error -> {
                 error.prependSegment(
@@ -5523,9 +5676,20 @@ public class Verification {
       IAnnotatedRelationshipElement that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IExtension>> thatExtensions = that.getExtensions();
+      final Optional<List<ILangStringTextType>> thatDescription = that.getDescription();
+      final Optional<List<ILangStringNameType>> thatDisplayName = that.getDisplayName();
+      final Optional<List<IReference>> thatSupplementalSemanticIds = that.getSupplementalSemanticIds();
+      final Optional<IReference> thatSemanticId = that.getSemanticId();
+      final Optional<List<IQualifier>> thatQualifiers = that.getQualifiers();
+      final Optional<List<IEmbeddedDataSpecification>> thatEmbeddedDataSpecifications = that.getEmbeddedDataSpecifications();
+      final Optional<List<IDataElement>> thatAnnotations = that.getAnnotations();
+      final Optional<String> thatCategory = that.getCategory();
+      final Optional<String> thatIdShort = that.getIdShort();
+
       if (!(
-        !(that.getExtensions().isPresent())
-        || (that.getExtensions().get().size() >= 1))) {
+        !(thatExtensions.isPresent())
+        || (thatExtensions.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5533,8 +5697,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getExtensions().isPresent())
-        || extensionNamesAreUnique(that.getExtensions().orElse(null)))) {
+        !(thatExtensions.isPresent())
+        || extensionNamesAreUnique(thatExtensions.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5543,8 +5707,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || (that.getDescription().get().size() >= 1))) {
+        !(thatDescription.isPresent())
+        || (thatDescription.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5553,8 +5717,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDescription().orElse(null)))) {
+        !(thatDescription.isPresent())
+        || langStringsHaveUniqueLanguages(thatDescription.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5562,8 +5726,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || (that.getDisplayName().get().size() >= 1))) {
+        !(thatDisplayName.isPresent())
+        || (thatDisplayName.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5572,8 +5736,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDisplayName().orElse(null)))) {
+        !(thatDisplayName.isPresent())
+        || langStringsHaveUniqueLanguages(thatDisplayName.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5581,8 +5745,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSupplementalSemanticIds().get().size() >= 1))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSupplementalSemanticIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5591,8 +5755,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSemanticId().isPresent()))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSemanticId.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5601,8 +5765,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || (that.getQualifiers().get().size() >= 1))) {
+        !(thatQualifiers.isPresent())
+        || (thatQualifiers.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5610,8 +5774,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || qualifierTypesAreUnique(that.getQualifiers().orElse(null)))) {
+        !(thatQualifiers.isPresent())
+        || qualifierTypesAreUnique(thatQualifiers.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5620,8 +5784,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
-        || (that.getEmbeddedDataSpecifications().get().size() >= 1))) {
+        !(thatEmbeddedDataSpecifications.isPresent())
+        || (thatEmbeddedDataSpecifications.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5630,8 +5794,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getAnnotations().isPresent())
-        || (that.getAnnotations().get().size() >= 1))) {
+        !(thatAnnotations.isPresent())
+        || (thatAnnotations.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5640,9 +5804,9 @@ public class Verification {
       }
 
       if (!(
-        !(that.getAnnotations().isPresent())
+        !(thatAnnotations.isPresent())
         || (
-            that.getAnnotations().get().stream().allMatch(
+            thatAnnotations.get().stream().allMatch(
                 item -> item.getIdShort().isPresent())
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
@@ -5654,9 +5818,9 @@ public class Verification {
             "be specified).")));
       }
 
-      if (that.getExtensions().isPresent()) {
+      if (thatExtensions.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getExtensions().get())
+          Stream.of(thatExtensions.get())
             .flatMap(Verification::verifyListOf_IExtension)
               .map(error -> {
                 error.prependSegment(
@@ -5665,9 +5829,9 @@ public class Verification {
               }));
       }
 
-      if (that.getCategory().isPresent()) {
+      if (thatCategory.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getCategory().get())
+          Stream.of(thatCategory.get())
             .flatMap(Verification::verifyNameType)
               .map(error -> {
                 error.prependSegment(
@@ -5676,9 +5840,9 @@ public class Verification {
               }));
       }
 
-      if (that.getIdShort().isPresent()) {
+      if (thatIdShort.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getIdShort().get())
+          Stream.of(thatIdShort.get())
             .flatMap(Verification::verifyIdShortType)
               .map(error -> {
                 error.prependSegment(
@@ -5687,9 +5851,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDisplayName().isPresent()) {
+      if (thatDisplayName.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDisplayName().get())
+          Stream.of(thatDisplayName.get())
             .flatMap(Verification::verifyListOf_ILangStringNameType)
               .map(error -> {
                 error.prependSegment(
@@ -5698,9 +5862,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDescription().isPresent()) {
+      if (thatDescription.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDescription().get())
+          Stream.of(thatDescription.get())
             .flatMap(Verification::verifyListOf_ILangStringTextType)
               .map(error -> {
                 error.prependSegment(
@@ -5709,9 +5873,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSemanticId().isPresent()) {
+      if (thatSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticId().get())
+          Stream.of(thatSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -5720,9 +5884,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
+      if (thatSupplementalSemanticIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSupplementalSemanticIds().get())
+          Stream.of(thatSupplementalSemanticIds.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -5731,9 +5895,9 @@ public class Verification {
               }));
       }
 
-      if (that.getQualifiers().isPresent()) {
+      if (thatQualifiers.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getQualifiers().get())
+          Stream.of(thatQualifiers.get())
             .flatMap(Verification::verifyListOf_IQualifier)
               .map(error -> {
                 error.prependSegment(
@@ -5742,9 +5906,9 @@ public class Verification {
               }));
       }
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
+      if (thatEmbeddedDataSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getEmbeddedDataSpecifications().get())
+          Stream.of(thatEmbeddedDataSpecifications.get())
             .flatMap(Verification::verifyListOf_IEmbeddedDataSpecification)
               .map(error -> {
                 error.prependSegment(
@@ -5771,9 +5935,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getAnnotations().isPresent()) {
+      if (thatAnnotations.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getAnnotations().get())
+          Stream.of(thatAnnotations.get())
             .flatMap(Verification::verifyListOf_IDataElement)
               .map(error -> {
                 error.prependSegment(
@@ -5790,9 +5954,22 @@ public class Verification {
       IEntity that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IExtension>> thatExtensions = that.getExtensions();
+      final Optional<List<ILangStringTextType>> thatDescription = that.getDescription();
+      final Optional<List<ILangStringNameType>> thatDisplayName = that.getDisplayName();
+      final Optional<List<IReference>> thatSupplementalSemanticIds = that.getSupplementalSemanticIds();
+      final Optional<IReference> thatSemanticId = that.getSemanticId();
+      final Optional<List<IQualifier>> thatQualifiers = that.getQualifiers();
+      final Optional<List<IEmbeddedDataSpecification>> thatEmbeddedDataSpecifications = that.getEmbeddedDataSpecifications();
+      final Optional<List<ISubmodelElement>> thatStatements = that.getStatements();
+      final Optional<String> thatGlobalAssetId = that.getGlobalAssetId();
+      final Optional<List<ISpecificAssetId>> thatSpecificAssetIds = that.getSpecificAssetIds();
+      final Optional<String> thatCategory = that.getCategory();
+      final Optional<String> thatIdShort = that.getIdShort();
+
       if (!(
-        !(that.getExtensions().isPresent())
-        || (that.getExtensions().get().size() >= 1))) {
+        !(thatExtensions.isPresent())
+        || (thatExtensions.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5800,8 +5977,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getExtensions().isPresent())
-        || extensionNamesAreUnique(that.getExtensions().orElse(null)))) {
+        !(thatExtensions.isPresent())
+        || extensionNamesAreUnique(thatExtensions.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5810,8 +5987,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || (that.getDescription().get().size() >= 1))) {
+        !(thatDescription.isPresent())
+        || (thatDescription.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5820,8 +5997,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDescription().orElse(null)))) {
+        !(thatDescription.isPresent())
+        || langStringsHaveUniqueLanguages(thatDescription.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5829,8 +6006,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || (that.getDisplayName().get().size() >= 1))) {
+        !(thatDisplayName.isPresent())
+        || (thatDisplayName.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5839,8 +6016,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDisplayName().orElse(null)))) {
+        !(thatDisplayName.isPresent())
+        || langStringsHaveUniqueLanguages(thatDisplayName.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5848,8 +6025,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSupplementalSemanticIds().get().size() >= 1))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSupplementalSemanticIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5858,8 +6035,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSemanticId().isPresent()))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSemanticId.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5868,8 +6045,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || (that.getQualifiers().get().size() >= 1))) {
+        !(thatQualifiers.isPresent())
+        || (thatQualifiers.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5877,8 +6054,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || qualifierTypesAreUnique(that.getQualifiers().orElse(null)))) {
+        !(thatQualifiers.isPresent())
+        || qualifierTypesAreUnique(thatQualifiers.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5887,8 +6064,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
-        || (that.getEmbeddedDataSpecifications().get().size() >= 1))) {
+        !(thatEmbeddedDataSpecifications.isPresent())
+        || (thatEmbeddedDataSpecifications.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5897,8 +6074,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getStatements().isPresent())
-        || (that.getStatements().get().size() >= 1))) {
+        !(thatStatements.isPresent())
+        || (thatStatements.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5906,9 +6083,9 @@ public class Verification {
       }
 
       if (!(
-        !(that.getStatements().isPresent())
+        !(thatStatements.isPresent())
         || (
-            that.getStatements().get().stream().allMatch(
+            thatStatements.get().stream().allMatch(
                 item -> item.getIdShort().isPresent())
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
@@ -5925,20 +6102,20 @@ public class Verification {
             that.getEntityType() == EntityType.SELF_MANAGED_ENTITY
             && (
                 (
-                    (that.getGlobalAssetId().isPresent())
-                    && (!that.getSpecificAssetIds().isPresent())
+                    (thatGlobalAssetId.isPresent())
+                    && (!thatSpecificAssetIds.isPresent())
                 )
                 || (
-                    (!that.getGlobalAssetId().isPresent())
-                    && (that.getSpecificAssetIds().isPresent())
-                    && that.getSpecificAssetIds().get().size() >= 1
+                    (!thatGlobalAssetId.isPresent())
+                    && (thatSpecificAssetIds.isPresent())
+                    && thatSpecificAssetIds.get().size() >= 1
                 )
             )
         )
         || (
             that.getEntityType() != EntityType.SELF_MANAGED_ENTITY
-            && (!that.getGlobalAssetId().isPresent())
-            && (!that.getSpecificAssetIds().isPresent())
+            && (!thatGlobalAssetId.isPresent())
+            && (!thatSpecificAssetIds.isPresent())
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -5949,8 +6126,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSpecificAssetIds().isPresent())
-        || (that.getSpecificAssetIds().get().size() >= 1))) {
+        !(thatSpecificAssetIds.isPresent())
+        || (thatSpecificAssetIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -5958,9 +6135,9 @@ public class Verification {
             "one item.")));
       }
 
-      if (that.getExtensions().isPresent()) {
+      if (thatExtensions.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getExtensions().get())
+          Stream.of(thatExtensions.get())
             .flatMap(Verification::verifyListOf_IExtension)
               .map(error -> {
                 error.prependSegment(
@@ -5969,9 +6146,9 @@ public class Verification {
               }));
       }
 
-      if (that.getCategory().isPresent()) {
+      if (thatCategory.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getCategory().get())
+          Stream.of(thatCategory.get())
             .flatMap(Verification::verifyNameType)
               .map(error -> {
                 error.prependSegment(
@@ -5980,9 +6157,9 @@ public class Verification {
               }));
       }
 
-      if (that.getIdShort().isPresent()) {
+      if (thatIdShort.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getIdShort().get())
+          Stream.of(thatIdShort.get())
             .flatMap(Verification::verifyIdShortType)
               .map(error -> {
                 error.prependSegment(
@@ -5991,9 +6168,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDisplayName().isPresent()) {
+      if (thatDisplayName.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDisplayName().get())
+          Stream.of(thatDisplayName.get())
             .flatMap(Verification::verifyListOf_ILangStringNameType)
               .map(error -> {
                 error.prependSegment(
@@ -6002,9 +6179,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDescription().isPresent()) {
+      if (thatDescription.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDescription().get())
+          Stream.of(thatDescription.get())
             .flatMap(Verification::verifyListOf_ILangStringTextType)
               .map(error -> {
                 error.prependSegment(
@@ -6013,9 +6190,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSemanticId().isPresent()) {
+      if (thatSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticId().get())
+          Stream.of(thatSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -6024,9 +6201,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
+      if (thatSupplementalSemanticIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSupplementalSemanticIds().get())
+          Stream.of(thatSupplementalSemanticIds.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -6035,9 +6212,9 @@ public class Verification {
               }));
       }
 
-      if (that.getQualifiers().isPresent()) {
+      if (thatQualifiers.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getQualifiers().get())
+          Stream.of(thatQualifiers.get())
             .flatMap(Verification::verifyListOf_IQualifier)
               .map(error -> {
                 error.prependSegment(
@@ -6046,9 +6223,9 @@ public class Verification {
               }));
       }
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
+      if (thatEmbeddedDataSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getEmbeddedDataSpecifications().get())
+          Stream.of(thatEmbeddedDataSpecifications.get())
             .flatMap(Verification::verifyListOf_IEmbeddedDataSpecification)
               .map(error -> {
                 error.prependSegment(
@@ -6057,9 +6234,9 @@ public class Verification {
               }));
       }
 
-      if (that.getStatements().isPresent()) {
+      if (thatStatements.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getStatements().get())
+          Stream.of(thatStatements.get())
             .flatMap(Verification::verifyListOf_ISubmodelElement)
               .map(error -> {
                 error.prependSegment(
@@ -6077,9 +6254,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getGlobalAssetId().isPresent()) {
+      if (thatGlobalAssetId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getGlobalAssetId().get())
+          Stream.of(thatGlobalAssetId.get())
             .flatMap(Verification::verifyIdentifier)
               .map(error -> {
                 error.prependSegment(
@@ -6088,9 +6265,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSpecificAssetIds().isPresent()) {
+      if (thatSpecificAssetIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSpecificAssetIds().get())
+          Stream.of(thatSpecificAssetIds.get())
             .flatMap(Verification::verifyListOf_ISpecificAssetId)
               .map(error -> {
                 error.prependSegment(
@@ -6106,6 +6283,12 @@ public class Verification {
     public Stream<Reporting.Error> transformEventPayload(
       IEventPayload that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
+
+      final Optional<IReference> thatSourceSemanticId = that.getSourceSemanticId();
+      final Optional<IReference> thatObservableSemanticId = that.getObservableSemanticId();
+      final Optional<String> thatTopic = that.getTopic();
+      final Optional<IReference> thatSubjectId = that.getSubjectId();
+      final Optional<byte[]> thatPayload = that.getPayload();
 
       if (!(
         isModelReferenceTo(that.getSource(), KeyTypes.EVENT_ELEMENT)
@@ -6134,9 +6317,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getSourceSemanticId().isPresent()) {
+      if (thatSourceSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSourceSemanticId().get())
+          Stream.of(thatSourceSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -6154,9 +6337,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getObservableSemanticId().isPresent()) {
+      if (thatObservableSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getObservableSemanticId().get())
+          Stream.of(thatObservableSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -6165,9 +6348,9 @@ public class Verification {
               }));
       }
 
-      if (that.getTopic().isPresent()) {
+      if (thatTopic.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getTopic().get())
+          Stream.of(thatTopic.get())
             .flatMap(Verification::verifyMessageTopicType)
               .map(error -> {
                 error.prependSegment(
@@ -6176,9 +6359,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSubjectId().isPresent()) {
+      if (thatSubjectId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSubjectId().get())
+          Stream.of(thatSubjectId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -6196,9 +6379,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getPayload().isPresent()) {
+      if (thatPayload.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getPayload().get())
+          Stream.of(thatPayload.get())
             .flatMap(Verification::verifyBlobType)
               .map(error -> {
                 error.prependSegment(
@@ -6215,9 +6398,24 @@ public class Verification {
       IBasicEventElement that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IExtension>> thatExtensions = that.getExtensions();
+      final Optional<List<ILangStringTextType>> thatDescription = that.getDescription();
+      final Optional<List<ILangStringNameType>> thatDisplayName = that.getDisplayName();
+      final Optional<List<IReference>> thatSupplementalSemanticIds = that.getSupplementalSemanticIds();
+      final Optional<IReference> thatSemanticId = that.getSemanticId();
+      final Optional<List<IQualifier>> thatQualifiers = that.getQualifiers();
+      final Optional<List<IEmbeddedDataSpecification>> thatEmbeddedDataSpecifications = that.getEmbeddedDataSpecifications();
+      final Optional<String> thatMaxInterval = that.getMaxInterval();
+      final Optional<IReference> thatMessageBroker = that.getMessageBroker();
+      final Optional<String> thatCategory = that.getCategory();
+      final Optional<String> thatIdShort = that.getIdShort();
+      final Optional<String> thatMessageTopic = that.getMessageTopic();
+      final Optional<String> thatLastUpdate = that.getLastUpdate();
+      final Optional<String> thatMinInterval = that.getMinInterval();
+
       if (!(
-        !(that.getExtensions().isPresent())
-        || (that.getExtensions().get().size() >= 1))) {
+        !(thatExtensions.isPresent())
+        || (thatExtensions.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6225,8 +6423,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getExtensions().isPresent())
-        || extensionNamesAreUnique(that.getExtensions().orElse(null)))) {
+        !(thatExtensions.isPresent())
+        || extensionNamesAreUnique(thatExtensions.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6235,8 +6433,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || (that.getDescription().get().size() >= 1))) {
+        !(thatDescription.isPresent())
+        || (thatDescription.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6245,8 +6443,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDescription().orElse(null)))) {
+        !(thatDescription.isPresent())
+        || langStringsHaveUniqueLanguages(thatDescription.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6254,8 +6452,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || (that.getDisplayName().get().size() >= 1))) {
+        !(thatDisplayName.isPresent())
+        || (thatDisplayName.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6264,8 +6462,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDisplayName().orElse(null)))) {
+        !(thatDisplayName.isPresent())
+        || langStringsHaveUniqueLanguages(thatDisplayName.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6273,8 +6471,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSupplementalSemanticIds().get().size() >= 1))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSupplementalSemanticIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6283,8 +6481,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSemanticId().isPresent()))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSemanticId.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6293,8 +6491,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || (that.getQualifiers().get().size() >= 1))) {
+        !(thatQualifiers.isPresent())
+        || (thatQualifiers.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6302,8 +6500,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || qualifierTypesAreUnique(that.getQualifiers().orElse(null)))) {
+        !(thatQualifiers.isPresent())
+        || qualifierTypesAreUnique(thatQualifiers.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6312,8 +6510,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
-        || (that.getEmbeddedDataSpecifications().get().size() >= 1))) {
+        !(thatEmbeddedDataSpecifications.isPresent())
+        || (thatEmbeddedDataSpecifications.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6323,7 +6521,7 @@ public class Verification {
 
       if (!(
         !(that.getDirection() == Direction.INPUT)
-        || (!that.getMaxInterval().isPresent()))) {
+        || (!thatMaxInterval.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6338,17 +6536,17 @@ public class Verification {
       }
 
       if (!(
-        !(that.getMessageBroker().isPresent())
-        || isModelReferenceToReferable(that.getMessageBroker().orElse(null)))) {
+        !(thatMessageBroker.isPresent())
+        || isModelReferenceToReferable(thatMessageBroker.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "Message broker must be a model reference to a referable.")));
       }
 
-      if (that.getExtensions().isPresent()) {
+      if (thatExtensions.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getExtensions().get())
+          Stream.of(thatExtensions.get())
             .flatMap(Verification::verifyListOf_IExtension)
               .map(error -> {
                 error.prependSegment(
@@ -6357,9 +6555,9 @@ public class Verification {
               }));
       }
 
-      if (that.getCategory().isPresent()) {
+      if (thatCategory.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getCategory().get())
+          Stream.of(thatCategory.get())
             .flatMap(Verification::verifyNameType)
               .map(error -> {
                 error.prependSegment(
@@ -6368,9 +6566,9 @@ public class Verification {
               }));
       }
 
-      if (that.getIdShort().isPresent()) {
+      if (thatIdShort.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getIdShort().get())
+          Stream.of(thatIdShort.get())
             .flatMap(Verification::verifyIdShortType)
               .map(error -> {
                 error.prependSegment(
@@ -6379,9 +6577,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDisplayName().isPresent()) {
+      if (thatDisplayName.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDisplayName().get())
+          Stream.of(thatDisplayName.get())
             .flatMap(Verification::verifyListOf_ILangStringNameType)
               .map(error -> {
                 error.prependSegment(
@@ -6390,9 +6588,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDescription().isPresent()) {
+      if (thatDescription.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDescription().get())
+          Stream.of(thatDescription.get())
             .flatMap(Verification::verifyListOf_ILangStringTextType)
               .map(error -> {
                 error.prependSegment(
@@ -6401,9 +6599,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSemanticId().isPresent()) {
+      if (thatSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticId().get())
+          Stream.of(thatSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -6412,9 +6610,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
+      if (thatSupplementalSemanticIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSupplementalSemanticIds().get())
+          Stream.of(thatSupplementalSemanticIds.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -6423,9 +6621,9 @@ public class Verification {
               }));
       }
 
-      if (that.getQualifiers().isPresent()) {
+      if (thatQualifiers.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getQualifiers().get())
+          Stream.of(thatQualifiers.get())
             .flatMap(Verification::verifyListOf_IQualifier)
               .map(error -> {
                 error.prependSegment(
@@ -6434,9 +6632,9 @@ public class Verification {
               }));
       }
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
+      if (thatEmbeddedDataSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getEmbeddedDataSpecifications().get())
+          Stream.of(thatEmbeddedDataSpecifications.get())
             .flatMap(Verification::verifyListOf_IEmbeddedDataSpecification)
               .map(error -> {
                 error.prependSegment(
@@ -6472,9 +6670,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getMessageTopic().isPresent()) {
+      if (thatMessageTopic.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getMessageTopic().get())
+          Stream.of(thatMessageTopic.get())
             .flatMap(Verification::verifyMessageTopicType)
               .map(error -> {
                 error.prependSegment(
@@ -6483,9 +6681,9 @@ public class Verification {
               }));
       }
 
-      if (that.getMessageBroker().isPresent()) {
+      if (thatMessageBroker.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getMessageBroker().get())
+          Stream.of(thatMessageBroker.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -6494,9 +6692,9 @@ public class Verification {
               }));
       }
 
-      if (that.getLastUpdate().isPresent()) {
+      if (thatLastUpdate.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getLastUpdate().get())
+          Stream.of(thatLastUpdate.get())
             .flatMap(Verification::verifyDateTimeUtc)
               .map(error -> {
                 error.prependSegment(
@@ -6505,9 +6703,9 @@ public class Verification {
               }));
       }
 
-      if (that.getMinInterval().isPresent()) {
+      if (thatMinInterval.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getMinInterval().get())
+          Stream.of(thatMinInterval.get())
             .flatMap(Verification::verifyDuration)
               .map(error -> {
                 error.prependSegment(
@@ -6516,9 +6714,9 @@ public class Verification {
               }));
       }
 
-      if (that.getMaxInterval().isPresent()) {
+      if (thatMaxInterval.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getMaxInterval().get())
+          Stream.of(thatMaxInterval.get())
             .flatMap(Verification::verifyDuration)
               .map(error -> {
                 error.prependSegment(
@@ -6535,9 +6733,22 @@ public class Verification {
       IOperation that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IExtension>> thatExtensions = that.getExtensions();
+      final Optional<List<ILangStringTextType>> thatDescription = that.getDescription();
+      final Optional<List<ILangStringNameType>> thatDisplayName = that.getDisplayName();
+      final Optional<List<IReference>> thatSupplementalSemanticIds = that.getSupplementalSemanticIds();
+      final Optional<IReference> thatSemanticId = that.getSemanticId();
+      final Optional<List<IQualifier>> thatQualifiers = that.getQualifiers();
+      final Optional<List<IEmbeddedDataSpecification>> thatEmbeddedDataSpecifications = that.getEmbeddedDataSpecifications();
+      final Optional<List<IOperationVariable>> thatInputVariables = that.getInputVariables();
+      final Optional<List<IOperationVariable>> thatOutputVariables = that.getOutputVariables();
+      final Optional<List<IOperationVariable>> thatInoutputVariables = that.getInoutputVariables();
+      final Optional<String> thatCategory = that.getCategory();
+      final Optional<String> thatIdShort = that.getIdShort();
+
       if (!(
-        !(that.getExtensions().isPresent())
-        || (that.getExtensions().get().size() >= 1))) {
+        !(thatExtensions.isPresent())
+        || (thatExtensions.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6545,8 +6756,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getExtensions().isPresent())
-        || extensionNamesAreUnique(that.getExtensions().orElse(null)))) {
+        !(thatExtensions.isPresent())
+        || extensionNamesAreUnique(thatExtensions.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6555,8 +6766,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || (that.getDescription().get().size() >= 1))) {
+        !(thatDescription.isPresent())
+        || (thatDescription.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6565,8 +6776,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDescription().orElse(null)))) {
+        !(thatDescription.isPresent())
+        || langStringsHaveUniqueLanguages(thatDescription.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6574,8 +6785,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || (that.getDisplayName().get().size() >= 1))) {
+        !(thatDisplayName.isPresent())
+        || (thatDisplayName.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6584,8 +6795,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDisplayName().orElse(null)))) {
+        !(thatDisplayName.isPresent())
+        || langStringsHaveUniqueLanguages(thatDisplayName.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6593,8 +6804,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSupplementalSemanticIds().get().size() >= 1))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSupplementalSemanticIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6603,8 +6814,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSemanticId().isPresent()))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSemanticId.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6613,8 +6824,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || (that.getQualifiers().get().size() >= 1))) {
+        !(thatQualifiers.isPresent())
+        || (thatQualifiers.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6622,8 +6833,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || qualifierTypesAreUnique(that.getQualifiers().orElse(null)))) {
+        !(thatQualifiers.isPresent())
+        || qualifierTypesAreUnique(thatQualifiers.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6632,8 +6843,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
-        || (that.getEmbeddedDataSpecifications().get().size() >= 1))) {
+        !(thatEmbeddedDataSpecifications.isPresent())
+        || (thatEmbeddedDataSpecifications.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6643,9 +6854,9 @@ public class Verification {
 
       if (!(
         idShortsOfVariablesAreUnique(
-            that.getInputVariables(),
-            that.getOutputVariables(),
-            that.getInoutputVariables()))) {
+            thatInputVariables,
+            thatOutputVariables,
+            thatInoutputVariables))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6654,8 +6865,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getInputVariables().isPresent())
-        || (that.getInputVariables().get().size() >= 1))) {
+        !(thatInputVariables.isPresent())
+        || (thatInputVariables.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6664,8 +6875,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getOutputVariables().isPresent())
-        || (that.getOutputVariables().get().size() >= 1))) {
+        !(thatOutputVariables.isPresent())
+        || (thatOutputVariables.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6674,8 +6885,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getInoutputVariables().isPresent())
-        || (that.getInoutputVariables().get().size() >= 1))) {
+        !(thatInoutputVariables.isPresent())
+        || (thatInoutputVariables.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6683,9 +6894,9 @@ public class Verification {
             "one item.")));
       }
 
-      if (that.getExtensions().isPresent()) {
+      if (thatExtensions.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getExtensions().get())
+          Stream.of(thatExtensions.get())
             .flatMap(Verification::verifyListOf_IExtension)
               .map(error -> {
                 error.prependSegment(
@@ -6694,9 +6905,9 @@ public class Verification {
               }));
       }
 
-      if (that.getCategory().isPresent()) {
+      if (thatCategory.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getCategory().get())
+          Stream.of(thatCategory.get())
             .flatMap(Verification::verifyNameType)
               .map(error -> {
                 error.prependSegment(
@@ -6705,9 +6916,9 @@ public class Verification {
               }));
       }
 
-      if (that.getIdShort().isPresent()) {
+      if (thatIdShort.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getIdShort().get())
+          Stream.of(thatIdShort.get())
             .flatMap(Verification::verifyIdShortType)
               .map(error -> {
                 error.prependSegment(
@@ -6716,9 +6927,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDisplayName().isPresent()) {
+      if (thatDisplayName.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDisplayName().get())
+          Stream.of(thatDisplayName.get())
             .flatMap(Verification::verifyListOf_ILangStringNameType)
               .map(error -> {
                 error.prependSegment(
@@ -6727,9 +6938,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDescription().isPresent()) {
+      if (thatDescription.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDescription().get())
+          Stream.of(thatDescription.get())
             .flatMap(Verification::verifyListOf_ILangStringTextType)
               .map(error -> {
                 error.prependSegment(
@@ -6738,9 +6949,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSemanticId().isPresent()) {
+      if (thatSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticId().get())
+          Stream.of(thatSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -6749,9 +6960,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
+      if (thatSupplementalSemanticIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSupplementalSemanticIds().get())
+          Stream.of(thatSupplementalSemanticIds.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -6760,9 +6971,9 @@ public class Verification {
               }));
       }
 
-      if (that.getQualifiers().isPresent()) {
+      if (thatQualifiers.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getQualifiers().get())
+          Stream.of(thatQualifiers.get())
             .flatMap(Verification::verifyListOf_IQualifier)
               .map(error -> {
                 error.prependSegment(
@@ -6771,9 +6982,9 @@ public class Verification {
               }));
       }
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
+      if (thatEmbeddedDataSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getEmbeddedDataSpecifications().get())
+          Stream.of(thatEmbeddedDataSpecifications.get())
             .flatMap(Verification::verifyListOf_IEmbeddedDataSpecification)
               .map(error -> {
                 error.prependSegment(
@@ -6782,9 +6993,9 @@ public class Verification {
               }));
       }
 
-      if (that.getInputVariables().isPresent()) {
+      if (thatInputVariables.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getInputVariables().get())
+          Stream.of(thatInputVariables.get())
             .flatMap(Verification::verifyListOf_IOperationVariable)
               .map(error -> {
                 error.prependSegment(
@@ -6793,9 +7004,9 @@ public class Verification {
               }));
       }
 
-      if (that.getOutputVariables().isPresent()) {
+      if (thatOutputVariables.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getOutputVariables().get())
+          Stream.of(thatOutputVariables.get())
             .flatMap(Verification::verifyListOf_IOperationVariable)
               .map(error -> {
                 error.prependSegment(
@@ -6804,9 +7015,9 @@ public class Verification {
               }));
       }
 
-      if (that.getInoutputVariables().isPresent()) {
+      if (thatInoutputVariables.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getInoutputVariables().get())
+          Stream.of(thatInoutputVariables.get())
             .flatMap(Verification::verifyListOf_IOperationVariable)
               .map(error -> {
                 error.prependSegment(
@@ -6850,9 +7061,19 @@ public class Verification {
       ICapability that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IExtension>> thatExtensions = that.getExtensions();
+      final Optional<List<ILangStringTextType>> thatDescription = that.getDescription();
+      final Optional<List<ILangStringNameType>> thatDisplayName = that.getDisplayName();
+      final Optional<List<IReference>> thatSupplementalSemanticIds = that.getSupplementalSemanticIds();
+      final Optional<IReference> thatSemanticId = that.getSemanticId();
+      final Optional<List<IQualifier>> thatQualifiers = that.getQualifiers();
+      final Optional<List<IEmbeddedDataSpecification>> thatEmbeddedDataSpecifications = that.getEmbeddedDataSpecifications();
+      final Optional<String> thatCategory = that.getCategory();
+      final Optional<String> thatIdShort = that.getIdShort();
+
       if (!(
-        !(that.getExtensions().isPresent())
-        || (that.getExtensions().get().size() >= 1))) {
+        !(thatExtensions.isPresent())
+        || (thatExtensions.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6860,8 +7081,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getExtensions().isPresent())
-        || extensionNamesAreUnique(that.getExtensions().orElse(null)))) {
+        !(thatExtensions.isPresent())
+        || extensionNamesAreUnique(thatExtensions.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6870,8 +7091,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || (that.getDescription().get().size() >= 1))) {
+        !(thatDescription.isPresent())
+        || (thatDescription.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6880,8 +7101,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDescription().orElse(null)))) {
+        !(thatDescription.isPresent())
+        || langStringsHaveUniqueLanguages(thatDescription.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6889,8 +7110,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || (that.getDisplayName().get().size() >= 1))) {
+        !(thatDisplayName.isPresent())
+        || (thatDisplayName.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6899,8 +7120,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDisplayName().orElse(null)))) {
+        !(thatDisplayName.isPresent())
+        || langStringsHaveUniqueLanguages(thatDisplayName.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6908,8 +7129,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSupplementalSemanticIds().get().size() >= 1))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSupplementalSemanticIds.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6918,8 +7139,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSupplementalSemanticIds().isPresent())
-        || (that.getSemanticId().isPresent()))) {
+        !(thatSupplementalSemanticIds.isPresent())
+        || (thatSemanticId.isPresent()))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6928,8 +7149,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || (that.getQualifiers().get().size() >= 1))) {
+        !(thatQualifiers.isPresent())
+        || (thatQualifiers.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6937,8 +7158,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getQualifiers().isPresent())
-        || qualifierTypesAreUnique(that.getQualifiers().orElse(null)))) {
+        !(thatQualifiers.isPresent())
+        || qualifierTypesAreUnique(thatQualifiers.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6947,8 +7168,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
-        || (that.getEmbeddedDataSpecifications().get().size() >= 1))) {
+        !(thatEmbeddedDataSpecifications.isPresent())
+        || (thatEmbeddedDataSpecifications.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -6956,9 +7177,9 @@ public class Verification {
             "at least one item.")));
       }
 
-      if (that.getExtensions().isPresent()) {
+      if (thatExtensions.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getExtensions().get())
+          Stream.of(thatExtensions.get())
             .flatMap(Verification::verifyListOf_IExtension)
               .map(error -> {
                 error.prependSegment(
@@ -6967,9 +7188,9 @@ public class Verification {
               }));
       }
 
-      if (that.getCategory().isPresent()) {
+      if (thatCategory.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getCategory().get())
+          Stream.of(thatCategory.get())
             .flatMap(Verification::verifyNameType)
               .map(error -> {
                 error.prependSegment(
@@ -6978,9 +7199,9 @@ public class Verification {
               }));
       }
 
-      if (that.getIdShort().isPresent()) {
+      if (thatIdShort.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getIdShort().get())
+          Stream.of(thatIdShort.get())
             .flatMap(Verification::verifyIdShortType)
               .map(error -> {
                 error.prependSegment(
@@ -6989,9 +7210,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDisplayName().isPresent()) {
+      if (thatDisplayName.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDisplayName().get())
+          Stream.of(thatDisplayName.get())
             .flatMap(Verification::verifyListOf_ILangStringNameType)
               .map(error -> {
                 error.prependSegment(
@@ -7000,9 +7221,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDescription().isPresent()) {
+      if (thatDescription.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDescription().get())
+          Stream.of(thatDescription.get())
             .flatMap(Verification::verifyListOf_ILangStringTextType)
               .map(error -> {
                 error.prependSegment(
@@ -7011,9 +7232,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSemanticId().isPresent()) {
+      if (thatSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSemanticId().get())
+          Stream.of(thatSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -7022,9 +7243,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
+      if (thatSupplementalSemanticIds.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSupplementalSemanticIds().get())
+          Stream.of(thatSupplementalSemanticIds.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -7033,9 +7254,9 @@ public class Verification {
               }));
       }
 
-      if (that.getQualifiers().isPresent()) {
+      if (thatQualifiers.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getQualifiers().get())
+          Stream.of(thatQualifiers.get())
             .flatMap(Verification::verifyListOf_IQualifier)
               .map(error -> {
                 error.prependSegment(
@@ -7044,9 +7265,9 @@ public class Verification {
               }));
       }
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
+      if (thatEmbeddedDataSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getEmbeddedDataSpecifications().get())
+          Stream.of(thatEmbeddedDataSpecifications.get())
             .flatMap(Verification::verifyListOf_IEmbeddedDataSpecification)
               .map(error -> {
                 error.prependSegment(
@@ -7063,9 +7284,18 @@ public class Verification {
       IConceptDescription that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IExtension>> thatExtensions = that.getExtensions();
+      final Optional<List<ILangStringTextType>> thatDescription = that.getDescription();
+      final Optional<List<ILangStringNameType>> thatDisplayName = that.getDisplayName();
+      final Optional<List<IEmbeddedDataSpecification>> thatEmbeddedDataSpecifications = that.getEmbeddedDataSpecifications();
+      final Optional<List<IReference>> thatIsCaseOf = that.getIsCaseOf();
+      final Optional<String> thatCategory = that.getCategory();
+      final Optional<String> thatIdShort = that.getIdShort();
+      final Optional<IAdministrativeInformation> thatAdministration = that.getAdministration();
+
       if (!(
-        !(that.getExtensions().isPresent())
-        || (that.getExtensions().get().size() >= 1))) {
+        !(thatExtensions.isPresent())
+        || (thatExtensions.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7073,8 +7303,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getExtensions().isPresent())
-        || extensionNamesAreUnique(that.getExtensions().orElse(null)))) {
+        !(thatExtensions.isPresent())
+        || extensionNamesAreUnique(thatExtensions.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7083,8 +7313,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || (that.getDescription().get().size() >= 1))) {
+        !(thatDescription.isPresent())
+        || (thatDescription.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7093,8 +7323,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDescription().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDescription().orElse(null)))) {
+        !(thatDescription.isPresent())
+        || langStringsHaveUniqueLanguages(thatDescription.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7102,8 +7332,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || (that.getDisplayName().get().size() >= 1))) {
+        !(thatDisplayName.isPresent())
+        || (thatDisplayName.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7112,8 +7342,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDisplayName().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDisplayName().orElse(null)))) {
+        !(thatDisplayName.isPresent())
+        || langStringsHaveUniqueLanguages(thatDisplayName.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7121,8 +7351,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
-        || (that.getEmbeddedDataSpecifications().get().size() >= 1))) {
+        !(thatEmbeddedDataSpecifications.isPresent())
+        || (thatEmbeddedDataSpecifications.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7131,8 +7361,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getIsCaseOf().isPresent())
-        || (that.getIsCaseOf().get().size() >= 1))) {
+        !(thatIsCaseOf.isPresent())
+        || (thatIsCaseOf.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7140,10 +7370,10 @@ public class Verification {
       }
 
       if (!(
-        !(that.getEmbeddedDataSpecifications().isPresent())
+        !(thatEmbeddedDataSpecifications.isPresent())
         || (
-            dataSpecificationIec61360sHaveDefinitionAtLeastInEnglish(that.getEmbeddedDataSpecifications().orElse(null))
-            || dataSpecificationIec61360sHaveValue(that.getEmbeddedDataSpecifications().orElse(null))
+            dataSpecificationIec61360sHaveDefinitionAtLeastInEnglish(thatEmbeddedDataSpecifications.orElse(null))
+            || dataSpecificationIec61360sHaveValue(thatEmbeddedDataSpecifications.orElse(null))
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -7156,11 +7386,11 @@ public class Verification {
 
       if (!(
         !(
-            (that.getCategory().isPresent())
-            && Objects.equals(that.getCategory().get(), "QUALIFIER_TYPE")
-            && (that.getEmbeddedDataSpecifications().isPresent())
+            (thatCategory.isPresent())
+            && Objects.equals(thatCategory.get(), "QUALIFIER_TYPE")
+            && (thatEmbeddedDataSpecifications.isPresent())
         )
-        || dataSpecificationIec61360sHaveDataType(that.getEmbeddedDataSpecifications().orElse(null)))) {
+        || dataSpecificationIec61360sHaveDataType(thatEmbeddedDataSpecifications.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7172,11 +7402,11 @@ public class Verification {
 
       if (!(
         !(
-            (that.getCategory().isPresent())
-            && Objects.equals(that.getCategory().get(), "DOCUMENT")
-            && (that.getEmbeddedDataSpecifications().isPresent())
+            (thatCategory.isPresent())
+            && Objects.equals(thatCategory.get(), "DOCUMENT")
+            && (thatEmbeddedDataSpecifications.isPresent())
         )
-        || dataSpecificationIec61360sForDocumentHaveAppropriateDataType(that.getEmbeddedDataSpecifications().orElse(null)))) {
+        || dataSpecificationIec61360sForDocumentHaveAppropriateDataType(thatEmbeddedDataSpecifications.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7188,11 +7418,11 @@ public class Verification {
 
       if (!(
         !(
-            (that.getCategory().isPresent())
-            && Objects.equals(that.getCategory().get(), "REFERENCE")
-            && (that.getEmbeddedDataSpecifications().isPresent())
+            (thatCategory.isPresent())
+            && Objects.equals(thatCategory.get(), "REFERENCE")
+            && (thatEmbeddedDataSpecifications.isPresent())
         )
-        || dataSpecificationIec61360sForReferenceHaveAppropriateDataType(that.getEmbeddedDataSpecifications().orElse(null)))) {
+        || dataSpecificationIec61360sForReferenceHaveAppropriateDataType(thatEmbeddedDataSpecifications.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7204,14 +7434,14 @@ public class Verification {
 
       if (!(
         !(
-            (that.getCategory().isPresent())
+            (thatCategory.isPresent())
             && (
-                Objects.equals(that.getCategory().get(), "PROPERTY")
-                || Objects.equals(that.getCategory().get(), "VALUE")
+                Objects.equals(thatCategory.get(), "PROPERTY")
+                || Objects.equals(thatCategory.get(), "VALUE")
             )
-            && (that.getEmbeddedDataSpecifications().isPresent())
+            && (thatEmbeddedDataSpecifications.isPresent())
         )
-        || dataSpecificationIec61360sForPropertyOrValueHaveAppropriateDataType(that.getEmbeddedDataSpecifications().orElse(null)))) {
+        || dataSpecificationIec61360sForPropertyOrValueHaveAppropriateDataType(thatEmbeddedDataSpecifications.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7224,9 +7454,9 @@ public class Verification {
             "RATIONAL_MEASURE, TIME, TIMESTAMP.")));
       }
 
-      if (that.getExtensions().isPresent()) {
+      if (thatExtensions.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getExtensions().get())
+          Stream.of(thatExtensions.get())
             .flatMap(Verification::verifyListOf_IExtension)
               .map(error -> {
                 error.prependSegment(
@@ -7235,9 +7465,9 @@ public class Verification {
               }));
       }
 
-      if (that.getCategory().isPresent()) {
+      if (thatCategory.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getCategory().get())
+          Stream.of(thatCategory.get())
             .flatMap(Verification::verifyNameType)
               .map(error -> {
                 error.prependSegment(
@@ -7246,9 +7476,9 @@ public class Verification {
               }));
       }
 
-      if (that.getIdShort().isPresent()) {
+      if (thatIdShort.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getIdShort().get())
+          Stream.of(thatIdShort.get())
             .flatMap(Verification::verifyIdShortType)
               .map(error -> {
                 error.prependSegment(
@@ -7257,9 +7487,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDisplayName().isPresent()) {
+      if (thatDisplayName.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDisplayName().get())
+          Stream.of(thatDisplayName.get())
             .flatMap(Verification::verifyListOf_ILangStringNameType)
               .map(error -> {
                 error.prependSegment(
@@ -7268,9 +7498,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDescription().isPresent()) {
+      if (thatDescription.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDescription().get())
+          Stream.of(thatDescription.get())
             .flatMap(Verification::verifyListOf_ILangStringTextType)
               .map(error -> {
                 error.prependSegment(
@@ -7279,9 +7509,9 @@ public class Verification {
               }));
       }
 
-      if (that.getAdministration().isPresent()) {
+      if (thatAdministration.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getAdministration().get())
+          Stream.of(thatAdministration.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -7299,9 +7529,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
+      if (thatEmbeddedDataSpecifications.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getEmbeddedDataSpecifications().get())
+          Stream.of(thatEmbeddedDataSpecifications.get())
             .flatMap(Verification::verifyListOf_IEmbeddedDataSpecification)
               .map(error -> {
                 error.prependSegment(
@@ -7310,9 +7540,9 @@ public class Verification {
               }));
       }
 
-      if (that.getIsCaseOf().isPresent()) {
+      if (thatIsCaseOf.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getIsCaseOf().get())
+          Stream.of(thatIsCaseOf.get())
             .flatMap(Verification::verifyListOf_IReference)
               .map(error -> {
                 error.prependSegment(
@@ -7328,6 +7558,8 @@ public class Verification {
     public Stream<Reporting.Error> transformReference(
       IReference that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
+
+      final Optional<IReference> thatReferredSemanticId = that.getReferredSemanticId();
 
       if (!(that.getKeys().size() >= 1)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
@@ -7483,9 +7715,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getReferredSemanticId().isPresent()) {
+      if (thatReferredSemanticId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getReferredSemanticId().get())
+          Stream.of(thatReferredSemanticId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -7603,9 +7835,13 @@ public class Verification {
       IEnvironment that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<List<IConceptDescription>> thatConceptDescriptions = that.getConceptDescriptions();
+      final Optional<List<ISubmodel>> thatSubmodels = that.getSubmodels();
+      final Optional<List<IAssetAdministrationShell>> thatAssetAdministrationShells = that.getAssetAdministrationShells();
+
       if (!(
-        !(that.getConceptDescriptions().isPresent())
-        || (that.getConceptDescriptions().get().size() >= 1))) {
+        !(thatConceptDescriptions.isPresent())
+        || (thatConceptDescriptions.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7614,8 +7850,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getSubmodels().isPresent())
-        || (that.getSubmodels().get().size() >= 1))) {
+        !(thatSubmodels.isPresent())
+        || (thatSubmodels.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7623,8 +7859,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getAssetAdministrationShells().isPresent())
-        || (that.getAssetAdministrationShells().get().size() >= 1))) {
+        !(thatAssetAdministrationShells.isPresent())
+        || (thatAssetAdministrationShells.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7632,9 +7868,9 @@ public class Verification {
             "at least one item.")));
       }
 
-      if (that.getAssetAdministrationShells().isPresent()) {
+      if (thatAssetAdministrationShells.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getAssetAdministrationShells().get())
+          Stream.of(thatAssetAdministrationShells.get())
             .flatMap(Verification::verifyListOf_IAssetAdministrationShell)
               .map(error -> {
                 error.prependSegment(
@@ -7643,9 +7879,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSubmodels().isPresent()) {
+      if (thatSubmodels.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSubmodels().get())
+          Stream.of(thatSubmodels.get())
             .flatMap(Verification::verifyListOf_ISubmodel)
               .map(error -> {
                 error.prependSegment(
@@ -7654,9 +7890,9 @@ public class Verification {
               }));
       }
 
-      if (that.getConceptDescriptions().isPresent()) {
+      if (thatConceptDescriptions.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getConceptDescriptions().get())
+          Stream.of(thatConceptDescriptions.get())
             .flatMap(Verification::verifyListOf_IConceptDescription)
               .map(error -> {
                 error.prependSegment(
@@ -7858,9 +8094,21 @@ public class Verification {
       IDataSpecificationIec61360 that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      final Optional<String> thatValue = that.getValue();
+      final Optional<IValueList> thatValueList = that.getValueList();
+      final Optional<DataTypeIec61360> thatDataType = that.getDataType();
+      final Optional<String> thatUnit = that.getUnit();
+      final Optional<IReference> thatUnitId = that.getUnitId();
+      final Optional<List<ILangStringDefinitionTypeIec61360>> thatDefinition = that.getDefinition();
+      final Optional<List<ILangStringShortNameTypeIec61360>> thatShortName = that.getShortName();
+      final Optional<String> thatSourceOfDefinition = that.getSourceOfDefinition();
+      final Optional<String> thatSymbol = that.getSymbol();
+      final Optional<String> thatValueFormat = that.getValueFormat();
+      final Optional<ILevelType> thatLevelType = that.getLevelType();
+
       if (!(
-        !((that.getValue().isPresent())
-        && (that.getValueList().isPresent())))) {
+        !((thatValue.isPresent())
+        && (thatValueList.isPresent())))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7870,12 +8118,12 @@ public class Verification {
 
       if (!(
         !(
-            (that.getDataType().isPresent())
-            && Constants.iec61360DataTypesWithUnit.contains(that.getDataType().get())
+            (thatDataType.isPresent())
+            && Constants.iec61360DataTypesWithUnit.contains(thatDataType.get())
         )
         || (
-            (that.getUnit().isPresent())
-            || (that.getUnitId().isPresent())
+            (thatUnit.isPresent())
+            || (thatUnitId.isPresent())
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -7886,8 +8134,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDefinition().isPresent())
-        || (that.getDefinition().get().size() >= 1))) {
+        !(thatDefinition.isPresent())
+        || (thatDefinition.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7895,8 +8143,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getDefinition().isPresent())
-        || langStringsHaveUniqueLanguages(that.getDefinition().orElse(null)))) {
+        !(thatDefinition.isPresent())
+        || langStringsHaveUniqueLanguages(thatDefinition.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7904,8 +8152,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getShortName().isPresent())
-        || (that.getShortName().get().size() >= 1))) {
+        !(thatShortName.isPresent())
+        || (thatShortName.get().size() >= 1))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7913,8 +8161,8 @@ public class Verification {
       }
 
       if (!(
-        !(that.getShortName().isPresent())
-        || langStringsHaveUniqueLanguages(that.getShortName().orElse(null)))) {
+        !(thatShortName.isPresent())
+        || langStringsHaveUniqueLanguages(thatShortName.orElse(null)))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -7955,9 +8203,9 @@ public class Verification {
               return error;
             }));
 
-      if (that.getShortName().isPresent()) {
+      if (thatShortName.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getShortName().get())
+          Stream.of(thatShortName.get())
             .flatMap(Verification::verifyListOf_ILangStringShortNameTypeIec61360)
               .map(error -> {
                 error.prependSegment(
@@ -7966,9 +8214,9 @@ public class Verification {
               }));
       }
 
-      if (that.getUnit().isPresent()) {
+      if (thatUnit.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getUnit().get())
+          Stream.of(thatUnit.get())
             .flatMap(Verification::verifyNonEmptyXmlSerializableString)
               .map(error -> {
                 error.prependSegment(
@@ -7977,9 +8225,9 @@ public class Verification {
               }));
       }
 
-      if (that.getUnitId().isPresent()) {
+      if (thatUnitId.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getUnitId().get())
+          Stream.of(thatUnitId.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -7988,9 +8236,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSourceOfDefinition().isPresent()) {
+      if (thatSourceOfDefinition.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSourceOfDefinition().get())
+          Stream.of(thatSourceOfDefinition.get())
             .flatMap(Verification::verifyNonEmptyXmlSerializableString)
               .map(error -> {
                 error.prependSegment(
@@ -7999,9 +8247,9 @@ public class Verification {
               }));
       }
 
-      if (that.getSymbol().isPresent()) {
+      if (thatSymbol.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getSymbol().get())
+          Stream.of(thatSymbol.get())
             .flatMap(Verification::verifyNonEmptyXmlSerializableString)
               .map(error -> {
                 error.prependSegment(
@@ -8010,9 +8258,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDataType().isPresent()) {
+      if (thatDataType.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDataType().get())
+          Stream.of(thatDataType.get())
             .flatMap(Verification::verifyDataTypeIec61360)
               .map(error -> {
                 error.prependSegment(
@@ -8021,9 +8269,9 @@ public class Verification {
               }));
       }
 
-      if (that.getDefinition().isPresent()) {
+      if (thatDefinition.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getDefinition().get())
+          Stream.of(thatDefinition.get())
             .flatMap(Verification::verifyListOf_ILangStringDefinitionTypeIec61360)
               .map(error -> {
                 error.prependSegment(
@@ -8032,9 +8280,9 @@ public class Verification {
               }));
       }
 
-      if (that.getValueFormat().isPresent()) {
+      if (thatValueFormat.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getValueFormat().get())
+          Stream.of(thatValueFormat.get())
             .flatMap(Verification::verifyNonEmptyXmlSerializableString)
               .map(error -> {
                 error.prependSegment(
@@ -8043,9 +8291,9 @@ public class Verification {
               }));
       }
 
-      if (that.getValueList().isPresent()) {
+      if (thatValueList.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getValueList().get())
+          Stream.of(thatValueList.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
@@ -8054,9 +8302,9 @@ public class Verification {
               }));
       }
 
-      if (that.getValue().isPresent()) {
+      if (thatValue.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getValue().get())
+          Stream.of(thatValue.get())
             .flatMap(Verification::verifyValueTypeIec61360)
               .map(error -> {
                 error.prependSegment(
@@ -8065,9 +8313,9 @@ public class Verification {
               }));
       }
 
-      if (that.getLevelType().isPresent()) {
+      if (thatLevelType.isPresent()) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
-          Stream.of(that.getLevelType().get())
+          Stream.of(thatLevelType.get())
             .flatMap(Verification::verifyToErrorStream)
               .map(error -> {
                 error.prependSegment(
