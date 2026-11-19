@@ -809,8 +809,10 @@ def generate_comment_for_signature(
             _strip_prefix_p(_remove_redundant_p(arg_tokens))
         )
 
+        param = java_naming.argument_name(arg_name)
+
         param_and_return_blocks.append(
-            Stripped(f"@param {arg_name} {rendered_arg_description}")
+            Stripped(f"@param {param} {rendered_arg_description}")
         )
 
     if description.returns is not None:
