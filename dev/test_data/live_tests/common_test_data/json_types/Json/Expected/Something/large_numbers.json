@@ -1,0 +1,13 @@
+{
+  "value": 31697300.43,
+  "values": [
+    12552311.97,
+    -40277513.02
+  ],
+  "mapping": {
+    "a": 17240976.11
+  },
+  "mappingWithConstrainedKey": {
+    "nonEmptyKey": 34492713.6
+  }
+}
