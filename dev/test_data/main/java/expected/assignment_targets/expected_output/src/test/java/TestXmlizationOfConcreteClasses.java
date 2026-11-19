@@ -24,15 +24,51 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import javax.xml.stream.*;
 import javax.xml.stream.events.XMLEvent;
 import org.junit.jupiter.api.Test;
 
 public class TestXmlizationOfConcreteClasses {
+  // An xs:double has several lexical forms, so we compare its values and not
+  // the text, which is up to the serializer.
+  private static final Set<String> DOUBLE_ELEMENT_NAMES =
+    new HashSet<>(Arrays.asList());
+
+  private static double parseDouble(String text) {
+    switch (text) {
+      case "INF":
+        return Double.POSITIVE_INFINITY;
+      case "-INF":
+        return Double.NEGATIVE_INFINITY;
+      default:
+        return Double.parseDouble(text);
+    }
+  }
+
+  private static boolean contentsEqual(
+    String elementName, String expectedContent, String gotContent) {
+    if (expectedContent.equals(gotContent)) {
+      return true;
+    }
+
+    if (!DOUBLE_ELEMENT_NAMES.contains(elementName)) {
+      return false;
+    }
+
+    try {
+      return Double.compare(parseDouble(expectedContent), parseDouble(gotContent)) == 0;
+    } catch (NumberFormatException exception) {
+      return false;
+    }
+  }
+
   public static Optional<Reporting.Error> checkElementsEqual(
     XMLEvent expected, String expectedContent, Map<XMLEvent, String> outputMap) {
     switch (expected.getEventType()) {
@@ -50,7 +86,7 @@ public class TestXmlizationOfConcreteClasses {
                       .getName()
                       .getLocalPart()
                       .equals(expectedName))
-              .filter(entry -> entry.getValue().equals(expectedContent))
+              .filter(entry -> contentsEqual(expectedName, expectedContent, entry.getValue()))
                 .findAny();
           if (!got.isPresent()) {
             final Reporting.Error error =
