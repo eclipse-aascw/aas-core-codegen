@@ -380,7 +380,7 @@ public class Jsonization {
 
         String theUniqueToFirst = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -419,7 +419,7 @@ public class Jsonization {
 
         String theUniqueToSecond = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -518,7 +518,7 @@ public class Jsonization {
 
         String theUniqueToAbstractDescendantOne = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -557,7 +557,7 @@ public class Jsonization {
 
         String theUniqueToAbstractDescendantTwo = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -640,7 +640,7 @@ public class Jsonization {
       private static Reporting.Result<MixedConcreteWithDescendants> tryMixedConcreteWithDescendantsFromObject(JsonNode node) {
         String theSomeBaseProperty = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -699,7 +699,7 @@ public class Jsonization {
         String theSomeBaseProperty = null;
         String theSomeChildProperty = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -754,7 +754,7 @@ public class Jsonization {
 
         String theUniqueToConcreteLeaf = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -878,7 +878,7 @@ public class Jsonization {
       private static Reporting.Result<ModelTypedFirst> tryModelTypedFirstFromObject(JsonNode node) {
         String theSomeProperty = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -935,7 +935,7 @@ public class Jsonization {
       private static Reporting.Result<ModelTypedSecond> tryModelTypedSecondFromObject(JsonNode node) {
         String theSomeProperty = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -1095,7 +1095,7 @@ public class Jsonization {
         ModelTypedUnion theOptionalModelTypedProperty = null;
         List<OverlappingUnion> theOptionalListOverlappingProperty = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
