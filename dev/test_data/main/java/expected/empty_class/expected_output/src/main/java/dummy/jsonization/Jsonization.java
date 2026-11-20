@@ -155,7 +155,7 @@ public class Jsonization {
           return notAJsonObject(node);
         }
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
 

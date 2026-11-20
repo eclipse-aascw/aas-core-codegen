@@ -398,7 +398,7 @@ public class Jsonization {
         String theName = null;
         String theNote = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -490,7 +490,7 @@ public class Jsonization {
       private static Reporting.Result<Branch> tryBranchFromObject(JsonNode node) {
         List<INode> theOptionalChildren = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -543,7 +543,7 @@ public class Jsonization {
       private static Reporting.Result<Leaf> tryLeafFromObject(JsonNode node) {
         IItem theOptionalItem = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -587,7 +587,7 @@ public class Jsonization {
         Kind theOptionalKind = null;
         Boolean theOptionalFlag = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();

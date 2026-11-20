@@ -863,7 +863,7 @@ default:
     foreach_writer = io.StringIO()
     foreach_writer.write(
         f"""\
-for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {{
+for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {{
 {I}final Map.Entry<String, JsonNode> keyValue = iterator.next();
 {I}final String key = keyValue.getKey();
 """

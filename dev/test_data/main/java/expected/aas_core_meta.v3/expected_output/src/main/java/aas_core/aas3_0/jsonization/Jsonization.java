@@ -549,7 +549,7 @@ public class Jsonization {
         String theValue = null;
         List<IReference> theRefersTo = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -884,7 +884,7 @@ public class Jsonization {
         IReference theCreator = null;
         String theTemplateId = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -1026,7 +1026,7 @@ public class Jsonization {
         String theValue = null;
         IReference theValueId = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -1149,7 +1149,7 @@ public class Jsonization {
         IReference theDerivedFrom = null;
         List<IReference> theSubmodels = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -1294,7 +1294,7 @@ public class Jsonization {
         String theAssetType = null;
         IResource theDefaultThumbnail = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -1371,7 +1371,7 @@ public class Jsonization {
         String thePath = null;
         String theContentType = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -1432,7 +1432,7 @@ public class Jsonization {
         List<IReference> theSupplementalSemanticIds = null;
         IReference theExternalSubjectId = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -1538,7 +1538,7 @@ public class Jsonization {
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
         List<ISubmodelElement> theSubmodelElements = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -1800,7 +1800,7 @@ public class Jsonization {
         List<IQualifier> theQualifiers = null;
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -1979,7 +1979,7 @@ public class Jsonization {
         DataTypeDefXsd theValueTypeListElement = null;
         List<ISubmodelElement> theValue = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -2168,7 +2168,7 @@ public class Jsonization {
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
         List<ISubmodelElement> theValue = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -2354,7 +2354,7 @@ public class Jsonization {
         String theValue = null;
         IReference theValueId = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -2524,7 +2524,7 @@ public class Jsonization {
         List<ILangStringTextType> theValue = null;
         IReference theValueId = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -2682,7 +2682,7 @@ public class Jsonization {
         String theMin = null;
         String theMax = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -2851,7 +2851,7 @@ public class Jsonization {
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
         IReference theValue = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -2998,7 +2998,7 @@ public class Jsonization {
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
         byte[] theValue = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -3158,7 +3158,7 @@ public class Jsonization {
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
         String theValue = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -3319,7 +3319,7 @@ public class Jsonization {
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
         List<IDataElement> theAnnotations = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -3494,7 +3494,7 @@ public class Jsonization {
         String theGlobalAssetId = null;
         List<ISpecificAssetId> theSpecificAssetIds = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -3683,7 +3683,7 @@ public class Jsonization {
         IReference theSubjectId = null;
         byte[] thePayload = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -3851,7 +3851,7 @@ public class Jsonization {
         String theMinInterval = null;
         String theMaxInterval = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -4074,7 +4074,7 @@ public class Jsonization {
         List<IOperationVariable> theOutputVariables = null;
         List<IOperationVariable> theInoutputVariables = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -4217,7 +4217,7 @@ public class Jsonization {
 
         ISubmodelElement theValue = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -4280,7 +4280,7 @@ public class Jsonization {
         List<IQualifier> theQualifiers = null;
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -4416,7 +4416,7 @@ public class Jsonization {
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
         List<IReference> theIsCaseOf = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -4545,7 +4545,7 @@ public class Jsonization {
         List<IKey> theKeys = null;
         IReference theReferredSemanticId = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -4608,7 +4608,7 @@ public class Jsonization {
         KeyTypes theType = null;
         String theValue = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -4714,7 +4714,7 @@ public class Jsonization {
         String theLanguage = null;
         String theText = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -4767,7 +4767,7 @@ public class Jsonization {
         String theLanguage = null;
         String theText = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -4821,7 +4821,7 @@ public class Jsonization {
         List<ISubmodel> theSubmodels = null;
         List<IConceptDescription> theConceptDescriptions = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -4904,7 +4904,7 @@ public class Jsonization {
         IReference theDataSpecification = null;
         IDataSpecificationContent theDataSpecificationContent = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -4972,7 +4972,7 @@ public class Jsonization {
         Boolean theTyp = null;
         Boolean theMax = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -5051,7 +5051,7 @@ public class Jsonization {
         String theValue = null;
         IReference theValueId = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -5103,7 +5103,7 @@ public class Jsonization {
 
         List<IValueReferencePair> theValueReferencePairs = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -5144,7 +5144,7 @@ public class Jsonization {
         String theLanguage = null;
         String theText = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -5197,7 +5197,7 @@ public class Jsonization {
         String theLanguage = null;
         String theText = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -5250,7 +5250,7 @@ public class Jsonization {
         String theLanguage = null;
         String theText = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();
@@ -5328,7 +5328,7 @@ public class Jsonization {
         String theValue = null;
         ILevelType theLevelType = null;
 
-        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.properties().iterator(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
           final String key = keyValue.getKey();
           final JsonNode value = keyValue.getValue();

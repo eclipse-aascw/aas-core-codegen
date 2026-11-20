@@ -30,6 +30,9 @@ import java.util.Objects;
 public class IecContent implements IIecContent {
   private List<ILangString> definition;
 
+  public IecContent() {
+  }
+
   public IecContent(List<ILangString> definition) {
     this.definition = definition;
   }
