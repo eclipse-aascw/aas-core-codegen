@@ -956,6 +956,12 @@ class Test_golang(_TestCase):
             case_name="transpiled_methods",
         )
 
+    def test_expected_tuple_xml_name_collision(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.GOLANG,
+            case_name="tuple_xml_name_collision",
+        )
+
     def test_expected_tuples(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.GOLANG, case_name="tuples"
