@@ -111,8 +111,8 @@ func readValueByLocal(
 			return
 	}
 
-	if err != nil {
-		xmlcommon.MustDeserializationError(err).PrependName(local)
+	if deseriaErr, ok := err.(*DeserializationError); ok {
+		deseriaErr.PrependName(local)
 	}
 	return
 }
@@ -286,9 +286,9 @@ func readData(
 			// Every item of a `<data>` element is a `<value>` element, so the index
 			// already names the element which was entered, and there is no step of
 			// its own for it.
-			xmlcommon.MustDeserializationError(err).
-				PrependIndex(len(value)).
-				PrependName("data")
+			if deseriaErr, ok := err.(*DeserializationError); ok {
+				deseriaErr.PrependIndex(len(value)).PrependName("data")
+			}
 			return
 		}
 
@@ -412,9 +412,9 @@ func readMember(
 		// A `<struct>` holds the key of a member in a `<name>` child element
 		// instead of an attribute, so the key segment renders as a predicate on
 		// that child element, and the `<value>` element is a step of its own.
-		xmlcommon.MustDeserializationError(err).
-			PrependName("value").
-			PrependKey(value.name)
+		if deseriaErr, ok := err.(*DeserializationError); ok {
+			deseriaErr.PrependName("value").PrependKey(value.name)
+		}
 		return
 	}
 	return

@@ -4,12 +4,16 @@ package xmlization_test
 // Do NOT edit or append.
 
 import (
+	"bytes"
+	"encoding/xml"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+
 	ourtesting "github.com/aas-core-works/aas-core3.0-golang/ourtesting"
 	ourxmlization "github.com/aas-core-works/aas-core3.0-golang/xmlization"
 )
@@ -125,6 +129,1026 @@ func removeWhitespaceWithinTags(text string) string {
 	return result
 }
 
+// Follow the model's XML nesting to recognize string values, including collection
+// items. Container whitespace remains available to the existing indentation cleanup.
+func xmlTextContext(parent string, name xml.Name) string {
+	switch parent {
+	case "class:Administrative_information":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "creator"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecifications"}):
+			return "content:ListOf_IEmbeddedDataSpecification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "revision"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "templateId"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "version"}):
+			return "text"
+		}
+	case "class:Annotated_relationship_element":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "annotations"}):
+			return "content:ListOf_IDataElement"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "category"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "description"}):
+			return "content:ListOf_ILangStringTextType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "displayName"}):
+			return "content:ListOf_ILangStringNameType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecifications"}):
+			return "content:ListOf_IEmbeddedDataSpecification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extensions"}):
+			return "content:ListOf_IExtension"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "first"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "idShort"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "qualifiers"}):
+			return "content:ListOf_IQualifier"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "second"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "supplementalSemanticIds"}):
+			return "content:ListOf_IReference"
+		}
+	case "class:Asset_administration_shell":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "administration"}):
+			return "class:Administrative_information"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "assetInformation"}):
+			return "class:Asset_information"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "category"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "derivedFrom"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "description"}):
+			return "content:ListOf_ILangStringTextType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "displayName"}):
+			return "content:ListOf_ILangStringNameType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecifications"}):
+			return "content:ListOf_IEmbeddedDataSpecification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extensions"}):
+			return "content:ListOf_IExtension"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "id"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "idShort"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "submodels"}):
+			return "content:ListOf_IReference"
+		}
+	case "class:Asset_information":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "assetKind"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "assetType"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "defaultThumbnail"}):
+			return "class:Resource"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "globalAssetId"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "specificAssetIds"}):
+			return "content:ListOf_ISpecificAssetID"
+		}
+	case "class:Basic_event_element":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "category"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "description"}):
+			return "content:ListOf_ILangStringTextType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "direction"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "displayName"}):
+			return "content:ListOf_ILangStringNameType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecifications"}):
+			return "content:ListOf_IEmbeddedDataSpecification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extensions"}):
+			return "content:ListOf_IExtension"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "idShort"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "lastUpdate"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "maxInterval"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "messageBroker"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "messageTopic"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "minInterval"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "observed"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "qualifiers"}):
+			return "content:ListOf_IQualifier"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "state"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "supplementalSemanticIds"}):
+			return "content:ListOf_IReference"
+		}
+	case "class:Blob":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "category"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "contentType"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "description"}):
+			return "content:ListOf_ILangStringTextType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "displayName"}):
+			return "content:ListOf_ILangStringNameType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecifications"}):
+			return "content:ListOf_IEmbeddedDataSpecification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extensions"}):
+			return "content:ListOf_IExtension"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "idShort"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "qualifiers"}):
+			return "content:ListOf_IQualifier"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "supplementalSemanticIds"}):
+			return "content:ListOf_IReference"
+		}
+	case "class:Capability":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "category"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "description"}):
+			return "content:ListOf_ILangStringTextType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "displayName"}):
+			return "content:ListOf_ILangStringNameType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecifications"}):
+			return "content:ListOf_IEmbeddedDataSpecification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extensions"}):
+			return "content:ListOf_IExtension"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "idShort"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "qualifiers"}):
+			return "content:ListOf_IQualifier"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "supplementalSemanticIds"}):
+			return "content:ListOf_IReference"
+		}
+	case "class:Concept_description":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "administration"}):
+			return "class:Administrative_information"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "category"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "description"}):
+			return "content:ListOf_ILangStringTextType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "displayName"}):
+			return "content:ListOf_ILangStringNameType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecifications"}):
+			return "content:ListOf_IEmbeddedDataSpecification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extensions"}):
+			return "content:ListOf_IExtension"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "id"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "idShort"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "isCaseOf"}):
+			return "content:ListOf_IReference"
+		}
+	case "class:Data_specification_IEC_61360":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "dataType"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "definition"}):
+			return "content:ListOf_ILangStringDefinitionTypeIEC61360"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "levelType"}):
+			return "class:Level_type"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "preferredName"}):
+			return "content:ListOf_ILangStringPreferredNameTypeIEC61360"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "shortName"}):
+			return "content:ListOf_ILangStringShortNameTypeIEC61360"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "sourceOfDefinition"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "symbol"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "unit"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "unitId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "value"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "valueFormat"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "valueList"}):
+			return "class:Value_list"
+		}
+	case "class:Embedded_data_specification":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "dataSpecification"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "dataSpecificationContent"}):
+			return "content:IDataSpecificationContent"
+		}
+	case "class:Entity":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "category"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "description"}):
+			return "content:ListOf_ILangStringTextType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "displayName"}):
+			return "content:ListOf_ILangStringNameType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecifications"}):
+			return "content:ListOf_IEmbeddedDataSpecification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "entityType"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extensions"}):
+			return "content:ListOf_IExtension"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "globalAssetId"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "idShort"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "qualifiers"}):
+			return "content:ListOf_IQualifier"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "specificAssetIds"}):
+			return "content:ListOf_ISpecificAssetID"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "statements"}):
+			return "content:ListOf_ISubmodelElement"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "supplementalSemanticIds"}):
+			return "content:ListOf_IReference"
+		}
+	case "class:Environment":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "assetAdministrationShells"}):
+			return "content:ListOf_IAssetAdministrationShell"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "conceptDescriptions"}):
+			return "content:ListOf_IConceptDescription"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "submodels"}):
+			return "content:ListOf_ISubmodel"
+		}
+	case "class:Event_payload":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "observableReference"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "observableSemanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "source"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "sourceSemanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "subjectId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "timeStamp"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "topic"}):
+			return "text"
+		}
+	case "class:Extension":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "name"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "refersTo"}):
+			return "content:ListOf_IReference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "supplementalSemanticIds"}):
+			return "content:ListOf_IReference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "value"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "valueType"}):
+			return "text"
+		}
+	case "class:File":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "category"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "contentType"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "description"}):
+			return "content:ListOf_ILangStringTextType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "displayName"}):
+			return "content:ListOf_ILangStringNameType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecifications"}):
+			return "content:ListOf_IEmbeddedDataSpecification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extensions"}):
+			return "content:ListOf_IExtension"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "idShort"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "qualifiers"}):
+			return "content:ListOf_IQualifier"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "supplementalSemanticIds"}):
+			return "content:ListOf_IReference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "value"}):
+			return "text"
+		}
+	case "class:Key":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "type"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "value"}):
+			return "text"
+		}
+	case "class:Lang_string_definition_type_IEC_61360":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "language"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "text"}):
+			return "text"
+		}
+	case "class:Lang_string_name_type":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "language"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "text"}):
+			return "text"
+		}
+	case "class:Lang_string_preferred_name_type_IEC_61360":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "language"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "text"}):
+			return "text"
+		}
+	case "class:Lang_string_short_name_type_IEC_61360":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "language"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "text"}):
+			return "text"
+		}
+	case "class:Lang_string_text_type":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "language"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "text"}):
+			return "text"
+		}
+	case "class:Multi_language_property":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "category"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "description"}):
+			return "content:ListOf_ILangStringTextType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "displayName"}):
+			return "content:ListOf_ILangStringNameType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecifications"}):
+			return "content:ListOf_IEmbeddedDataSpecification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extensions"}):
+			return "content:ListOf_IExtension"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "idShort"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "qualifiers"}):
+			return "content:ListOf_IQualifier"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "supplementalSemanticIds"}):
+			return "content:ListOf_IReference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "value"}):
+			return "content:ListOf_ILangStringTextType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "valueId"}):
+			return "class:Reference"
+		}
+	case "class:Operation":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "category"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "description"}):
+			return "content:ListOf_ILangStringTextType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "displayName"}):
+			return "content:ListOf_ILangStringNameType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecifications"}):
+			return "content:ListOf_IEmbeddedDataSpecification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extensions"}):
+			return "content:ListOf_IExtension"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "idShort"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "inoutputVariables"}):
+			return "content:ListOf_IOperationVariable"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "inputVariables"}):
+			return "content:ListOf_IOperationVariable"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "outputVariables"}):
+			return "content:ListOf_IOperationVariable"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "qualifiers"}):
+			return "content:ListOf_IQualifier"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "supplementalSemanticIds"}):
+			return "content:ListOf_IReference"
+		}
+	case "class:Operation_variable":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "value"}):
+			return "content:ISubmodelElement"
+		}
+	case "class:Property":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "category"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "description"}):
+			return "content:ListOf_ILangStringTextType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "displayName"}):
+			return "content:ListOf_ILangStringNameType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecifications"}):
+			return "content:ListOf_IEmbeddedDataSpecification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extensions"}):
+			return "content:ListOf_IExtension"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "idShort"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "qualifiers"}):
+			return "content:ListOf_IQualifier"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "supplementalSemanticIds"}):
+			return "content:ListOf_IReference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "value"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "valueId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "valueType"}):
+			return "text"
+		}
+	case "class:Qualifier":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "kind"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "supplementalSemanticIds"}):
+			return "content:ListOf_IReference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "type"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "value"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "valueId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "valueType"}):
+			return "text"
+		}
+	case "class:Range":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "category"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "description"}):
+			return "content:ListOf_ILangStringTextType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "displayName"}):
+			return "content:ListOf_ILangStringNameType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecifications"}):
+			return "content:ListOf_IEmbeddedDataSpecification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extensions"}):
+			return "content:ListOf_IExtension"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "idShort"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "max"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "min"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "qualifiers"}):
+			return "content:ListOf_IQualifier"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "supplementalSemanticIds"}):
+			return "content:ListOf_IReference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "valueType"}):
+			return "text"
+		}
+	case "class:Reference":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "keys"}):
+			return "content:ListOf_IKey"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "referredSemanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "type"}):
+			return "text"
+		}
+	case "class:Reference_element":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "category"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "description"}):
+			return "content:ListOf_ILangStringTextType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "displayName"}):
+			return "content:ListOf_ILangStringNameType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecifications"}):
+			return "content:ListOf_IEmbeddedDataSpecification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extensions"}):
+			return "content:ListOf_IExtension"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "idShort"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "qualifiers"}):
+			return "content:ListOf_IQualifier"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "supplementalSemanticIds"}):
+			return "content:ListOf_IReference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "value"}):
+			return "class:Reference"
+		}
+	case "class:Relationship_element":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "category"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "description"}):
+			return "content:ListOf_ILangStringTextType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "displayName"}):
+			return "content:ListOf_ILangStringNameType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecifications"}):
+			return "content:ListOf_IEmbeddedDataSpecification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extensions"}):
+			return "content:ListOf_IExtension"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "first"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "idShort"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "qualifiers"}):
+			return "content:ListOf_IQualifier"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "second"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "supplementalSemanticIds"}):
+			return "content:ListOf_IReference"
+		}
+	case "class:Resource":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "contentType"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "path"}):
+			return "text"
+		}
+	case "class:Specific_asset_ID":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "externalSubjectId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "name"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "supplementalSemanticIds"}):
+			return "content:ListOf_IReference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "value"}):
+			return "text"
+		}
+	case "class:Submodel":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "administration"}):
+			return "class:Administrative_information"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "category"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "description"}):
+			return "content:ListOf_ILangStringTextType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "displayName"}):
+			return "content:ListOf_ILangStringNameType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecifications"}):
+			return "content:ListOf_IEmbeddedDataSpecification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extensions"}):
+			return "content:ListOf_IExtension"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "id"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "idShort"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "kind"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "qualifiers"}):
+			return "content:ListOf_IQualifier"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "submodelElements"}):
+			return "content:ListOf_ISubmodelElement"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "supplementalSemanticIds"}):
+			return "content:ListOf_IReference"
+		}
+	case "class:Submodel_element_collection":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "category"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "description"}):
+			return "content:ListOf_ILangStringTextType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "displayName"}):
+			return "content:ListOf_ILangStringNameType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecifications"}):
+			return "content:ListOf_IEmbeddedDataSpecification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extensions"}):
+			return "content:ListOf_IExtension"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "idShort"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "qualifiers"}):
+			return "content:ListOf_IQualifier"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "supplementalSemanticIds"}):
+			return "content:ListOf_IReference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "value"}):
+			return "content:ListOf_ISubmodelElement"
+		}
+	case "class:Submodel_element_list":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "category"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "description"}):
+			return "content:ListOf_ILangStringTextType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "displayName"}):
+			return "content:ListOf_ILangStringNameType"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecifications"}):
+			return "content:ListOf_IEmbeddedDataSpecification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extensions"}):
+			return "content:ListOf_IExtension"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "idShort"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "qualifiers"}):
+			return "content:ListOf_IQualifier"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticId"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "semanticIdListElement"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "supplementalSemanticIds"}):
+			return "content:ListOf_IReference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "typeValueListElement"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "value"}):
+			return "content:ListOf_ISubmodelElement"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "valueTypeListElement"}):
+			return "text"
+		}
+	case "class:Value_list":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "valueReferencePairs"}):
+			return "content:ListOf_IValueReferencePair"
+		}
+	case "class:Value_reference_pair":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "value"}):
+			return "text"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "valueId"}):
+			return "class:Reference"
+		}
+	case "content:IDataSpecificationContent":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "dataSpecificationIec61360"}):
+			return "class:Data_specification_IEC_61360"
+		}
+	case "content:ISubmodelElement":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "annotatedRelationshipElement"}):
+			return "class:Annotated_relationship_element"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "basicEventElement"}):
+			return "class:Basic_event_element"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "blob"}):
+			return "class:Blob"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "capability"}):
+			return "class:Capability"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "entity"}):
+			return "class:Entity"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "file"}):
+			return "class:File"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "multiLanguageProperty"}):
+			return "class:Multi_language_property"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "operation"}):
+			return "class:Operation"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "property"}):
+			return "class:Property"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "range"}):
+			return "class:Range"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "referenceElement"}):
+			return "class:Reference_element"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "relationshipElement"}):
+			return "class:Relationship_element"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "submodelElementCollection"}):
+			return "class:Submodel_element_collection"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "submodelElementList"}):
+			return "class:Submodel_element_list"
+		}
+	case "content:ListOf_IAssetAdministrationShell":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "assetAdministrationShell"}):
+			return "class:Asset_administration_shell"
+		}
+	case "content:ListOf_IConceptDescription":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "conceptDescription"}):
+			return "class:Concept_description"
+		}
+	case "content:ListOf_IDataElement":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "blob"}):
+			return "class:Blob"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "file"}):
+			return "class:File"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "multiLanguageProperty"}):
+			return "class:Multi_language_property"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "property"}):
+			return "class:Property"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "range"}):
+			return "class:Range"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "referenceElement"}):
+			return "class:Reference_element"
+		}
+	case "content:ListOf_IEmbeddedDataSpecification":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecification"}):
+			return "class:Embedded_data_specification"
+		}
+	case "content:ListOf_IExtension":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extension"}):
+			return "class:Extension"
+		}
+	case "content:ListOf_IKey":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "key"}):
+			return "class:Key"
+		}
+	case "content:ListOf_ILangStringDefinitionTypeIEC61360":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "langStringDefinitionTypeIec61360"}):
+			return "class:Lang_string_definition_type_IEC_61360"
+		}
+	case "content:ListOf_ILangStringNameType":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "langStringNameType"}):
+			return "class:Lang_string_name_type"
+		}
+	case "content:ListOf_ILangStringPreferredNameTypeIEC61360":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "langStringPreferredNameTypeIec61360"}):
+			return "class:Lang_string_preferred_name_type_IEC_61360"
+		}
+	case "content:ListOf_ILangStringShortNameTypeIEC61360":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "langStringShortNameTypeIec61360"}):
+			return "class:Lang_string_short_name_type_IEC_61360"
+		}
+	case "content:ListOf_ILangStringTextType":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "langStringTextType"}):
+			return "class:Lang_string_text_type"
+		}
+	case "content:ListOf_IOperationVariable":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "operationVariable"}):
+			return "class:Operation_variable"
+		}
+	case "content:ListOf_IQualifier":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "qualifier"}):
+			return "class:Qualifier"
+		}
+	case "content:ListOf_IReference":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "reference"}):
+			return "class:Reference"
+		}
+	case "content:ListOf_ISpecificAssetID":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "specificAssetId"}):
+			return "class:Specific_asset_ID"
+		}
+	case "content:ListOf_ISubmodel":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "submodel"}):
+			return "class:Submodel"
+		}
+	case "content:ListOf_ISubmodelElement":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "annotatedRelationshipElement"}):
+			return "class:Annotated_relationship_element"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "basicEventElement"}):
+			return "class:Basic_event_element"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "blob"}):
+			return "class:Blob"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "capability"}):
+			return "class:Capability"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "entity"}):
+			return "class:Entity"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "file"}):
+			return "class:File"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "multiLanguageProperty"}):
+			return "class:Multi_language_property"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "operation"}):
+			return "class:Operation"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "property"}):
+			return "class:Property"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "range"}):
+			return "class:Range"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "referenceElement"}):
+			return "class:Reference_element"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "relationshipElement"}):
+			return "class:Relationship_element"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "submodelElementCollection"}):
+			return "class:Submodel_element_collection"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "submodelElementList"}):
+			return "class:Submodel_element_list"
+		}
+	case "content:ListOf_IValueReferencePair":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "valueReferencePair"}):
+			return "class:Value_reference_pair"
+		}
+	case "root":
+		switch name {
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "administrativeInformation"}):
+			return "class:Administrative_information"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "annotatedRelationshipElement"}):
+			return "class:Annotated_relationship_element"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "assetAdministrationShell"}):
+			return "class:Asset_administration_shell"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "assetInformation"}):
+			return "class:Asset_information"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "basicEventElement"}):
+			return "class:Basic_event_element"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "blob"}):
+			return "class:Blob"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "capability"}):
+			return "class:Capability"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "conceptDescription"}):
+			return "class:Concept_description"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "dataSpecificationIec61360"}):
+			return "class:Data_specification_IEC_61360"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "embeddedDataSpecification"}):
+			return "class:Embedded_data_specification"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "entity"}):
+			return "class:Entity"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "environment"}):
+			return "class:Environment"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "eventPayload"}):
+			return "class:Event_payload"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "extension"}):
+			return "class:Extension"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "file"}):
+			return "class:File"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "key"}):
+			return "class:Key"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "langStringDefinitionTypeIec61360"}):
+			return "class:Lang_string_definition_type_IEC_61360"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "langStringNameType"}):
+			return "class:Lang_string_name_type"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "langStringPreferredNameTypeIec61360"}):
+			return "class:Lang_string_preferred_name_type_IEC_61360"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "langStringShortNameTypeIec61360"}):
+			return "class:Lang_string_short_name_type_IEC_61360"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "langStringTextType"}):
+			return "class:Lang_string_text_type"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "levelType"}):
+			return "class:Level_type"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "multiLanguageProperty"}):
+			return "class:Multi_language_property"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "operation"}):
+			return "class:Operation"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "operationVariable"}):
+			return "class:Operation_variable"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "property"}):
+			return "class:Property"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "qualifier"}):
+			return "class:Qualifier"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "range"}):
+			return "class:Range"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "reference"}):
+			return "class:Reference"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "referenceElement"}):
+			return "class:Reference_element"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "relationshipElement"}):
+			return "class:Relationship_element"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "resource"}):
+			return "class:Resource"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "specificAssetId"}):
+			return "class:Specific_asset_ID"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "submodel"}):
+			return "class:Submodel"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "submodelElementCollection"}):
+			return "class:Submodel_element_collection"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "submodelElementList"}):
+			return "class:Submodel_element_list"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "valueList"}):
+			return "class:Value_list"
+		case (xml.Name{Space: "https://admin-shell.io/aas/3/0", Local: "valueReferencePair"}):
+			return "class:Value_reference_pair"
+		}
+	}
+	return ""
+}
+
+// Normalize escaping in character data while retaining the original markup.
+// Copying tags verbatim avoids changing namespace declarations or prefixes.
+func normalizeXmlTextEscaping(text string) (string, error) {
+	decoder := xml.NewDecoder(strings.NewReader(text))
+	var result bytes.Buffer
+	contexts := []string{"root"}
+	for {
+		start := decoder.InputOffset()
+		token, err := decoder.Token()
+		if err == io.EOF {
+			return result.String(), nil
+		}
+		if err != nil {
+			return "", err
+		}
+		if start, ok := token.(xml.StartElement); ok {
+			contexts = append(contexts, xmlTextContext(contexts[len(contexts)-1], start.Name))
+		}
+		if data, ok := token.(xml.CharData); ok {
+			// Normalize strings consistently, even if they consist only of whitespace.
+			// Keep container indentation available to the existing cleanup.
+			if contexts[len(contexts)-1] != "text" && strings.Trim(string(data), " \t\r\n") == "" {
+				result.WriteString(text[start:decoder.InputOffset()])
+			} else {
+				var escaped bytes.Buffer
+				if err := xml.EscapeText(&escaped, data); err != nil {
+					return "", err
+				}
+				if contexts[len(contexts)-1] == "text" {
+					// Protect spaces as well as tabs and line breaks from the regex cleanup.
+					result.WriteString(strings.ReplaceAll(escaped.String(), " ", "&#32;"))
+				} else {
+					result.Write(escaped.Bytes())
+				}
+			}
+		} else {
+			result.WriteString(text[start:decoder.InputOffset()])
+		}
+		if _, ok := token.(xml.EndElement); ok {
+			contexts = contexts[:len(contexts)-1]
+		}
+	}
+}
+
+func TestNormalizeXmlTextEscaping(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"quotes", `<v>"hello"</v>`, `<v>&#34;hello&#34;</v>`},
+		{"quote_references", `<v>&quot;hello&#x22;</v>`, `<v>&#34;hello&#34;</v>`},
+		{"apostrophes", `<v>'hello'</v>`, `<v>&#39;hello&#39;</v>`},
+		{"tabs", "<v>a\tb</v>", `<v>a&#x9;b</v>`},
+		{"tab_reference", `<v>a&#9;b</v>`, `<v>a&#x9;b</v>`},
+		{"double_escaping", `<v>&amp;#34;</v>`, `<v>&amp;#34;</v>`},
+		{"text_is_not_markup", `<v>&#60;x/&#62;</v>`, `<v>&lt;x/&gt;</v>`},
+		{"string_spaces", `<v> hello </v>`, `<v> hello </v>`},
+		{"markup", `<p:v xmlns:p='urn:test' a='"'/>`, `<p:v xmlns:p='urn:test' a='"'/>`},
+		{"numbers", `<v>1e2</v>`, `<v>1e2</v>`},
+		{"indentation", "<r>\n\t<v/>\n</r>", "<r>\n\t<v/>\n</r>"},
+		{"whitespace_reference", `<v>&#x9;</v>`, `<v>&#x9;</v>`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := normalizeXmlTextEscaping(c.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != c.want {
+				t.Fatalf("Expected %q, got %q", c.want, got)
+			}
+		})
+	}
+}
+
+func canonicalizeXmlForComparison(text string) (string, error) {
+	text = strings.TrimSpace(text)
+	// Escape text before applying the legacy markup cleanup, so a literal
+	// '>' in a value can not make the cleanup remove a preceding space.
+	text, err := normalizeXmlTextEscaping(text)
+	if err != nil {
+		return "", err
+	}
+	text = strings.ReplaceAll(text, "\r", "")
+	text = removeWhitespaceBetweenTags(text)
+	text = forceSelfClosingTags(text)
+	return removeWhitespaceWithinTags(text), nil
+}
+
+func TestXmlComparisonPreservesText(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		expected string
+		actual   string
+		equal    bool
+	}{
+		{"equivalent_escaping", `<v>x ></v>`, `<v>x &gt;</v>`, true},
+		{"lost_space", `<v>x ></v>`, `<v>x&gt;</v>`, false},
+		{"numeric_reference", `<v>x ></v>`, `<v>x &#62;</v>`, true},
+		{"extra_space", `<v>x ></v>`, `<v>x  &gt;</v>`, false},
+		{"tab_vs_newline", `<v>&#x9;</v>`, `<v>&#xA;</v>`, false},
+		{"tab_vs_space", `<v>&#x9;</v>`, `<v>&#32;</v>`, false},
+		{"lost_tab", `<v>&#x9;</v>`, `<v></v>`, false},
+		{"space_vs_literal_tab", `<v>&#32;</v>`, "<v>\t</v>", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			expected, err := canonicalizeXmlForComparison(c.expected)
+			if err != nil {
+				t.Fatal(err)
+			}
+			actual, err := canonicalizeXmlForComparison(c.actual)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (expected == actual) != c.equal {
+				t.Fatalf("Unexpected comparison of %q and %q", expected, actual)
+			}
+		})
+	}
+}
+
 // Assert that the serialization `other`, as XML document, equals the original
 //
 //	XML document `that` read from the `source`.
@@ -136,16 +1160,6 @@ func assertSerializationEqualsDeserialization(
 ) (ok bool) {
 	ok = true
 
-	// Remove carriers to avoid problems between Windows, Posix and MacOS
-	canonicalThat := strings.ReplaceAll(that, "\r", "")
-	canonicalOther := strings.ReplaceAll(other, "\r", "")
-
-	canonicalThat = strings.TrimSpace(canonicalThat)
-	canonicalOther = strings.TrimSpace(canonicalOther)
-
-	canonicalThat = forceSelfClosingTags(canonicalThat)
-	canonicalOther = forceSelfClosingTags(canonicalOther)
-
 	// NOTE (mristin):
 	// The following hack is SUPER ugly and unsafe! However, it works. Given Go's
 	// limited support for XML, we gave up on a safer approach :(. We tested
@@ -156,14 +1170,16 @@ func assertSerializationEqualsDeserialization(
 	//    element content still has not been de-escaped or consistently escaped in
 	//    a round trip.
 
-	canonicalThat = strings.ReplaceAll(canonicalThat, "'", "&#39;")
-	canonicalOther = strings.ReplaceAll(canonicalOther, "'", "&#39;")
-
-	canonicalThat = removeWhitespaceBetweenTags(canonicalThat)
-	canonicalOther = removeWhitespaceBetweenTags(canonicalOther)
-
-	canonicalThat = removeWhitespaceWithinTags(canonicalThat)
-	canonicalOther = removeWhitespaceWithinTags(canonicalOther)
+	canonicalThat, err := canonicalizeXmlForComparison(that)
+	if err != nil {
+		t.Fatalf("Failed to normalize original XML from %s: %s", source, err)
+		return false
+	}
+	canonicalOther, err := canonicalizeXmlForComparison(other)
+	if err != nil {
+		t.Fatalf("Failed to normalize serialized XML from %s: %s", source, err)
+		return false
+	}
 
 	thatLines := strings.Split(canonicalThat, "\n")
 	otherLines := strings.Split(canonicalOther, "\n")

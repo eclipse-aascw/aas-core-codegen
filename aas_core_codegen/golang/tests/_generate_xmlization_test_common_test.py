@@ -4,15 +4,19 @@
 
 """Generate code for common XML de/serialization shared across the tests."""
 
+import html
 import io
-from typing import List
+from typing import List, MutableMapping, Optional, Tuple
 
 from icontract import ensure
 
+from aas_core_codegen import intermediate, naming
 from aas_core_codegen.common import (
     Stripped,
+    assert_never,
+    indent_but_first_line,
 )
-from aas_core_codegen.golang import common as golang_common
+from aas_core_codegen.golang import common as golang_common, naming as golang_naming
 from aas_core_codegen.golang.common import (
     INDENT as I,
     INDENT2 as II,
@@ -22,13 +26,304 @@ from aas_core_codegen.golang.common import (
 )
 
 
+def _generate_whitespace_round_trip_test(
+    symbol_table: intermediate.SymbolTable,
+) -> Optional[Stripped]:
+    """Exercise whitespace-only strings through the real model reader and writer."""
+    for cls in symbol_table.our_types:
+        if not isinstance(cls, intermediate.ConcreteClass):
+            continue
+        required = [
+            prop
+            for prop in cls.properties
+            if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
+        ]
+        if any(
+            intermediate.try_primitive_type(prop.type_annotation) is None
+            and not (
+                isinstance(prop.type_annotation, intermediate.OurTypeAnnotation)
+                and isinstance(prop.type_annotation.our_type, intermediate.Enumeration)
+            )
+            for prop in required
+        ):
+            continue
+        prop = next(
+            (
+                candidate
+                for candidate in required
+                if isinstance(
+                    candidate.type_annotation, intermediate.PrimitiveTypeAnnotation
+                )
+                and candidate.type_annotation.a_type is intermediate.PrimitiveType.STR
+            ),
+            None,
+        )
+        if prop is None:
+            continue
+
+        namespace = html.escape(symbol_table.meta_model.xml_namespace, quote=True)
+        local = naming.xml_class_name(cls.name)
+        prefix = f'<{local} xmlns="{namespace}">'
+        suffix = f"</{local}>"
+        following = False
+        for sibling in required:
+            if sibling is prop:
+                prefix += f"<{prop.xml_name}>"
+                suffix = f"</{prop.xml_name}>" + suffix
+                following = True
+                continue
+            a_type = intermediate.try_primitive_type(sibling.type_annotation)
+            if a_type is not None:
+                value = {
+                    intermediate.PrimitiveType.STR: "",
+                    intermediate.PrimitiveType.BOOL: "false",
+                    intermediate.PrimitiveType.INT: "0",
+                    intermediate.PrimitiveType.FLOAT: "0",
+                    intermediate.PrimitiveType.BYTEARRAY: "",
+                }[a_type]
+            else:
+                assert isinstance(
+                    sibling.type_annotation, intermediate.OurTypeAnnotation
+                )
+                assert isinstance(
+                    sibling.type_annotation.our_type, intermediate.Enumeration
+                )
+                value = html.escape(sibling.type_annotation.our_type.literals[0].value)
+            element = f"<{sibling.xml_name}>{value}</{sibling.xml_name}>"
+            if following:
+                suffix = suffix.removesuffix(f"</{local}>") + element + f"</{local}>"
+            else:
+                prefix += element
+        prefix_literal = golang_common.string_literal(prefix)
+        suffix_literal = golang_common.string_literal(suffix)
+        getter = golang_naming.getter_name(prop.name)
+        empty_container = golang_common.string_literal(
+            f'<{local} xmlns="{namespace}"/>'
+        )
+        indented_container = golang_common.string_literal(
+            f'<{local} xmlns="{namespace}">\n\t</{local}>'
+        )
+        return Stripped(
+            f"""\
+func TestWhitespaceStringRoundTrip(t *testing.T) {{
+{I}canonicalByValue := make(map[string]string)
+{I}for _, c := range []struct {{
+{II}name string
+{II}xml  string
+{II}want string
+{I}}}{{
+{II}{{"literal_tab", "\\t", "\\t"}},
+{II}{{"decimal_tab", "&#9;", "\\t"}},
+{II}{{"hex_tab", "&#x9;", "\\t"}},
+{II}{{"literal_newline", "\\n", "\\n"}},
+{II}{{"decimal_newline", "&#10;", "\\n"}},
+{II}{{"hex_newline", "&#xA;", "\\n"}},
+{II}{{"literal_crlf", "\\r\\n", "\\n"}},
+{II}{{"literal_cr", "\\r", "\\n"}},
+{II}{{"referenced_cr", "&#13;", "\\r"}},
+{II}{{"literal_space", " ", " "}},
+{II}{{"decimal_space", "&#32;", " "}},
+{II}{{"hex_space", "&#x20;", " "}},
+{II}{{"two_spaces", "  ", "  "}},
+{II}{{"mixed_whitespace", " &#9;\\n", " \\t\\n"}},
+{II}{{"empty", "", ""}},
+{II}{{"space_before_angle", "x &gt;", "x >"}},
+{II}{{"lost_space_before_angle", "x&gt;", "x>"}},
+{II}{{"cdata_tab", "<![CDATA[\\t]]>", "\\t"}},
+{I}}} {{
+{II}t.Run(c.name, func(t *testing.T) {{
+{III}document := {prefix_literal} + c.xml + {suffix_literal}
+{III}instance, err := ourxmlization.Unmarshal(xml.NewDecoder(strings.NewReader(document)))
+{III}if err != nil {{
+{IIII}t.Fatal(err)
+{III}}}
+{III}typed, ok := instance.(interface{{ {getter}() string }})
+{III}if !ok || typed.{getter}() != c.want {{
+{IIII}t.Fatalf("Expected decoded string %q, got %v", c.want, instance)
+{III}}}
+{III}var serialized bytes.Buffer
+{III}encoder := xml.NewEncoder(&serialized)
+{III}encoder.Indent("", "\\t")
+{III}if err := ourxmlization.Marshal(encoder, instance, true); err != nil {{
+{IIII}t.Fatal(err)
+{III}}}
+{III}assertSerializationEqualsDeserialization(t, document, serialized.String(), c.name)
+{III}canonical, err := canonicalizeXmlForComparison(document)
+{III}if err != nil {{
+{IIII}t.Fatal(err)
+{III}}}
+{III}for value, previous := range canonicalByValue {{
+{IIII}if (canonical == previous) != (c.want == value) {{
+{IIIII}t.Fatalf("Comparison confuses string values %q and %q", c.want, value)
+{IIII}}}
+{III}}}
+{III}canonicalByValue[c.want] = canonical
+{II}}})
+{I}}}
+{I}empty, err := canonicalizeXmlForComparison({empty_container})
+{I}if err != nil {{
+{II}t.Fatal(err)
+{I}}}
+{I}indented, err := canonicalizeXmlForComparison({indented_container})
+{I}if err != nil || empty != indented {{
+{II}t.Fatalf("Empty container indentation differs: %v", err)
+{I}}}
+}}"""
+        )
+    return None
+
+
+def _generate_text_context(symbol_table: intermediate.SymbolTable) -> Stripped:
+    """Identify string content by its position in the model's XML structure."""
+    namespace = symbol_table.meta_model.xml_namespace
+    children_by_type: MutableMapping[str, MutableMapping[Tuple[str, str], str]] = {
+        "root": {}
+    }
+
+    def class_content(cls: intermediate.ConcreteClass) -> str:
+        """Register a class before its properties so recursive models terminate."""
+        key = f"class:{cls.name}"
+        if key not in children_by_type:
+            children_by_type[key] = {}
+            for prop in cls.properties:
+                children_by_type[key][(namespace, prop.xml_name)] = content(
+                    intermediate.beneath_optional(prop.type_annotation)
+                )
+        return key
+
+    def items(
+        type_anno: intermediate.TypeAnnotationExceptOptional, local: str
+    ) -> MutableMapping[Tuple[str, str], str]:
+        """Describe self-naming instances or positionally named collection items."""
+        if isinstance(type_anno, intermediate.OurTypeAnnotation):
+            our_type = type_anno.our_type
+            alternatives: List[intermediate.ConcreteClass]
+            if isinstance(our_type, intermediate.NamedUnion):
+                alternatives = list(our_type.implementers)
+            elif isinstance(
+                our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+            ):
+                alternatives = list(our_type.concrete_descendants)
+                if isinstance(our_type, intermediate.ConcreteClass):
+                    alternatives.append(our_type)
+            else:
+                alternatives = []
+            if alternatives:
+                return {
+                    (namespace, naming.xml_class_name(cls.name)): class_content(cls)
+                    for cls in alternatives
+                }
+        return {(namespace, local): content(type_anno)}
+
+    def content(type_anno: intermediate.TypeAnnotationExceptOptional) -> str:
+        """Distinguish whitespace-preserving strings from their enclosing containers."""
+        if intermediate.try_primitive_type(type_anno) is intermediate.PrimitiveType.STR:
+            return "text"
+        if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
+            return ""
+        if isinstance(type_anno, intermediate.OurTypeAnnotation):
+            our_type = type_anno.our_type
+            if isinstance(
+                our_type, (intermediate.ConstrainedPrimitive, intermediate.Enumeration)
+            ):
+                return "text" if isinstance(our_type, intermediate.Enumeration) else ""
+            if isinstance(our_type, intermediate.ConcreteClass) and not (
+                our_type.concrete_descendants
+            ):
+                return class_content(our_type)
+
+        key = f"content:{golang_common.type_moniker(type_anno)}"
+        if key in children_by_type:
+            return key
+        children_by_type[key] = {}
+        if isinstance(type_anno, intermediate.OurTypeAnnotation):
+            children_by_type[key].update(items(type_anno, ""))
+        elif isinstance(
+            type_anno, (intermediate.ListTypeAnnotation, intermediate.SetTypeAnnotation)
+        ):
+            children_by_type[key].update(items(type_anno.items, "v"))
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            for i, item in enumerate(type_anno.items):
+                children_by_type[key].update(items(item, f"v{i + 1}"))
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            children_by_type["json:value"] = {
+                ("", "array"): "json:array",
+                ("", "struct"): "json:object",
+                ("", "string"): "text",
+            }
+            children_by_type["json:array"] = {("", "data"): "json:data"}
+            children_by_type["json:data"] = {("", "value"): "json:value"}
+            children_by_type["json:object"] = {("", "member"): "json:member"}
+            children_by_type["json:member"] = {
+                ("", "name"): "text",
+                ("", "value"): "json:value",
+            }
+            if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+                json_key = "json:value"
+            elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+                json_key = "json:array"
+            else:
+                json_key = "json:object"
+            children_by_type[key].update(children_by_type[json_key])
+        else:
+            assert_never(type_anno)
+        return key
+
+    for our_type in symbol_table.our_types:
+        if isinstance(our_type, intermediate.ConcreteClass):
+            children_by_type["root"][
+                (namespace, naming.xml_class_name(our_type.name))
+            ] = class_content(our_type)
+
+    cases: List[str] = []
+    for key, children in sorted(children_by_type.items()):
+        child_cases: List[str] = []
+        for (space, local), child_type in sorted(children.items()):
+            if not child_type:
+                continue
+            child_cases.append(
+                f"""\
+case (xml.Name{{Space: {golang_common.string_literal(space)}, Local: {golang_common.string_literal(local)}}}):
+{I}return {golang_common.string_literal(child_type)}"""
+            )
+        if not child_cases:
+            continue
+        joined = "\n".join(child_cases)
+        cases.append(
+            f"""\
+case {golang_common.string_literal(key)}:
+{I}switch name {{
+{I}{indent_but_first_line(joined, I)}
+{I}}}"""
+        )
+    joined = "\n".join(cases)
+    return Stripped(
+        f"""\
+// Follow the model's XML nesting to recognize string values, including collection
+// items. Container whitespace remains available to the existing indentation cleanup.
+func xmlTextContext(parent string, name xml.Name) string {{
+{I}switch parent {{
+{I}{indent_but_first_line(joined, I)}
+{I}}}
+{I}return ""
+}}"""
+    )
+
+
 # fmt: off
 @ensure(
     lambda result: result.endswith('\n'),
     "Trailing newline mandatory for valid end-of-files"
 )
 # fmt: on
-def generate(repo_url: Stripped) -> str:
+def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     """Generate code for common XML de/serialization shared across the tests."""
     blocks: List[Stripped] = [
         Stripped(
@@ -39,12 +334,16 @@ package xmlization_test"""
         Stripped(
             f"""\
 import (
+{I}"bytes"
+{I}"encoding/xml"
 {I}"fmt"
+{I}"io"
 {I}"os"
 {I}"path/filepath"
 {I}"regexp"
 {I}"strings"
 {I}"testing"
+
 {I}ourtesting "{repo_url}/ourtesting"
 {I}ourxmlization "{repo_url}/xmlization"
 )"""
@@ -178,6 +477,137 @@ func removeWhitespaceWithinTags(text string) string {{
 {I}return result
 }}"""
         ),
+        _generate_text_context(symbol_table),
+        Stripped(
+            f"""\
+// Normalize escaping in character data while retaining the original markup.
+// Copying tags verbatim avoids changing namespace declarations or prefixes.
+func normalizeXmlTextEscaping(text string) (string, error) {{
+{I}decoder := xml.NewDecoder(strings.NewReader(text))
+{I}var result bytes.Buffer
+{I}contexts := []string{{"root"}}
+{I}for {{
+{II}start := decoder.InputOffset()
+{II}token, err := decoder.Token()
+{II}if err == io.EOF {{
+{III}return result.String(), nil
+{II}}}
+{II}if err != nil {{
+{III}return "", err
+{II}}}
+{II}if start, ok := token.(xml.StartElement); ok {{
+{III}contexts = append(contexts, xmlTextContext(contexts[len(contexts)-1], start.Name))
+{II}}}
+{II}if data, ok := token.(xml.CharData); ok {{
+{III}// Normalize strings consistently, even if they consist only of whitespace.
+{III}// Keep container indentation available to the existing cleanup.
+{III}if contexts[len(contexts)-1] != "text" && strings.Trim(string(data), " \\t\\r\\n") == "" {{
+{IIII}result.WriteString(text[start:decoder.InputOffset()])
+{III}}} else {{
+{IIII}var escaped bytes.Buffer
+{IIII}if err := xml.EscapeText(&escaped, data); err != nil {{
+{IIIII}return "", err
+{IIII}}}
+{IIII}if contexts[len(contexts)-1] == "text" {{
+{IIIII}// Protect spaces as well as tabs and line breaks from the regex cleanup.
+{IIIII}result.WriteString(strings.ReplaceAll(escaped.String(), " ", "&#32;"))
+{IIII}}} else {{
+{IIIII}result.Write(escaped.Bytes())
+{IIII}}}
+{III}}}
+{II}}} else {{
+{III}result.WriteString(text[start:decoder.InputOffset()])
+{II}}}
+{II}if _, ok := token.(xml.EndElement); ok {{
+{III}contexts = contexts[:len(contexts)-1]
+{II}}}
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+func TestNormalizeXmlTextEscaping(t *testing.T) {{
+{I}cases := []struct {{
+{II}name  string
+{II}input string
+{II}want  string
+{I}}}{{
+{II}{{"quotes", `<v>"hello"</v>`, `<v>&#34;hello&#34;</v>`}},
+{II}{{"quote_references", `<v>&quot;hello&#x22;</v>`, `<v>&#34;hello&#34;</v>`}},
+{II}{{"apostrophes", `<v>'hello'</v>`, `<v>&#39;hello&#39;</v>`}},
+{II}{{"tabs", "<v>a\\tb</v>", `<v>a&#x9;b</v>`}},
+{II}{{"tab_reference", `<v>a&#9;b</v>`, `<v>a&#x9;b</v>`}},
+{II}{{"double_escaping", `<v>&amp;#34;</v>`, `<v>&amp;#34;</v>`}},
+{II}{{"text_is_not_markup", `<v>&#60;x/&#62;</v>`, `<v>&lt;x/&gt;</v>`}},
+{II}{{"string_spaces", `<v> hello </v>`, `<v> hello </v>`}},
+{II}{{"markup", `<p:v xmlns:p='urn:test' a='"'/>`, `<p:v xmlns:p='urn:test' a='"'/>`}},
+{II}{{"numbers", `<v>1e2</v>`, `<v>1e2</v>`}},
+{II}{{"indentation", "<r>\\n\\t<v/>\\n</r>", "<r>\\n\\t<v/>\\n</r>"}},
+{II}{{"whitespace_reference", `<v>&#x9;</v>`, `<v>&#x9;</v>`}},
+{I}}}
+{I}for _, c := range cases {{
+{II}t.Run(c.name, func(t *testing.T) {{
+{III}got, err := normalizeXmlTextEscaping(c.input)
+{III}if err != nil {{
+{IIII}t.Fatal(err)
+{III}}}
+{III}if got != c.want {{
+{IIII}t.Fatalf("Expected %q, got %q", c.want, got)
+{III}}}
+{II}}})
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+func canonicalizeXmlForComparison(text string) (string, error) {{
+{I}text = strings.TrimSpace(text)
+{I}// Escape text before applying the legacy markup cleanup, so a literal
+{I}// '>' in a value can not make the cleanup remove a preceding space.
+{I}text, err := normalizeXmlTextEscaping(text)
+{I}if err != nil {{
+{II}return "", err
+{I}}}
+{I}text = strings.ReplaceAll(text, "\\r", "")
+{I}text = removeWhitespaceBetweenTags(text)
+{I}text = forceSelfClosingTags(text)
+{I}return removeWhitespaceWithinTags(text), nil
+}}"""
+        ),
+        Stripped(
+            f"""\
+func TestXmlComparisonPreservesText(t *testing.T) {{
+{I}for _, c := range []struct {{
+{II}name     string
+{II}expected string
+{II}actual   string
+{II}equal    bool
+{I}}}{{
+{II}{{"equivalent_escaping", `<v>x ></v>`, `<v>x &gt;</v>`, true}},
+{II}{{"lost_space", `<v>x ></v>`, `<v>x&gt;</v>`, false}},
+{II}{{"numeric_reference", `<v>x ></v>`, `<v>x &#62;</v>`, true}},
+{II}{{"extra_space", `<v>x ></v>`, `<v>x  &gt;</v>`, false}},
+{II}{{"tab_vs_newline", `<v>&#x9;</v>`, `<v>&#xA;</v>`, false}},
+{II}{{"tab_vs_space", `<v>&#x9;</v>`, `<v>&#32;</v>`, false}},
+{II}{{"lost_tab", `<v>&#x9;</v>`, `<v></v>`, false}},
+{II}{{"space_vs_literal_tab", `<v>&#32;</v>`, "<v>\\t</v>", false}},
+{I}}} {{
+{II}t.Run(c.name, func(t *testing.T) {{
+{III}expected, err := canonicalizeXmlForComparison(c.expected)
+{III}if err != nil {{
+{IIII}t.Fatal(err)
+{III}}}
+{III}actual, err := canonicalizeXmlForComparison(c.actual)
+{III}if err != nil {{
+{IIII}t.Fatal(err)
+{III}}}
+{III}if (expected == actual) != c.equal {{
+{IIII}t.Fatalf("Unexpected comparison of %q and %q", expected, actual)
+{III}}}
+{II}}})
+{I}}}
+}}"""
+        ),
         Stripped(
             f"""\
 // Assert that the serialization `other`, as XML document, equals the original
@@ -191,16 +621,6 @@ func assertSerializationEqualsDeserialization(
 ) (ok bool) {{
 {I}ok = true
 
-{I}// Remove carriers to avoid problems between Windows, Posix and MacOS
-{I}canonicalThat := strings.ReplaceAll(that, "\\r", "")
-{I}canonicalOther := strings.ReplaceAll(other, "\\r", "")
-
-{I}canonicalThat = strings.TrimSpace(canonicalThat)
-{I}canonicalOther = strings.TrimSpace(canonicalOther)
-
-{I}canonicalThat = forceSelfClosingTags(canonicalThat)
-{I}canonicalOther = forceSelfClosingTags(canonicalOther)
-
 {I}// NOTE (mristin):
 {I}// The following hack is SUPER ugly and unsafe! However, it works. Given Go's
 {I}// limited support for XML, we gave up on a safer approach :(. We tested
@@ -211,14 +631,16 @@ func assertSerializationEqualsDeserialization(
 {I}//    element content still has not been de-escaped or consistently escaped in
 {I}//    a round trip.
 
-{I}canonicalThat = strings.ReplaceAll(canonicalThat, "'", "&#39;")
-{I}canonicalOther = strings.ReplaceAll(canonicalOther, "'", "&#39;")
-
-{I}canonicalThat = removeWhitespaceBetweenTags(canonicalThat)
-{I}canonicalOther = removeWhitespaceBetweenTags(canonicalOther)
-
-{I}canonicalThat = removeWhitespaceWithinTags(canonicalThat)
-{I}canonicalOther = removeWhitespaceWithinTags(canonicalOther)
+{I}canonicalThat, err := canonicalizeXmlForComparison(that)
+{I}if err != nil {{
+{II}t.Fatalf("Failed to normalize original XML from %s: %s", source, err)
+{II}return false
+{I}}}
+{I}canonicalOther, err := canonicalizeXmlForComparison(other)
+{I}if err != nil {{
+{II}t.Fatalf("Failed to normalize serialized XML from %s: %s", source, err)
+{II}return false
+{I}}}
 
 {I}thatLines := strings.Split(canonicalThat, "\\n")
 {I}otherLines := strings.Split(canonicalOther, "\\n")
@@ -351,6 +773,10 @@ func assertIsDeserializationErrorAndEqualsExpectedOrRecord(
         ),
         golang_common.WARNING,
     ]
+
+    whitespace_test = _generate_whitespace_round_trip_test(symbol_table)
+    if whitespace_test is not None:
+        blocks.insert(-1, whitespace_test)
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

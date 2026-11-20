@@ -19,7 +19,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"unicode"
 	ourcommon "github.com/aas-core-works/aas-core3.0-golang/common"
 	ourreporting "github.com/aas-core-works/aas-core3.0-golang/reporting"
 )
@@ -178,7 +177,7 @@ func MustSerializationError(err error) *SerializationError {
 // Represent a sentinel token which signals the end-of-file.
 type Eof struct{}
 
-// Check if the string `s` consists only of whitespace.
+// Check if the string `s` consists only of XML whitespace: space, tab, CR or LF.
 //
 // An empty string causes panic — please cover that case before.
 func IsWhitespace(s string) bool {
@@ -186,7 +185,7 @@ func IsWhitespace(s string) bool {
 		panic("Unexpected empty string")
 	}
 	for _, c := range s {
-		if !unicode.IsSpace(c) {
+		if c != ' ' && c != '\t' && c != '\r' && c != '\n' {
 			return false
 		}
 	}
@@ -799,6 +798,11 @@ func readElementDispatchedInNamespace[T any](
 	}
 
 	value, current, err = readByLocal(decoder, current, local)
+	if err != nil {
+		return
+	}
+
+	current, err = SkipEmptyTextWhitespaceAndComments(decoder, current)
 	if err != nil {
 		return
 	}
