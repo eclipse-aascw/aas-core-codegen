@@ -30,6 +30,9 @@ import java.util.Objects;
 public class Leaf implements ILeaf {
   private IItem optionalItem;
 
+  public Leaf() {
+  }
+
   public Leaf(IItem optionalItem) {
     this.optionalItem = optionalItem;
   }
