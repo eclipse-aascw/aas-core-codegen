@@ -123,6 +123,9 @@ public class ReferenceElement implements IReferenceElement {
    */
   private IReference value;
 
+  public ReferenceElement() {
+  }
+
   public ReferenceElement(
     List<IExtension> extensions,
     String category,

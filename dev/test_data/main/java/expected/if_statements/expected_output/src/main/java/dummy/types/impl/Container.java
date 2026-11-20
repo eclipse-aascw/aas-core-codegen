@@ -32,6 +32,9 @@ public class Container implements IContainer {
 
   private List<IParent> children;
 
+  public Container() {
+  }
+
   public Container(
     String optionalText,
     List<IParent> children) {

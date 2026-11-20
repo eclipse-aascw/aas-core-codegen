@@ -75,6 +75,9 @@ public class AdministrativeInformation implements IAdministrativeInformation {
    */
   private String templateId;
 
+  public AdministrativeInformation() {
+  }
+
   public AdministrativeInformation(
     List<IEmbeddedDataSpecification> embeddedDataSpecifications,
     String version,

@@ -115,6 +115,9 @@ public class Capability implements ICapability {
    */
   private List<IEmbeddedDataSpecification> embeddedDataSpecifications;
 
+  public Capability() {
+  }
+
   public Capability(
     List<IExtension> extensions,
     String category,
