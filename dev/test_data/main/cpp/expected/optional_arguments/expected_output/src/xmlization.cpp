@@ -1819,7 +1819,8 @@ enum class OfSomething : std::uint32_t {
   kOptionalNumber = 2,
   kOptionalItem = 3,
   kOptionalTexts = 4,
-  kOptionalKind = 5
+  kOptionalKind = 5,
+  kOptionalFlag = 6
 };  // enum class OfSomething
 
 const std::size_t kPropertyCountOfItem = 2;
@@ -1862,7 +1863,7 @@ const std::unordered_map<
   }
 };
 
-const std::size_t kPropertyCountOfSomething = 6;
+const std::size_t kPropertyCountOfSomething = 7;
 
 const std::unordered_map<
   std::string,
@@ -1891,6 +1892,10 @@ const std::unordered_map<
   {
     "optionalKind",
     OfSomething::kOptionalKind
+  },
+  {
+    "optionalFlag",
+    OfSomething::kOptionalFlag
   }
 };
 
@@ -2160,6 +2165,8 @@ std::pair<
 
   common::optional<types::Kind> the_optional_kind;
 
+  common::optional<bool> the_optional_flag;
+
   // endregion Initialization
 
   common::optional<DeserializationError> error(
@@ -2220,6 +2227,11 @@ std::pair<
               the_optional_kind,
               DeserializeKind(reader)
             );
+          case properties::OfSomething::kOptionalFlag:
+            return ReadInto(
+              the_optional_flag,
+              DeserializeBool(reader)
+            );
           default:
             throw UnexpectedPropertyLiteralError(
               "properties::OfSomething",
@@ -2263,7 +2275,8 @@ std::pair<
         std::move(the_optional_number),
         std::move(the_optional_item),
         std::move(the_optional_texts),
-        std::move(the_optional_kind)
+        std::move(the_optional_kind),
+        std::move(the_optional_flag)
       )
     ),
     common::nullopt
@@ -3259,6 +3272,17 @@ common::optional<xml_common::SerializationError> SerializeSomethingAsSequence(
     writer,
     iteration::Property::kOptionalKind,
     SerializeKind
+  );
+  if (error.has_value()) {
+    return error;
+  }
+
+  error = WriteProperty(
+    "optionalFlag",
+    that.optional_flag(),
+    writer,
+    iteration::Property::kOptionalFlag,
+    WriteBool
   );
   if (error.has_value()) {
     return error;

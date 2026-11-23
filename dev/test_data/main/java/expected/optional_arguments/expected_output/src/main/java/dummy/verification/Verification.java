@@ -84,6 +84,15 @@ public class Verification {
   }
 
   /**
+   * Check the negation of the optional boolean argument narrowed to non-null.
+   */
+  public static Boolean flagIsNotSet(
+    Optional<Boolean> flag) {
+    return (!flag.isPresent())
+    || (!flag.get());
+  }
+
+  /**
    * Check the optional list argument.
    */
   public static Boolean textsAreFew(
@@ -315,6 +324,13 @@ public class Verification {
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "Texts must be few")));
+      }
+
+      if (!flagIsNotSet(that.getOptionalFlag())) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(new Reporting.Error(
+            "Invariant violated:\n" +
+            "Flag must not be set")));
       }
 
       if (!itemHasName(that.getOptionalItem())) {

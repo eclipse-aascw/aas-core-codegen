@@ -256,6 +256,18 @@ export function itemHasName(
 }
 
 /**
+ * Check the negation of the optional boolean argument narrowed to non-null.
+ */
+export function flagIsNotSet(
+  flag: boolean | null
+): boolean {
+  return (
+    (flag === null)
+    || (!flag)
+  );
+}
+
+/**
  * Check the optional list argument.
  */
 export function textsAreFew(
@@ -459,6 +471,12 @@ class Verifier
     if (!textsAreFew(that.optionalTexts)) {
       yield new VerificationError(
         "Texts must be few"
+      )
+    }
+
+    if (!flagIsNotSet(that.optionalFlag)) {
+      yield new VerificationError(
+        "Flag must not be set"
       )
     }
 

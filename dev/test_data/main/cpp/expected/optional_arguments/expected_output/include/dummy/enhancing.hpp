@@ -408,6 +408,20 @@ class EnhancedSomething
     instance_->set_optional_kind(value);
   }
 
+  const common::optional<bool>& optional_flag() const override {
+    return instance_->optional_flag();
+  }
+
+  common::optional<bool>& mutable_optional_flag() override {
+    return instance_->mutable_optional_flag();
+  }
+
+  void set_optional_flag(
+    common::optional<bool> value
+  ) override {
+    instance_->set_optional_flag(value);
+  }
+
   const std::shared_ptr<E>& enhancement() const {
     return enhancement_;
   }
