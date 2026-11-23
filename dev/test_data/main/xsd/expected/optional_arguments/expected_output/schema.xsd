@@ -47,6 +47,7 @@
         </xs:complexType>
       </xs:element>
       <xs:element name="optionalKind" type="kind_t" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="optionalFlag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
   </xs:group>
   <xs:simpleType name="kind_t">

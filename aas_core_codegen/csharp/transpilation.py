@@ -1440,7 +1440,9 @@ new {list_type}
     def transform_not(
         self, node: parse_tree.Not
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        operand, error = self.transform(node.operand)
+        operand, error = self._transform_and_unwrap_narrowed_nullable_value(
+            node.operand
+        )
         if error is not None:
             return None, error
 

@@ -91,6 +91,14 @@ func ItemHasName(
 		ourcommon.LenStr(item.Name()) > 0
 }
 
+// Check the negation of the optional boolean argument narrowed to non-null.
+func FlagIsNotSet(
+	flag *bool,
+) bool {
+	return (flag == nil) ||
+		(!*flag)
+}
+
 // Check the optional list argument.
 func TextsAreFew(
 	texts []string,
@@ -291,6 +299,16 @@ func VerifySomething(
 		abort = onError(
 			newVerificationError(
 				"Texts must be few",),
+		)
+		if abort {
+			return
+		}
+	}
+
+	if !FlagIsNotSet(that.OptionalFlag()) {
+		abort = onError(
+			newVerificationError(
+				"Flag must not be set",),
 		)
 		if abort {
 			return

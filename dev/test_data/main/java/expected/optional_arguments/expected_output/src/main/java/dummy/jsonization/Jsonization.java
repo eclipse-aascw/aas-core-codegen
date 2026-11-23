@@ -585,6 +585,7 @@ public class Jsonization {
         IItem theOptionalItem = null;
         List<String> theOptionalTexts = null;
         Kind theOptionalKind = null;
+        Boolean theOptionalFlag = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
@@ -640,6 +641,14 @@ public class Jsonization {
               theOptionalKind = parsed.getResult();
               break;
             }
+            case "optionalFlag": {
+              final Reporting.Result<? extends Boolean> parsed = tryBooleanFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
+              }
+              theOptionalFlag = parsed.getResult();
+              break;
+            }
             default:
               return unexpectedProperty(key);
           }
@@ -655,7 +664,8 @@ public class Jsonization {
           theOptionalNumber,
           theOptionalItem,
           theOptionalTexts,
-          theOptionalKind));
+          theOptionalKind,
+          theOptionalFlag));
       }
     }
 
@@ -926,6 +936,19 @@ public class Jsonization {
       }
 
       /**
+       * Convert {@code that} boolean to a JSON value.
+       *
+       * <p>This wraps {@link JsonNodeFactory}, which is an object, so that
+       * the conversion is a static method like every other one here and
+       * a reference to it captures nothing.
+       *
+       * @param that value to be converted
+       */
+      private static JsonNode boolToJsonNode(Boolean that) {
+        return JsonNodeFactory.instance.booleanNode(that);
+      }
+
+      /**
        * Convert {@code that} string to a JSON value.
        *
        * <p>See the note on {@link #boolToJsonNode} on why this wrapper exists.
@@ -1067,6 +1090,10 @@ public class Jsonization {
         setOptionalProperty(
           result, "optionalKind", "getOptionalKind()",
           that.getOptionalKind(), Serialize::toJsonValue);
+
+        setOptionalProperty(
+          result, "optionalFlag", "getOptionalFlag()",
+          that.getOptionalFlag(), _Transformer::boolToJsonNode);
 
         return result;
       }

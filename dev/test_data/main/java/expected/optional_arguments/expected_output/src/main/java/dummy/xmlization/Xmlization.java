@@ -67,6 +67,36 @@ public class Xmlization {
       T convert(XMLEventReader reader) throws XMLStreamException;
     }
 
+    private static Boolean readContentAsBool(XMLEventReader reader) throws XMLStreamException {
+      final StringBuilder content = new StringBuilder();
+
+      while (reader.peek().isCharacters() || reader.peek().getEventType() == XMLStreamConstants.COMMENT) {
+        if (reader.peek().isCharacters()) {
+          content.append(reader.peek().asCharacters().getData());
+        }
+        reader.nextEvent();
+      }
+      final String text = XmlCommon.collapseWhitespace(content.toString());
+
+      // NOTE (mristin):
+      // ``xs:boolean`` spells the two values in four ways, not two, so ``1`` and
+      // ``0`` have to be read as well. Boolean.valueOf is of no use here: it
+      // answers ``false`` to anything which is not ``true``, so it would take
+      // ``0`` and ``banana`` alike, and silently.
+      //
+      // See: https://www.w3.org/TR/xmlschema-2/#boolean
+      if (text.equals("true") || text.equals("1")) {
+        return Boolean.TRUE;
+      }
+
+      if (text.equals("false") || text.equals("0")) {
+        return Boolean.FALSE;
+      }
+
+      throw new IllegalStateException(
+        "Expected a value as xs:boolean, but got: " + text);
+    }
+
     private static Long readContentAsLong(XMLEventReader reader) throws XMLStreamException {
       final StringBuilder content = new StringBuilder();
 
@@ -281,6 +311,15 @@ public class Xmlization {
         isEmpty,
         Stringification::kindFromString,
         "Kind");
+    }
+
+    private static Reporting.Result<Boolean> readTextAs_bool(
+      XMLEventReader reader, boolean isEmpty) {
+      return readText(
+        reader,
+        isEmpty,
+        _DeserializeImplementation::readContentAsBool,
+        "Boolean");
     }
 
     private static Reporting.Result<? extends String> readAtV_string(
@@ -589,6 +628,7 @@ public class Xmlization {
       IItem theOptionalItem = null;
       List<String> theOptionalTexts = null;
       Kind theOptionalKind = null;
+      Boolean theOptionalFlag = null;
 
       if (!isEmptySequence) {
         while (!atEndOfSequence(reader)) {
@@ -693,6 +733,21 @@ public class Xmlization {
               }
               break;
             }
+            case "optionalFlag": {
+              if (theOptionalFlag != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
+              final Reporting.Result<Boolean> value =
+                readTextAs_bool(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theOptionalFlag = value.getResult();
+              }
+              break;
+            }
             default:
               return unexpectedProperty("Something", elementName);
           }
@@ -727,7 +782,8 @@ public class Xmlization {
         theOptionalNumber,
         theOptionalItem,
         theOptionalTexts,
-        theOptionalKind));
+        theOptionalKind,
+        theOptionalFlag));
     }
 
     /**
@@ -1232,6 +1288,13 @@ public class Xmlization {
         that.getOptionalKind(),
         writer,
         _VisitorWithWriter::writeEnum);
+
+      writeOptionalProperty(
+        "optionalFlag",
+        "getOptionalFlag()",
+        that.getOptionalFlag(),
+        writer,
+        XmlCommon::writeStringifiedContent);
     }
 
     @Override

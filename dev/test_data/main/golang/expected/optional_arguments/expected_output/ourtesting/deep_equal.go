@@ -176,6 +176,19 @@ func deepEqualSomething(
 		}
 	}
 
+	thatOptionalFlag := that.OptionalFlag()
+	otherOptionalFlag := other.OptionalFlag()
+	if
+		(thatOptionalFlag == nil && otherOptionalFlag != nil) ||
+		(thatOptionalFlag != nil && otherOptionalFlag == nil) {
+		return false
+	}
+	if thatOptionalFlag != nil {
+		if *thatOptionalFlag != *otherOptionalFlag {
+			return false
+		}
+	}
+
 	return true
 }
 
