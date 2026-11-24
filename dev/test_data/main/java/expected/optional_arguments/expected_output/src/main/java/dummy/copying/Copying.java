@@ -94,7 +94,8 @@ public class Copying
                 that.getOptionalNumber().orElse(null),
                 that.getOptionalItem().orElse(null),
                 that.getOptionalTexts().orElse(null),
-                that.getOptionalKind().orElse(null));
+                that.getOptionalKind().orElse(null),
+                that.getOptionalFlag().orElse(null));
         }
     }
 
@@ -146,7 +147,8 @@ public class Copying
                 that.getOptionalTexts().isPresent()
                     ? new ArrayList<>(that.getOptionalTexts().get())
                     : null,
-                that.getOptionalKind().orElse(null)
+                that.getOptionalKind().orElse(null),
+                that.getOptionalFlag().orElse(null)
             );
         }
     }

@@ -262,6 +262,12 @@ namespace dummy
                 set => _instance.OptionalKind = value;
             }
 
+            public bool? OptionalFlag
+            {
+                get => _instance.OptionalFlag;
+                set => _instance.OptionalFlag = value;
+            }
+
             public IEnumerable<string> OverOptionalTextsOrEmpty()
             {
                 return _instance.OverOptionalTextsOrEmpty();

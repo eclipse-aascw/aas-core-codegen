@@ -81,7 +81,8 @@ public class TestCopying {
             && transform(that.getOptionalItem().get(), casted.getOptionalItem().get())
           : !casted.getOptionalItem().isPresent())
         && that.getOptionalTexts().equals(casted.getOptionalTexts())
-        && that.getOptionalKind().equals(casted.getOptionalKind()));
+        && that.getOptionalKind().equals(casted.getOptionalKind())
+        && that.getOptionalFlag().equals(casted.getOptionalFlag()));
     }
 
     private Boolean deepEqualsListOf_INode(
@@ -132,7 +133,8 @@ public class TestCopying {
       && that.getOptionalNumber().equals(other.getOptionalNumber())
       && that.getOptionalItem().equals(other.getOptionalItem())
       && that.getOptionalTexts().equals(other.getOptionalTexts())
-      && that.getOptionalKind().equals(other.getOptionalKind()));
+      && that.getOptionalKind().equals(other.getOptionalKind())
+      && that.getOptionalFlag().equals(other.getOptionalFlag()));
   }
 
   private static Boolean ItemDeepEquals(Item that, Item other) {
