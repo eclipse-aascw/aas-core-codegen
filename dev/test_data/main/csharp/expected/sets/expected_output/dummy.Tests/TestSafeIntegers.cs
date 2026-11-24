@@ -3,6 +3,7 @@
  * Do NOT edit or append.
  */
 
+using CodeAnalysis = System.Diagnostics.CodeAnalysis;
 using Directory = System.IO.Directory;
 using Nodes = System.Text.Json.Nodes;
 using Our = dummy;  // renamed
@@ -82,7 +83,7 @@ namespace dummy.Tests
             return Our.Tests.CommonJson.ReadFromFile(paths[0]);
         }
 
-        [SuppressMessage("ReSharper", "UnusedMethodReturnValue.Local")]
+        [CodeAnalysis.SuppressMessage("ReSharper", "UnusedMethodReturnValue.Local")]
         private static string SerializeToXml(Our.IClass instance)
         {
             var builder = new System.Text.StringBuilder();

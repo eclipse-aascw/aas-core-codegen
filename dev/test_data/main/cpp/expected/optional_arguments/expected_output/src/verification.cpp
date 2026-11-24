@@ -111,6 +111,17 @@ bool ItemHasName(
   );
 }
 
+bool FlagIsNotSet(
+  const common::optional<bool>& flag
+) {
+  return (
+    (
+      (!(flag.has_value()))
+      || (!(*flag))
+    )
+  );
+}
+
 bool TextsAreFew(
   const common::optional<
     std::vector<std::wstring>
@@ -271,12 +282,23 @@ bool Something_3(
   const types::ISomething* that = (
     static_cast<const types::ISomething*>(value)
   );
+  return verification::FlagIsNotSet(
+    that->optional_flag()
+  );
+}
+
+bool Something_4(
+  const void* value
+) {
+  const types::ISomething* that = (
+    static_cast<const types::ISomething*>(value)
+  );
   return verification::ItemHasName(
     that->optional_item()
   );
 }
 
-bool Something_4(
+bool Something_5(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -287,7 +309,7 @@ bool Something_4(
   );
 }
 
-bool Something_5(
+bool Something_6(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -298,7 +320,7 @@ bool Something_5(
   );
 }
 
-bool Something_6(
+bool Something_7(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -309,7 +331,7 @@ bool Something_6(
   );
 }
 
-bool Something_7(
+bool Something_8(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -323,7 +345,7 @@ bool Something_7(
   );
 }
 
-bool Something_8(
+bool Something_9(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -337,7 +359,7 @@ bool Something_8(
   );
 }
 
-bool Something_9(
+bool Something_10(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -374,30 +396,34 @@ const std::vector<Check>& ChecksOf(Shape shape) {
         },
         {
           &Something_3,
-          L"Optional item must have a name"
+          L"Flag must not be set"
         },
         {
           &Something_4,
-          L"Number must be small"
+          L"Optional item must have a name"
         },
         {
           &Something_5,
-          L"Text must not be banned"
+          L"Number must be small"
         },
         {
           &Something_6,
-          L"Text must be short"
+          L"Text must not be banned"
         },
         {
           &Something_7,
-          L"Narrowed item must be named"
+          L"Text must be short"
         },
         {
           &Something_8,
-          L"Narrowed number must be positive"
+          L"Narrowed item must be named"
         },
         {
           &Something_9,
+          L"Narrowed number must be positive"
+        },
+        {
+          &Something_10,
           L"Narrowed kind must be known"
         }
       };
