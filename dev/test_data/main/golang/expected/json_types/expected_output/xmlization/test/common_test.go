@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -355,6 +356,10 @@ const xmlComparisonMarker = "GITHUB_COM_DUMMY_WORKS_DUMMY_XML_COMPARISON_LITERAL
 
 func canonicalizeXmlForComparison(text string) (xmlComparison, error) {
 	text = strings.TrimSpace(text)
+	text, err := orderXmlRpcMembersForComparison(text)
+	if err != nil {
+		return xmlComparison{}, err
+	}
 	// Escape text before applying the legacy markup cleanup, so a literal
 	// '>' in a value can not make the cleanup remove a preceding space.
 	comparison, err := normalizeXmlTextEscaping(text)
@@ -828,6 +833,239 @@ func TestXmlNumericComparison(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Order XML-RPC object members by decoded key, preserving the XML of each member.
+// Source ranges preserve tags, namespaces and markup without re-serializing them.
+func orderXmlRpcMembersForComparison(text string) (string, error) {
+	// Member element names contain this literal text, including when prefixed.
+	if !strings.Contains(text, "member") {
+		return text, nil
+	}
+	type element struct {
+		start, end int64
+		context    string
+		key        string
+		hasKey     bool
+		children   []*element
+	}
+	root := &element{end: int64(len(text)), context: "root"}
+	stack := []*element{root}
+	decoder := xml.NewDecoder(strings.NewReader(text))
+	for {
+		start := decoder.InputOffset()
+		token, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		switch token := token.(type) {
+		case xml.StartElement:
+			parent := stack[len(stack)-1]
+			child := &element{
+				start:   start,
+				context: xmlTextContext(parent.context, len(parent.children)+1, token.Name),
+			}
+			parent.children = append(parent.children, child)
+			if parent.context == "json:member" && token.Name == (xml.Name{Local: "name"}) {
+				if parent.hasKey {
+					return "", fmt.Errorf("duplicate XML-RPC member name element")
+				}
+				if err := decoder.DecodeElement(&parent.key, &token); err != nil {
+					return "", err
+				}
+				parent.hasKey = true
+				child.end = decoder.InputOffset()
+				continue
+			}
+			stack = append(stack, child)
+		case xml.EndElement:
+			stack[len(stack)-1].end = decoder.InputOffset()
+			stack = stack[:len(stack)-1]
+		}
+	}
+
+	var result strings.Builder
+	var write func(*element) error
+	write = func(parent *element) error {
+		var members []*element
+		for _, child := range parent.children {
+			if child.context == "json:member" {
+				if !child.hasKey {
+					return fmt.Errorf("XML-RPC member has no name")
+				}
+				members = append(members, child)
+			}
+		}
+		sort.Slice(members, func(i, j int) bool { return members[i].key < members[j].key })
+		for i := 1; i < len(members); i++ {
+			if members[i-1].key == members[i].key {
+				return fmt.Errorf("duplicate XML-RPC member key %q", members[i].key)
+			}
+		}
+		cursor := parent.start
+		memberIndex := 0
+		for _, child := range parent.children {
+			// Keep gaps between children, including comments, in their original positions.
+			result.WriteString(text[cursor:child.start])
+			selected := child
+			if child.context == "json:member" {
+				selected = members[memberIndex]
+				memberIndex++
+			}
+			if err := write(selected); err != nil {
+				return err
+			}
+			cursor = child.end
+		}
+		result.WriteString(text[cursor:parent.end])
+		return nil
+	}
+	if err := write(root); err != nil {
+		return "", err
+	}
+	return result.String(), nil
+}
+
+func TestXmlRpcMemberOrderComparison(t *testing.T) {
+	member := func(key, value string) string {
+		return `<member xmlns=""><name>` + key + `</name><value>` + value + `</value></member>`
+	}
+	a := member("a", "<string>42.0</string>")
+	b := member("b", "<double>2.0</double>")
+	aNumber := member("a", "<double>4<!--c-->2.0</double>")
+	bNumber := member("b", "<double>5<!--d-->2.0</double>")
+	array := "<array><data><value><double>1</double></value><value><double>2</double></value></data></array>"
+	reversedArray := "<array><data><value><double>2</double></value><value><double>1</double></value></data></array>"
+	attributeA := strings.Replace(a, "<member ", `<member label="a >b" `, 1)
+	comment := "<!--<c></c>-->"
+	for _, path := range []struct{ name, prefix, suffix, middle string }{
+		{"Something.value/value", "<something xmlns=\"https://dummy.com\"><value><struct xmlns=\"\">", "</struct></value></something>", ""},
+		{"Something.values/array", "<something xmlns=\"https://dummy.com\"><values><data xmlns=\"\"><value><struct>", "</struct></value></data></values></something>", ""},
+		{"Something.mapping/object", "<something xmlns=\"https://dummy.com\"><mapping>", "</mapping></something>", ""},
+		{"Something.mapping_with_constrained_key/object", "<something xmlns=\"https://dummy.com\"><mappingWithConstrainedKey>", "</mappingWithConstrainedKey></something>", ""},
+		{"Something.optional_value/value", "<something xmlns=\"https://dummy.com\"><optionalValue><struct xmlns=\"\">", "</struct></optionalValue></something>", ""},
+		{"Something.optional_values/array", "<something xmlns=\"https://dummy.com\"><optionalValues><data xmlns=\"\"><value><struct>", "</struct></value></data></optionalValues></something>", ""},
+		{"Something.optional_mapping/object", "<something xmlns=\"https://dummy.com\"><optionalMapping>", "</optionalMapping></something>", ""},
+	} {
+		t.Run(path.name, func(t *testing.T) {
+			for _, c := range []struct {
+				name, left, right string
+				equal             bool
+			}{
+				{"reordered", b + a, a + b, true},
+				{"numeric_spelling", b + a, a + member("b", "<double>2</double>"), true},
+				{"changed_value", b + a, a + member("b", "<double>3</double>"), false},
+				{"changed_key", b + a, a + member("c", "<double>2</double>"), false},
+				{"changed_type", b + a, a + member("b", "<string>2.0</string>"), false},
+				{"changed_string", b + a, member("a", "<string>42</string>") + b, false},
+				{"missing_member", b + a, a, false},
+				{"empty_key", b + member("", "<nil/>"), member("", "<nil/>") + b, true},
+				{"escaped_key", b + member("a&amp;b", "<nil/>"), member("a&#38;b", "<nil/>") + b, true},
+				{"cdata_key", b + member("<![CDATA[a]]>", "<nil/>"), member("a", "<nil/>") + b, true},
+				{
+					"nested_object",
+					member("nested", "<struct>"+b+a+"</struct>"),
+					member("nested", "<struct>"+a+b+"</struct>"),
+					true,
+				},
+				{
+					"object_in_array",
+					member("array", "<array><data><value><struct>"+b+a+"</struct></value></data></array>"),
+					member("array", "<array><data><value><struct>"+a+b+"</struct></value></data></array>"),
+					true,
+				},
+				{"array_order", member("array", array), member("array", reversedArray), false},
+				{"numeric_markup", bNumber + aNumber, strings.ReplaceAll(aNumber+bNumber, "2.0", "2"), true},
+				{
+					"changed_numeric_markup", bNumber + aNumber,
+					aNumber + strings.ReplaceAll(bNumber, "<!--d-->", "<!--e-->"), false,
+				},
+				{
+					"moved_numeric_markup", bNumber + aNumber,
+					aNumber + strings.ReplaceAll(bNumber, "5<!--d-->2.0", "52.0<!--d-->"), false,
+				},
+				{"member_attribute", b + a, strings.Replace(a, "<member ", `<member extra="x" `, 1) + b, false},
+				{"attribute_reorder_control", attributeA + b, b + attributeA, true},
+				{
+					"attribute_changed", attributeA + b,
+					b + strings.Replace(attributeA, `label="a >b"`, `label="a>b"`, 1), false,
+				},
+				{"comment_reorder_control", a + comment + b, b + comment + a, true},
+				{"comment_content_changed", a + comment + b, b + "<!--<c/>-->" + a, false},
+				{"inter_member_comment", b + "<!--gap-->" + a, a + "<!--gap-->" + b, true},
+				{"changed_comment", b + "<!--gap-->" + a, a + "<!--changed-->" + b, false},
+				{
+					"wrong_namespace",
+					strings.ReplaceAll(b+a, `xmlns=""`, `xmlns="urn:other"`),
+					strings.ReplaceAll(a+b, `xmlns=""`, `xmlns="urn:other"`), false,
+				},
+			} {
+				t.Run(c.name, func(t *testing.T) {
+					left, err := canonicalizeXmlForComparison(path.prefix + c.left + path.suffix)
+					if err != nil {
+						t.Fatal(err)
+					}
+					right, err := canonicalizeXmlForComparison(path.prefix + c.right + path.suffix)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if (left == right) != c.equal {
+						t.Fatalf("Unexpected comparison of %q and %q", left, right)
+					}
+				})
+			}
+			for _, invalid := range []string{
+				a + a,
+				a + member("&#97;", "<nil/>"),
+				`<member xmlns=""><value><nil/></value></member>`,
+				`<member xmlns=""><name>a</name><name>b</name><value><nil/></value></member>`,
+			} {
+				if _, err := canonicalizeXmlForComparison(path.prefix + invalid + path.suffix); err == nil {
+					t.Fatalf("Accepted invalid object members %q", invalid)
+				}
+			}
+			if path.middle != "" {
+				// Reorder members inside each list item while preserving the item positions.
+				second := member("a", "<string>different</string>") + b
+				left, err := canonicalizeXmlForComparison(
+					path.prefix + b + a + path.middle + second + path.suffix)
+				if err != nil {
+					t.Fatal(err)
+				}
+				right, err := canonicalizeXmlForComparison(
+					path.prefix + a + b + path.middle + second + path.suffix)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if left != right {
+					t.Fatal("Reordered members inside a model list item compared differently")
+				}
+				swapped, err := canonicalizeXmlForComparison(
+					path.prefix + second + path.middle + a + b + path.suffix)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if left == swapped {
+					t.Fatal("Swapped distinct model list items compared equally")
+				}
+			}
+		})
+	}
+	// A struct-shaped fragment outside a model-defined JSON path keeps its order.
+	left, err := canonicalizeXmlForComparison("<struct>" + b + a + "</struct>")
+	if err != nil {
+		t.Fatal(err)
+	}
+	right, err := canonicalizeXmlForComparison("<struct>" + a + b + "</struct>")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if left == right {
+		t.Fatal("Reordered elements outside a model-defined JSON path")
 	}
 }
 
