@@ -6,11 +6,12 @@
 
 import html
 import io
-from typing import List, MutableMapping, Optional, Tuple
+from typing import List, MutableMapping, Optional, Sequence, Tuple
 
 from icontract import ensure
 
 from aas_core_codegen import intermediate, naming
+from aas_core_codegen.intermediate import uses as intermediate_uses
 from aas_core_codegen.common import (
     Stripped,
     assert_never,
@@ -346,6 +347,367 @@ func TestXmlNumericComparison(t *testing.T) {{
     )
 
 
+def _generate_xml_rpc_member_order_test(
+    symbol_table: intermediate.SymbolTable,
+) -> Optional[Stripped]:
+    """Exercise unordered objects at the model's XML-RPC property paths."""
+    paths: List[Tuple[str, str, str, str]] = []
+    namespace = html.escape(symbol_table.meta_model.xml_namespace, quote=True)
+
+    def sample_item(
+        type_anno: intermediate.TypeAnnotationExceptOptional, local: str
+    ) -> str:
+        """Supply tuple siblings so positional dispatch reaches the intended slot."""
+        primitive = intermediate.try_primitive_type(type_anno)
+        if primitive is not None:
+            text = {
+                intermediate.PrimitiveType.BOOL: "true",
+                intermediate.PrimitiveType.INT: "0",
+                intermediate.PrimitiveType.FLOAT: "0",
+                intermediate.PrimitiveType.STR: "text",
+                intermediate.PrimitiveType.BYTEARRAY: "",
+            }[primitive]
+            return f"<{local}>{text}</{local}>"
+        if isinstance(type_anno, intermediate.OurTypeAnnotation):
+            our_type = type_anno.our_type
+            if isinstance(our_type, intermediate.Enumeration):
+                # Siblings provide positional context without being deserialized.
+                # An enum literal can contain characters forbidden in XML.
+                return f"<{local}>text</{local}>"
+            if isinstance(our_type, intermediate.ConcreteClass):
+                local = naming.xml_class_name(our_type.name)
+            elif isinstance(our_type, intermediate.AbstractClass):
+                if our_type.concrete_descendants:
+                    local = naming.xml_class_name(our_type.concrete_descendants[0].name)
+            elif isinstance(our_type, intermediate.NamedUnion):
+                if our_type.implementers:
+                    local = naming.xml_class_name(our_type.implementers[0].name)
+            return f"<{local}/>"
+        if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+            return f'<{local}><nil xmlns=""/></{local}>'
+        if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+            return f'<{local}><data xmlns=""/></{local}>'
+        if isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            contents = "".join(
+                sample_item(item, f"v{index}")
+                for index, item in enumerate(type_anno.items, 1)
+            )
+            return f"<{local}>{contents}</{local}>"
+        return f"<{local}/>"
+
+    def visit(
+        type_anno: intermediate.TypeAnnotationExceptOptional,
+        wrappers: Sequence[Tuple[str, str, bool]],
+        path: str,
+    ) -> None:
+        """Follow model collections and retain boundaries of ordered list items."""
+        if isinstance(
+            type_anno, (intermediate.ListTypeAnnotation, intermediate.SetTypeAnnotation)
+        ):
+            ordered = isinstance(type_anno, intermediate.ListTypeAnnotation)
+            visit(
+                type_anno.items,
+                [*wrappers, ("<v>", "</v>", ordered)],
+                path + ("/list" if ordered else "/set"),
+            )
+            return
+        if isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            siblings = [
+                sample_item(item, f"v{index}")
+                for index, item in enumerate(type_anno.items, 1)
+            ]
+            for index, item in enumerate(type_anno.items):
+                local = f"v{index + 1}"
+                opening = "".join(siblings[:index]) + f"<{local}>"
+                closing = f"</{local}>" + "".join(siblings[index + 1 :])
+                visit(
+                    item,
+                    [*wrappers, (opening, closing, False)],
+                    path + f"/tuple[{index + 1}]",
+                )
+            return
+        if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+            kind, opening, closing = "value", '<struct xmlns="">', "</struct>"
+        elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+            kind = "array"
+            opening = '<data xmlns=""><value><struct>'
+            closing = "</struct></value></data>"
+        elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+            kind, opening, closing = "object", "", ""
+        else:
+            return
+        frames = [*wrappers, (opening, closing, False)]
+        prefix = "".join(frame[0] for frame in frames)
+        suffix = "".join(frame[1] for frame in reversed(frames))
+        middle = ""
+        for index, frame in enumerate(frames):
+            if frame[2]:
+                item_frames = frames[index:]
+                middle = "".join(item[1] for item in reversed(item_frames)) + "".join(
+                    item[0] for item in item_frames
+                )
+        paths.append((path + "/" + kind, prefix, suffix, middle))
+
+    for cls in symbol_table.our_types:
+        if not isinstance(cls, intermediate.ConcreteClass):
+            continue
+        for prop in cls.properties:
+            type_anno = intermediate.beneath_optional(prop.type_annotation)
+            local = naming.xml_class_name(cls.name)
+            visit(
+                type_anno,
+                [
+                    (
+                        f'<{local} xmlns="{namespace}"><{prop.xml_name}>',
+                        f"</{prop.xml_name}></{local}>",
+                        False,
+                    )
+                ],
+                f"{cls.name}.{prop.name}",
+            )
+    if not paths:
+        return None
+    path_literals = ",\n".join(
+        "{" + ", ".join(golang_common.string_literal(value) for value in path) + "}"
+        for path in paths
+    )
+    return Stripped(
+        f"""\
+func TestXmlRpcMemberOrderComparison(t *testing.T) {{
+{I}member := func(key, value string) string {{
+{II}return `<member xmlns=""><name>` + key + `</name><value>` + value + `</value></member>`
+{I}}}
+{I}a := member("a", "<string>42.0</string>")
+{I}b := member("b", "<double>2.0</double>")
+{I}aNumber := member("a", "<double>4<!--c-->2.0</double>")
+{I}bNumber := member("b", "<double>5<!--d-->2.0</double>")
+{I}array := "<array><data><value><double>1</double></value><value><double>2</double></value></data></array>"
+{I}reversedArray := "<array><data><value><double>2</double></value><value><double>1</double></value></data></array>"
+{I}attributeA := strings.Replace(a, "<member ", `<member label="a >b" `, 1)
+{I}comment := "<!--<c></c>-->"
+{I}for _, path := range []struct{{ name, prefix, suffix, middle string }}{{
+{II}{indent_but_first_line(path_literals, II)},
+{I}}} {{
+{II}t.Run(path.name, func(t *testing.T) {{
+{III}for _, c := range []struct {{
+{IIII}name, left, right string
+{IIII}equal             bool
+{III}}}{{
+{IIII}{{"reordered", b + a, a + b, true}},
+{IIII}{{"numeric_spelling", b + a, a + member("b", "<double>2</double>"), true}},
+{IIII}{{"changed_value", b + a, a + member("b", "<double>3</double>"), false}},
+{IIII}{{"changed_key", b + a, a + member("c", "<double>2</double>"), false}},
+{IIII}{{"changed_type", b + a, a + member("b", "<string>2.0</string>"), false}},
+{IIII}{{"changed_string", b + a, member("a", "<string>42</string>") + b, false}},
+{IIII}{{"missing_member", b + a, a, false}},
+{IIII}{{"empty_key", b + member("", "<nil/>"), member("", "<nil/>") + b, true}},
+{IIII}{{"escaped_key", b + member("a&amp;b", "<nil/>"), member("a&#38;b", "<nil/>") + b, true}},
+{IIII}{{"cdata_key", b + member("<![CDATA[a]]>", "<nil/>"), member("a", "<nil/>") + b, true}},
+{IIII}{{
+{IIIII}"nested_object",
+{IIIII}member("nested", "<struct>"+b+a+"</struct>"),
+{IIIII}member("nested", "<struct>"+a+b+"</struct>"),
+{IIIII}true,
+{IIII}}},
+{IIII}{{
+{IIIII}"object_in_array",
+{IIIII}member("array", "<array><data><value><struct>"+b+a+"</struct></value></data></array>"),
+{IIIII}member("array", "<array><data><value><struct>"+a+b+"</struct></value></data></array>"),
+{IIIII}true,
+{IIII}}},
+{IIII}{{"array_order", member("array", array), member("array", reversedArray), false}},
+{IIII}{{"numeric_markup", bNumber + aNumber, strings.ReplaceAll(aNumber+bNumber, "2.0", "2"), true}},
+{IIII}{{
+{IIIII}"changed_numeric_markup", bNumber + aNumber,
+{IIIII}aNumber + strings.ReplaceAll(bNumber, "<!--d-->", "<!--e-->"), false,
+{IIII}}},
+{IIII}{{
+{IIIII}"moved_numeric_markup", bNumber + aNumber,
+{IIIII}aNumber + strings.ReplaceAll(bNumber, "5<!--d-->2.0", "52.0<!--d-->"), false,
+{IIII}}},
+{IIII}{{"member_attribute", b + a, strings.Replace(a, "<member ", `<member extra="x" `, 1) + b, false}},
+{IIII}{{"attribute_reorder_control", attributeA + b, b + attributeA, true}},
+{IIII}{{
+{IIIII}"attribute_changed", attributeA + b,
+{IIIII}b + strings.Replace(attributeA, `label="a >b"`, `label="a>b"`, 1), false,
+{IIII}}},
+{IIII}{{"comment_reorder_control", a + comment + b, b + comment + a, true}},
+{IIII}{{"comment_content_changed", a + comment + b, b + "<!--<c/>-->" + a, false}},
+{IIII}{{"inter_member_comment", b + "<!--gap-->" + a, a + "<!--gap-->" + b, true}},
+{IIII}{{"changed_comment", b + "<!--gap-->" + a, a + "<!--changed-->" + b, false}},
+{IIII}{{
+{IIIII}"wrong_namespace",
+{IIIII}strings.ReplaceAll(b+a, `xmlns=""`, `xmlns="urn:other"`),
+{IIIII}strings.ReplaceAll(a+b, `xmlns=""`, `xmlns="urn:other"`), false,
+{IIII}}},
+{III}}} {{
+{IIII}t.Run(c.name, func(t *testing.T) {{
+{IIIII}left, err := canonicalizeXmlForComparison(path.prefix + c.left + path.suffix)
+{IIIII}if err != nil {{
+{IIIIII}t.Fatal(err)
+{IIIII}}}
+{IIIII}right, err := canonicalizeXmlForComparison(path.prefix + c.right + path.suffix)
+{IIIII}if err != nil {{
+{IIIIII}t.Fatal(err)
+{IIIII}}}
+{IIIII}if (left == right) != c.equal {{
+{IIIIII}t.Fatalf("Unexpected comparison of %q and %q", left, right)
+{IIIII}}}
+{IIII}}})
+{III}}}
+{III}for _, invalid := range []string{{
+{IIII}a + a,
+{IIII}a + member("&#97;", "<nil/>"),
+{IIII}`<member xmlns=""><value><nil/></value></member>`,
+{IIII}`<member xmlns=""><name>a</name><name>b</name><value><nil/></value></member>`,
+{III}}} {{
+{IIII}if _, err := canonicalizeXmlForComparison(path.prefix + invalid + path.suffix); err == nil {{
+{IIIII}t.Fatalf("Accepted invalid object members %q", invalid)
+{IIII}}}
+{III}}}
+{III}if path.middle != "" {{
+{IIII}// Reorder members inside each list item while preserving the item positions.
+{IIII}second := member("a", "<string>different</string>") + b
+{IIII}left, err := canonicalizeXmlForComparison(
+{IIIII}path.prefix + b + a + path.middle + second + path.suffix)
+{IIII}if err != nil {{
+{IIIII}t.Fatal(err)
+{IIII}}}
+{IIII}right, err := canonicalizeXmlForComparison(
+{IIIII}path.prefix + a + b + path.middle + second + path.suffix)
+{IIII}if err != nil {{
+{IIIII}t.Fatal(err)
+{IIII}}}
+{IIII}if left != right {{
+{IIIII}t.Fatal("Reordered members inside a model list item compared differently")
+{IIII}}}
+{IIII}swapped, err := canonicalizeXmlForComparison(
+{IIIII}path.prefix + second + path.middle + a + b + path.suffix)
+{IIII}if err != nil {{
+{IIIII}t.Fatal(err)
+{IIII}}}
+{IIII}if left == swapped {{
+{IIIII}t.Fatal("Swapped distinct model list items compared equally")
+{IIII}}}
+{III}}}
+{II}}})
+{I}}}
+{I}// A struct-shaped fragment outside a model-defined JSON path keeps its order.
+{I}left, err := canonicalizeXmlForComparison("<struct>" + b + a + "</struct>")
+{I}if err != nil {{
+{II}t.Fatal(err)
+{I}}}
+{I}right, err := canonicalizeXmlForComparison("<struct>" + a + b + "</struct>")
+{I}if err != nil {{
+{II}t.Fatal(err)
+{I}}}
+{I}if left == right {{
+{II}t.Fatal("Reordered elements outside a model-defined JSON path")
+{I}}}
+}}"""
+    )
+
+
+def _generate_xml_rpc_member_order() -> Stripped:
+    """Order only model-identified XML-RPC members, retaining their original XML."""
+    return Stripped(
+        f"""\
+// Order XML-RPC object members by decoded key, preserving the XML of each member.
+// Source ranges preserve tags, namespaces and markup without re-serializing them.
+func orderXmlRpcMembersForComparison(text string) (string, error) {{
+{I}// Member element names contain this literal text, including when prefixed.
+{I}if !strings.Contains(text, "member") {{
+{II}return text, nil
+{I}}}
+{I}type element struct {{
+{II}start, end int64
+{II}context    string
+{II}key        string
+{II}hasKey     bool
+{II}children   []*element
+{I}}}
+{I}root := &element{{end: int64(len(text)), context: "root"}}
+{I}stack := []*element{{root}}
+{I}decoder := xml.NewDecoder(strings.NewReader(text))
+{I}for {{
+{II}start := decoder.InputOffset()
+{II}token, err := decoder.Token()
+{II}if err == io.EOF {{
+{III}break
+{II}}}
+{II}if err != nil {{
+{III}return "", err
+{II}}}
+{II}switch token := token.(type) {{
+{II}case xml.StartElement:
+{III}parent := stack[len(stack)-1]
+{III}child := &element{{
+{IIII}start:   start,
+{IIII}context: xmlTextContext(parent.context, len(parent.children)+1, token.Name),
+{III}}}
+{III}parent.children = append(parent.children, child)
+{III}if parent.context == "json:member" && token.Name == (xml.Name{{Local: "name"}}) {{
+{IIII}if parent.hasKey {{
+{IIIII}return "", fmt.Errorf("duplicate XML-RPC member name element")
+{IIII}}}
+{IIII}if err := decoder.DecodeElement(&parent.key, &token); err != nil {{
+{IIIII}return "", err
+{IIII}}}
+{IIII}parent.hasKey = true
+{IIII}child.end = decoder.InputOffset()
+{IIII}continue
+{III}}}
+{III}stack = append(stack, child)
+{II}case xml.EndElement:
+{III}stack[len(stack)-1].end = decoder.InputOffset()
+{III}stack = stack[:len(stack)-1]
+{II}}}
+{I}}}
+
+{I}var result strings.Builder
+{I}var write func(*element) error
+{I}write = func(parent *element) error {{
+{II}var members []*element
+{II}for _, child := range parent.children {{
+{III}if child.context == "json:member" {{
+{IIII}if !child.hasKey {{
+{IIIII}return fmt.Errorf("XML-RPC member has no name")
+{IIII}}}
+{IIII}members = append(members, child)
+{III}}}
+{II}}}
+{II}sort.Slice(members, func(i, j int) bool {{ return members[i].key < members[j].key }})
+{II}for i := 1; i < len(members); i++ {{
+{III}if members[i-1].key == members[i].key {{
+{IIII}return fmt.Errorf("duplicate XML-RPC member key %q", members[i].key)
+{III}}}
+{II}}}
+{II}cursor := parent.start
+{II}memberIndex := 0
+{II}for _, child := range parent.children {{
+{III}// Keep gaps between children, including comments, in their original positions.
+{III}result.WriteString(text[cursor:child.start])
+{III}selected := child
+{III}if child.context == "json:member" {{
+{IIII}selected = members[memberIndex]
+{IIII}memberIndex++
+{III}}}
+{III}if err := write(selected); err != nil {{
+{IIII}return err
+{III}}}
+{III}cursor = child.end
+{II}}}
+{II}result.WriteString(text[cursor:parent.end])
+{II}return nil
+{I}}}
+{I}if err := write(root); err != nil {{
+{II}return "", err
+{I}}}
+{I}return result.String(), nil
+}}"""
+    )
+
+
 def _generate_text_context(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Track element types by their position in the model's XML structure."""
     namespace = symbol_table.meta_model.xml_namespace
@@ -513,6 +875,18 @@ func xmlTextContext(parent string, position int, name xml.Name) string {{
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     """Generate code for common XML de/serialization shared across the tests."""
+    uses_json_types = intermediate_uses.json_types(symbol_table)
+    sort_import = f'{I}"sort"\n' if uses_json_types else ""
+    member_order_normalization = (
+        f"""\
+{I}text, err := orderXmlRpcMembersForComparison(text)
+{I}if err != nil {{
+{II}return xmlComparison{{}}, err
+{I}}}
+"""
+        if uses_json_types
+        else ""
+    )
     blocks: List[Stripped] = [
         Stripped(
             """\
@@ -530,6 +904,7 @@ import (
 {I}"os"
 {I}"path/filepath"
 {I}"regexp"
+{sort_import}\
 {I}"strconv"
 {I}"strings"
 {I}"testing"
@@ -808,6 +1183,7 @@ const xmlComparisonMarker = "{golang_common.repo_url_to_environment_variable(rep
 
 func canonicalizeXmlForComparison(text string) (xmlComparison, error) {{
 {I}text = strings.TrimSpace(text)
+{member_order_normalization}\
 {I}// Escape text before applying the legacy markup cleanup, so a literal
 {I}// '>' in a value can not make the cleanup remove a preceding space.
 {I}comparison, err := normalizeXmlTextEscaping(text)
@@ -1190,6 +1566,13 @@ func assertIsDeserializationErrorAndEqualsExpectedOrRecord(
     numeric_test = _generate_numeric_comparison_test(symbol_table)
     if numeric_test is not None:
         blocks.insert(-1, numeric_test)
+
+    if uses_json_types:
+        blocks.insert(-1, _generate_xml_rpc_member_order())
+
+    member_order_test = _generate_xml_rpc_member_order_test(symbol_table)
+    if member_order_test is not None:
+        blocks.insert(-1, member_order_test)
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):
