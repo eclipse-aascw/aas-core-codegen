@@ -426,7 +426,7 @@ func TestNormalizeXmlTextEscaping(t *testing.T) {
 	}
 }
 
-const xmlComparisonMarker = "GITHUB_COM_DUMMY_WORKS_DUMMY_XML_COMPARISON_PI"
+const xmlComparisonMarker = "GITHUB_COM_DUMMY_WORKS_DUMMY_XML_COMPARISON_LITERAL"
 
 func canonicalizeXmlForComparison(text string) (xmlComparison, error) {
 	text = strings.TrimSpace(text)
@@ -437,14 +437,26 @@ func canonicalizeXmlForComparison(text string) (xmlComparison, error) {
 		return xmlComparison{}, err
 	}
 	text = comparison.text
-	// Protect processing instructions while the legacy regexes clean up markup.
-	// The marker target is absent even after carriage-return removal.
+	// Protect literal content while the legacy regexes clean up markup.
+	// Check after simulating carriage-return removal so cleanup cannot turn
+	// existing XML text into a placeholder that gets replaced on restoration.
 	markerPrefix := xmlComparisonMarker
 	withoutCR := strings.ReplaceAll(text, "\r", "")
 	for strings.Contains(withoutCR, markerPrefix) {
 		markerPrefix += "X"
 	}
-	var instructions []string
+	// Collect placeholder/original pairs for a single-pass restoration.
+	var replacements []string
+	protectLiteral := func(original string, asMarkup bool) string {
+		marker := fmt.Sprintf("%s_%d_", markerPrefix, len(replacements)/2)
+		if asMarkup {
+			marker = "<?" + marker + "?>"
+		}
+		// XML 1.0 section 2.11 normalizes literal line endings before parsing.
+		original = strings.ReplaceAll(strings.ReplaceAll(original, "\r\n", "\n"), "\r", "\n")
+		replacements = append(replacements, marker, original)
+		return marker
+	}
 	var protected bytes.Buffer
 	decoder := xml.NewDecoder(strings.NewReader(text))
 	for {
@@ -457,12 +469,33 @@ func canonicalizeXmlForComparison(text string) (xmlComparison, error) {
 			return xmlComparison{}, err
 		}
 		original := text[start:decoder.InputOffset()]
-		if _, ok := token.(xml.ProcInst); ok {
-			fmt.Fprintf(&protected, "<?%s%d?>", markerPrefix, len(instructions))
-			// XML 1.0 section 2.11 normalizes literal line endings before parsing.
-			original = strings.ReplaceAll(strings.ReplaceAll(original, "\r\n", "\n"), "\r", "\n")
-			instructions = append(instructions, original)
-		} else {
+		switch token.(type) {
+		case xml.Comment, xml.ProcInst:
+			protected.WriteString(protectLiteral(original, true))
+		case xml.StartElement:
+			// Quoted attribute values can contain '>' and the other quote character.
+			// Keep the original quotes and protect only the contents between them.
+			cursor := 0
+			for i := 0; i < len(original); i++ {
+				quote := original[i]
+				if quote != '\'' && quote != '"' {
+					continue
+				}
+				end := i + 1
+				for end < len(original) && original[end] != quote {
+					end++
+				}
+				if end == len(original) {
+					return xmlComparison{}, fmt.Errorf("unterminated XML attribute value")
+				}
+				protected.WriteString(original[cursor : i+1])
+				protected.WriteString(protectLiteral(original[i+1:end], false))
+				protected.WriteByte(quote)
+				cursor = end + 1
+				i = end
+			}
+			protected.WriteString(original[cursor:])
+		default:
 			protected.WriteString(original)
 		}
 	}
@@ -471,8 +504,8 @@ func canonicalizeXmlForComparison(text string) (xmlComparison, error) {
 	text = removeWhitespaceBetweenTags(text)
 	text = forceSelfClosingTags(text)
 	text = removeWhitespaceWithinTags(text)
-	for i, original := range instructions {
-		text = strings.ReplaceAll(text, fmt.Sprintf("<?%s%d?>", markerPrefix, i), original)
+	if len(replacements) > 0 {
+		text = strings.NewReplacer(replacements...).Replace(text)
 	}
 	comparison.text = text
 	return comparison, nil
@@ -493,6 +526,31 @@ func TestXmlComparisonPreservesText(t *testing.T) {
 		{"tab_vs_space", `<v>&#x9;</v>`, `<v>&#32;</v>`, false},
 		{"lost_tab", `<v>&#x9;</v>`, `<v></v>`, false},
 		{"space_vs_literal_tab", `<v>&#32;</v>`, "<v>\t</v>", false},
+		{"attribute_space", `<v label="a >b"/>`, `<v label="a>b"/>`, false},
+		{"attribute_single_quote", `<v label='a >b'/>`, `<v label='a>b'/>`, false},
+		{"attribute_mixed_quotes", `<v label='a " >b'/>`, `<v label='a ">b'/>`, false},
+		{"attribute_empty_element", `<v label="a >b"></v>`, `<v label="a >b"/>`, true},
+		{"attribute_tag_spacing", `<v label="a >b" />`, `<v label="a >b"/>`, true},
+		{"attribute_crlf", "<v label=\"a\r\nb\"/>", "<v label=\"a\nb\"/>", true},
+		{"attribute_cr", "<v label=\"a\rb\"/>", "<v label=\"ab\"/>", false},
+		{
+			"attribute_many_literals",
+			`<v a0="0" a1="1" a2="2" a3="3" a4="4" a5="5"` +
+				` a6="6" a7="7" a8="8" a9="9" a10="10"/>`,
+			`<v a0="0" a1="1" a2="2" a3="3" a4="4" a5="5"` +
+				` a6="6" a7="7" a8="8" a9="9" a10="changed"/>`,
+			false,
+		},
+		{
+			"namespace_changed",
+			`<p:v xmlns:p="urn:a" label="a >b"/>`,
+			`<p:v xmlns:p="urn:b" label="a >b"/>`, false,
+		},
+		{"comment_markup", `<v><!--<c></c>--></v>`, `<v><!--<c/>--></v>`, false},
+		{"comment_space", `<v><!--a >b--></v>`, `<v><!--a>b--></v>`, false},
+		{"comment_crlf", "<v><!--a\r\nb--></v>", "<v><!--a\nb--></v>", true},
+		{"comment_cr_as_lf", "<v><!--a\rb--></v>", "<v><!--a\nb--></v>", true},
+		{"comment_cr", "<v><!--a\rb--></v>", `<v><!--ab--></v>`, false},
 		{"instruction_data", `<v><?p x > y?></v>`, `<v><?p x> y?></v>`, false},
 		{"instruction_markup", `<v><?p <a></a>?></v>`, `<v><?p <a/>?></v>`, false},
 		{"instruction_cr", "<v><?p x\ry?></v>", `<v><?p xy?></v>`, false},
@@ -501,8 +559,14 @@ func TestXmlComparisonPreservesText(t *testing.T) {
 		{"instruction_indentation", "<v>\n<?p x > y?>\n</v>", `<v><?p x > y?></v>`, true},
 		{
 			"instruction_marker",
-			"<v><!--<?" + xmlComparisonMarker + "0?>--><?p x?></v>",
+			"<v><!--<?" + xmlComparisonMarker + "_0_?>--><?p x?></v>",
 			"<v><!--<?p x?>--><?p x?></v>",
+			false,
+		},
+		{
+			"attribute_marker",
+			"<v a=\"" + xmlComparisonMarker + "_0_\" b=\"other\"/>",
+			"<v a=\"other\" b=\"other\"/>",
 			false,
 		},
 	} {
