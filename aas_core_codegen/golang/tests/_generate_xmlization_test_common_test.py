@@ -853,7 +853,7 @@ func TestNormalizeXmlTextEscaping(t *testing.T) {{
         ),
         Stripped(
             f"""\
-const xmlComparisonMarker = "{golang_common.repo_url_to_environment_variable(repo_url)}_XML_COMPARISON_PI"
+const xmlComparisonMarker = "{golang_common.repo_url_to_environment_variable(repo_url)}_XML_COMPARISON_LITERAL"
 
 func canonicalizeXmlForComparison(text string) (xmlComparison, error) {{
 {I}text = strings.TrimSpace(text)
@@ -864,14 +864,26 @@ func canonicalizeXmlForComparison(text string) (xmlComparison, error) {{
 {II}return xmlComparison{{}}, err
 {I}}}
 {I}text = comparison.text
-{I}// Protect processing instructions while the legacy regexes clean up markup.
-{I}// The marker target is absent even after carriage-return removal.
+{I}// Protect literal content while the legacy regexes clean up markup.
+{I}// Check after simulating carriage-return removal so cleanup cannot turn
+{I}// existing XML text into a placeholder that gets replaced on restoration.
 {I}markerPrefix := xmlComparisonMarker
 {I}withoutCR := strings.ReplaceAll(text, "\\r", "")
 {I}for strings.Contains(withoutCR, markerPrefix) {{
 {II}markerPrefix += "X"
 {I}}}
-{I}var instructions []string
+{I}// Collect placeholder/original pairs for a single-pass restoration.
+{I}var replacements []string
+{I}protectLiteral := func(original string, asMarkup bool) string {{
+{II}marker := fmt.Sprintf("%s_%d_", markerPrefix, len(replacements)/2)
+{II}if asMarkup {{
+{III}marker = "<?" + marker + "?>"
+{II}}}
+{II}// XML 1.0 section 2.11 normalizes literal line endings before parsing.
+{II}original = strings.ReplaceAll(strings.ReplaceAll(original, "\\r\\n", "\\n"), "\\r", "\\n")
+{II}replacements = append(replacements, marker, original)
+{II}return marker
+{I}}}
 {I}var protected bytes.Buffer
 {I}decoder := xml.NewDecoder(strings.NewReader(text))
 {I}for {{
@@ -884,12 +896,33 @@ func canonicalizeXmlForComparison(text string) (xmlComparison, error) {{
 {III}return xmlComparison{{}}, err
 {II}}}
 {II}original := text[start:decoder.InputOffset()]
-{II}if _, ok := token.(xml.ProcInst); ok {{
-{III}fmt.Fprintf(&protected, "<?%s%d?>", markerPrefix, len(instructions))
-{III}// XML 1.0 section 2.11 normalizes literal line endings before parsing.
-{III}original = strings.ReplaceAll(strings.ReplaceAll(original, "\\r\\n", "\\n"), "\\r", "\\n")
-{III}instructions = append(instructions, original)
-{II}}} else {{
+{II}switch token.(type) {{
+{II}case xml.Comment, xml.ProcInst:
+{III}protected.WriteString(protectLiteral(original, true))
+{II}case xml.StartElement:
+{III}// Quoted attribute values can contain '>' and the other quote character.
+{III}// Keep the original quotes and protect only the contents between them.
+{III}cursor := 0
+{III}for i := 0; i < len(original); i++ {{
+{IIII}quote := original[i]
+{IIII}if quote != '\\'' && quote != '"' {{
+{IIIII}continue
+{IIII}}}
+{IIII}end := i + 1
+{IIII}for end < len(original) && original[end] != quote {{
+{IIIII}end++
+{IIII}}}
+{IIII}if end == len(original) {{
+{IIIII}return xmlComparison{{}}, fmt.Errorf("unterminated XML attribute value")
+{IIII}}}
+{IIII}protected.WriteString(original[cursor : i+1])
+{IIII}protected.WriteString(protectLiteral(original[i+1:end], false))
+{IIII}protected.WriteByte(quote)
+{IIII}cursor = end + 1
+{IIII}i = end
+{III}}}
+{III}protected.WriteString(original[cursor:])
+{II}default:
 {III}protected.WriteString(original)
 {II}}}
 {I}}}
@@ -898,8 +931,8 @@ func canonicalizeXmlForComparison(text string) (xmlComparison, error) {{
 {I}text = removeWhitespaceBetweenTags(text)
 {I}text = forceSelfClosingTags(text)
 {I}text = removeWhitespaceWithinTags(text)
-{I}for i, original := range instructions {{
-{II}text = strings.ReplaceAll(text, fmt.Sprintf("<?%s%d?>", markerPrefix, i), original)
+{I}if len(replacements) > 0 {{
+{II}text = strings.NewReplacer(replacements...).Replace(text)
 {I}}}
 {I}comparison.text = text
 {I}return comparison, nil
@@ -922,6 +955,31 @@ func TestXmlComparisonPreservesText(t *testing.T) {{
 {II}{{"tab_vs_space", `<v>&#x9;</v>`, `<v>&#32;</v>`, false}},
 {II}{{"lost_tab", `<v>&#x9;</v>`, `<v></v>`, false}},
 {II}{{"space_vs_literal_tab", `<v>&#32;</v>`, "<v>\\t</v>", false}},
+{II}{{"attribute_space", `<v label="a >b"/>`, `<v label="a>b"/>`, false}},
+{II}{{"attribute_single_quote", `<v label='a >b'/>`, `<v label='a>b'/>`, false}},
+{II}{{"attribute_mixed_quotes", `<v label='a " >b'/>`, `<v label='a ">b'/>`, false}},
+{II}{{"attribute_empty_element", `<v label="a >b"></v>`, `<v label="a >b"/>`, true}},
+{II}{{"attribute_tag_spacing", `<v label="a >b" />`, `<v label="a >b"/>`, true}},
+{II}{{"attribute_crlf", "<v label=\\"a\\r\\nb\\"/>", "<v label=\\"a\\nb\\"/>", true}},
+{II}{{"attribute_cr", "<v label=\\"a\\rb\\"/>", "<v label=\\"ab\\"/>", false}},
+{II}{{
+{III}"attribute_many_literals",
+{III}`<v a0="0" a1="1" a2="2" a3="3" a4="4" a5="5"` +
+{IIII}` a6="6" a7="7" a8="8" a9="9" a10="10"/>`,
+{III}`<v a0="0" a1="1" a2="2" a3="3" a4="4" a5="5"` +
+{IIII}` a6="6" a7="7" a8="8" a9="9" a10="changed"/>`,
+{III}false,
+{II}}},
+{II}{{
+{III}"namespace_changed",
+{III}`<p:v xmlns:p="urn:a" label="a >b"/>`,
+{III}`<p:v xmlns:p="urn:b" label="a >b"/>`, false,
+{II}}},
+{II}{{"comment_markup", `<v><!--<c></c>--></v>`, `<v><!--<c/>--></v>`, false}},
+{II}{{"comment_space", `<v><!--a >b--></v>`, `<v><!--a>b--></v>`, false}},
+{II}{{"comment_crlf", "<v><!--a\\r\\nb--></v>", "<v><!--a\\nb--></v>", true}},
+{II}{{"comment_cr_as_lf", "<v><!--a\\rb--></v>", "<v><!--a\\nb--></v>", true}},
+{II}{{"comment_cr", "<v><!--a\\rb--></v>", `<v><!--ab--></v>`, false}},
 {II}{{"instruction_data", `<v><?p x > y?></v>`, `<v><?p x> y?></v>`, false}},
 {II}{{"instruction_markup", `<v><?p <a></a>?></v>`, `<v><?p <a/>?></v>`, false}},
 {II}{{"instruction_cr", "<v><?p x\\ry?></v>", `<v><?p xy?></v>`, false}},
@@ -930,8 +988,14 @@ func TestXmlComparisonPreservesText(t *testing.T) {{
 {II}{{"instruction_indentation", "<v>\\n<?p x > y?>\\n</v>", `<v><?p x > y?></v>`, true}},
 {II}{{
 {III}"instruction_marker",
-{III}"<v><!--<?" + xmlComparisonMarker + "0?>--><?p x?></v>",
+{III}"<v><!--<?" + xmlComparisonMarker + "_0_?>--><?p x?></v>",
 {III}"<v><!--<?p x?>--><?p x?></v>",
+{III}false,
+{II}}},
+{II}{{
+{III}"attribute_marker",
+{III}"<v a=\\"" + xmlComparisonMarker + "_0_\\" b=\\"other\\"/>",
+{III}"<v a=\\"other\\" b=\\"other\\"/>",
 {III}false,
 {II}}},
 {I}}} {{
