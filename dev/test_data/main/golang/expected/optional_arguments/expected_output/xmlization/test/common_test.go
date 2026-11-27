@@ -423,7 +423,7 @@ func canonicalizeXmlForComparison(text string) (xmlComparison, error) {
 		}
 		original := text[start:decoder.InputOffset()]
 		switch token.(type) {
-		case xml.Comment, xml.ProcInst:
+		case xml.Comment, xml.ProcInst, xml.Directive:
 			protected.WriteString(protectLiteral(original, true))
 		case xml.StartElement:
 			// Quoted attribute values can contain '>' and the other quote character.
@@ -465,6 +465,9 @@ func canonicalizeXmlForComparison(text string) (xmlComparison, error) {
 }
 
 func TestXmlComparisonPreservesText(t *testing.T) {
+	withDefaultAttribute := func(value string) string {
+		return `<!DOCTYPE v [<!ATTLIST v label CDATA "` + value + `">]><v/>`
+	}
 	for _, c := range []struct {
 		name     string
 		expected string
@@ -504,6 +507,11 @@ func TestXmlComparisonPreservesText(t *testing.T) {
 		{"comment_crlf", "<v><!--a\r\nb--></v>", "<v><!--a\nb--></v>", true},
 		{"comment_cr_as_lf", "<v><!--a\rb--></v>", "<v><!--a\nb--></v>", true},
 		{"comment_cr", "<v><!--a\rb--></v>", `<v><!--ab--></v>`, false},
+		{"doctype_cr_as_lf", withDefaultAttribute("a\rb"), withDefaultAttribute("a\nb"), true},
+		{"doctype_crlf", withDefaultAttribute("a\r\nb"), withDefaultAttribute("a\nb"), true},
+		{"doctype_cr", withDefaultAttribute("a\rb"), withDefaultAttribute("ab"), false},
+		{"doctype_attribute_space", withDefaultAttribute("a >b"), withDefaultAttribute("a>b"), false},
+		{"doctype_spacing", `<!DOCTYPE v  ><v/>`, `<!DOCTYPE v><v/>`, false},
 		{"instruction_data", `<v><?p x > y?></v>`, `<v><?p x> y?></v>`, false},
 		{"instruction_markup", `<v><?p <a></a>?></v>`, `<v><?p <a/>?></v>`, false},
 		{"instruction_cr", "<v><?p x\ry?></v>", `<v><?p xy?></v>`, false},

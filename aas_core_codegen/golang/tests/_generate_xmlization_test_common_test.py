@@ -897,7 +897,7 @@ func canonicalizeXmlForComparison(text string) (xmlComparison, error) {{
 {II}}}
 {II}original := text[start:decoder.InputOffset()]
 {II}switch token.(type) {{
-{II}case xml.Comment, xml.ProcInst:
+{II}case xml.Comment, xml.ProcInst, xml.Directive:
 {III}protected.WriteString(protectLiteral(original, true))
 {II}case xml.StartElement:
 {III}// Quoted attribute values can contain '>' and the other quote character.
@@ -941,6 +941,9 @@ func canonicalizeXmlForComparison(text string) (xmlComparison, error) {{
         Stripped(
             f"""\
 func TestXmlComparisonPreservesText(t *testing.T) {{
+{I}withDefaultAttribute := func(value string) string {{
+{II}return `<!DOCTYPE v [<!ATTLIST v label CDATA "` + value + `">]><v/>`
+{I}}}
 {I}for _, c := range []struct {{
 {II}name     string
 {II}expected string
@@ -980,6 +983,11 @@ func TestXmlComparisonPreservesText(t *testing.T) {{
 {II}{{"comment_crlf", "<v><!--a\\r\\nb--></v>", "<v><!--a\\nb--></v>", true}},
 {II}{{"comment_cr_as_lf", "<v><!--a\\rb--></v>", "<v><!--a\\nb--></v>", true}},
 {II}{{"comment_cr", "<v><!--a\\rb--></v>", `<v><!--ab--></v>`, false}},
+{II}{{"doctype_cr_as_lf", withDefaultAttribute("a\\rb"), withDefaultAttribute("a\\nb"), true}},
+{II}{{"doctype_crlf", withDefaultAttribute("a\\r\\nb"), withDefaultAttribute("a\\nb"), true}},
+{II}{{"doctype_cr", withDefaultAttribute("a\\rb"), withDefaultAttribute("ab"), false}},
+{II}{{"doctype_attribute_space", withDefaultAttribute("a >b"), withDefaultAttribute("a>b"), false}},
+{II}{{"doctype_spacing", `<!DOCTYPE v  ><v/>`, `<!DOCTYPE v><v/>`, false}},
 {II}{{"instruction_data", `<v><?p x > y?></v>`, `<v><?p x> y?></v>`, false}},
 {II}{{"instruction_markup", `<v><?p <a></a>?></v>`, `<v><?p <a/>?></v>`, false}},
 {II}{{"instruction_cr", "<v><?p x\\ry?></v>", `<v><?p xy?></v>`, false}},
