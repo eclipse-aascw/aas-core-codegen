@@ -433,7 +433,7 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
 
         if errors is not None:
             run.write_error_report(
-                message=f"Failed to generate {rel_path} "
+                message=f"Failed to generate {rel_path.as_posix()} "
                 f"based on {context.model_path}",
                 errors=[
                     context.lineno_columner.error_message(error) for error in errors
