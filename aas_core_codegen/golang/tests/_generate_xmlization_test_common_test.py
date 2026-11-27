@@ -97,6 +97,9 @@ def _generate_whitespace_round_trip_test(
                 prefix += element
         prefix_literal = golang_common.string_literal(prefix)
         suffix_literal = golang_common.string_literal(suffix)
+        self_closing_string = golang_common.string_literal(
+            prefix.removesuffix(">") + "/>" + suffix.removeprefix(f"</{prop.xml_name}>")
+        )
         getter = golang_naming.getter_name(prop.name)
         empty_container = golang_common.string_literal(
             f'<{local} xmlns="{namespace}"/>'
@@ -107,7 +110,12 @@ def _generate_whitespace_round_trip_test(
         return Stripped(
             f"""\
 func TestWhitespaceStringRoundTrip(t *testing.T) {{
-{I}canonicalByValue := make(map[string]xmlComparison)
+{I}// Compare the paired spelling and whitespace values against a self-closing string.
+{I}selfClosing, err := canonicalizeXmlForComparison({self_closing_string})
+{I}if err != nil {{
+{II}t.Fatal(err)
+{I}}}
+{I}canonicalByValue := map[string]xmlComparison{{"": selfClosing}}
 {I}for _, c := range []struct {{
 {II}name string
 {II}xml  string
@@ -576,63 +584,6 @@ func assertNoSerializationError(
         ),
         Stripped(
             """\
-// NOTE (mristin):
-// Currently, Go does not support self-closing tags,
-// see: https://github.com/golang/go/issues/21399.
-// We apply the following hack to make the tags self-closing even if they are not.
-// This is unsafe in general, but works OK for the limited set of test data that we are
-// here dealing with.
-//
-// The code has been taken from: https://github.com/golang/go/issues/21399#issuecomment-1342730174"""
-        ),
-        Stripped(
-            """\
-// NOTE (mristin):
-// The opening tag, tag name plus an optional attribute list (*e.g.*,
-// ``xmlns="..."`` on a root element), is captured in the first (and only)
-// submatch group so that we do not lose any attributes when we force
-// the tag to be self-closing below. The attribute list must not end with
-// a slash, as we would otherwise match an already self-closing tag followed
-// by the closing tag of its parent, *e.g.*, ``<someBytes /></something>``.
-var emptyTagRe = regexp.MustCompile(`<(\\w+(?:\\s[^>]*[^/>])?)></\\w+>`)"""
-        ),
-        Stripped(
-            f"""\
-func forceSelfClosingTags(text string) string {{
-{I}b := []byte(text)
-{I}emptyTagIdxs := emptyTagRe.FindAllSubmatchIndex(b, -1)
-
-{I}if len(emptyTagIdxs) == 0 {{
-{II}return text
-{I}}}
-
-{I}// NOTE (mristin):
-{I}// The matches are walked in order, and the pieces of `b` between them are
-{I}// copied over as they are. Mind that `nb` starts out empty and that `b` is
-{I}// only ever *read*: an earlier version appended into `b[0:idx[0]]`, which
-{I}// writes into `b`'s own backing array, so a document with more than one
-{I}// empty tag came out garbled -- every turn of the loop then indexed into
-{I}// a `b` which the previous turn had already overwritten.
-{I}var nb []byte
-{I}previous := 0
-
-{I}for _, idx := range emptyTagIdxs {{
-{II}// Copy everything since the previous match, then the tag itself --
-{II}// its name and its attributes -- as a self-closing one.
-{II}nb = append(nb, b[previous:idx[0]]...)
-{II}nb = append(nb, fmt.Sprintf("<%s/>", b[idx[2]:idx[3]])...)
-
-{II}previous = idx[1]
-{I}}}
-
-{I}// Finally, copy everything after the last match.
-{I}nb = append(nb, b[previous:]...)
-
-{I}return string(nb)
-}}"""
-        ),
-        Stripped(
-            """\
 var whitespaceBetweenTagsRe = regexp.MustCompile(`>\\s+<`)"""
         ),
         Stripped(
@@ -885,6 +836,8 @@ func canonicalizeXmlForComparison(text string) (xmlComparison, error) {{
 {II}return marker
 {I}}}
 {I}var protected bytes.Buffer
+{I}// Track the buffered end of a start tag followed only by formatting whitespace.
+{I}openingTagEnd := 0
 {I}decoder := xml.NewDecoder(strings.NewReader(text))
 {I}for {{
 {II}start := decoder.InputOffset()
@@ -898,6 +851,7 @@ func canonicalizeXmlForComparison(text string) (xmlComparison, error) {{
 {II}original := text[start:decoder.InputOffset()]
 {II}switch token.(type) {{
 {II}case xml.Comment, xml.ProcInst, xml.Directive:
+{III}openingTagEnd = 0
 {III}protected.WriteString(protectLiteral(original, true))
 {II}case xml.StartElement:
 {III}// Quoted attribute values can contain '>' and the other quote character.
@@ -922,14 +876,30 @@ func canonicalizeXmlForComparison(text string) (xmlComparison, error) {{
 {IIII}i = end
 {III}}}
 {III}protected.WriteString(original[cursor:])
+{III}openingTagEnd = protected.Len()
+{II}case xml.CharData:
+{III}// Check the source spelling so whitespace references and CDATA still count.
+{III}if strings.Trim(original, " \\t\\r\\n") != "" {{
+{IIII}openingTagEnd = 0
+{III}}}
+{III}protected.WriteString(original)
+{II}case xml.EndElement:
+{III}// An already self-closing tag produces an end token without source bytes.
+{III}if openingTagEnd > 0 && original != "" {{
+{IIII}protected.Truncate(openingTagEnd - 1)
+{IIII}protected.WriteString("/>")
+{III}}} else {{
+{IIII}protected.WriteString(original)
+{III}}}
+{III}openingTagEnd = 0
 {II}default:
+{III}openingTagEnd = 0
 {III}protected.WriteString(original)
 {II}}}
 {I}}}
 {I}text = protected.String()
 {I}text = strings.ReplaceAll(text, "\\r", "")
 {I}text = removeWhitespaceBetweenTags(text)
-{I}text = forceSelfClosingTags(text)
 {I}text = removeWhitespaceWithinTags(text)
 {I}if len(replacements) > 0 {{
 {II}text = strings.NewReplacer(replacements...).Replace(text)
@@ -950,6 +920,26 @@ func TestXmlComparisonPreservesText(t *testing.T) {{
 {II}actual   string
 {II}equal    bool
 {I}}}{{
+{II}{{"empty_prefixed", `<p:v xmlns:p="urn:test"></p:v>`, `<p:v xmlns:p="urn:test"/>`, true}},
+{II}{{"empty_tag_space", `<v ></v>`, `<v/>`, true}},
+{II}{{"empty_indented", "<v>\\n\\t</v>", `<v/>`, true}},
+{II}{{"empty_siblings", `<root><v></v><v /><v ></v></root>`, `<root><v/><v/><v/></root>`, true}},
+{II}{{
+{III}"empty_prefixed_attribute",
+{III}`<p:v xmlns:p="urn:test" label="a >b"></p:v>`,
+{III}`<p:v xmlns:p="urn:test" label="a >b"/>`, true,
+{II}}},
+{II}{{
+{III}"empty_prefixed_changed_attribute",
+{III}`<p:v xmlns:p="urn:test" label="a >b"></p:v>`,
+{III}`<p:v xmlns:p="urn:test" label="a>b"/>`, false,
+{II}}},
+{II}{{"empty_vs_text", `<v>x</v>`, `<v/>`, false}},
+{II}{{"empty_vs_reference", `<v>&#32;</v>`, `<v/>`, false}},
+{II}{{"empty_vs_cdata_space", `<v><![CDATA[ ]]></v>`, `<v/>`, false}},
+{II}{{"empty_vs_comment", `<v><!--note--></v>`, `<v/>`, false}},
+{II}{{"empty_vs_instruction", `<v><?p note?></v>`, `<v/>`, false}},
+{II}{{"empty_vs_child", `<v><child/></v>`, `<v/>`, false}},
 {II}{{"equivalent_escaping", `<v>x ></v>`, `<v>x &gt;</v>`, true}},
 {II}{{"lost_space", `<v>x ></v>`, `<v>x&gt;</v>`, false}},
 {II}{{"numeric_reference", `<v>x ></v>`, `<v>x &#62;</v>`, true}},

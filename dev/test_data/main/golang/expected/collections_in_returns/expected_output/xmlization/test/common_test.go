@@ -60,57 +60,6 @@ func assertNoSerializationError(
 	return
 }
 
-// NOTE (mristin):
-// Currently, Go does not support self-closing tags,
-// see: https://github.com/golang/go/issues/21399.
-// We apply the following hack to make the tags self-closing even if they are not.
-// This is unsafe in general, but works OK for the limited set of test data that we are
-// here dealing with.
-//
-// The code has been taken from: https://github.com/golang/go/issues/21399#issuecomment-1342730174
-
-// NOTE (mristin):
-// The opening tag, tag name plus an optional attribute list (*e.g.*,
-// ``xmlns="..."`` on a root element), is captured in the first (and only)
-// submatch group so that we do not lose any attributes when we force
-// the tag to be self-closing below. The attribute list must not end with
-// a slash, as we would otherwise match an already self-closing tag followed
-// by the closing tag of its parent, *e.g.*, ``<someBytes /></something>``.
-var emptyTagRe = regexp.MustCompile(`<(\w+(?:\s[^>]*[^/>])?)></\w+>`)
-
-func forceSelfClosingTags(text string) string {
-	b := []byte(text)
-	emptyTagIdxs := emptyTagRe.FindAllSubmatchIndex(b, -1)
-
-	if len(emptyTagIdxs) == 0 {
-		return text
-	}
-
-	// NOTE (mristin):
-	// The matches are walked in order, and the pieces of `b` between them are
-	// copied over as they are. Mind that `nb` starts out empty and that `b` is
-	// only ever *read*: an earlier version appended into `b[0:idx[0]]`, which
-	// writes into `b`'s own backing array, so a document with more than one
-	// empty tag came out garbled -- every turn of the loop then indexed into
-	// a `b` which the previous turn had already overwritten.
-	var nb []byte
-	previous := 0
-
-	for _, idx := range emptyTagIdxs {
-		// Copy everything since the previous match, then the tag itself --
-		// its name and its attributes -- as a self-closing one.
-		nb = append(nb, b[previous:idx[0]]...)
-		nb = append(nb, fmt.Sprintf("<%s/>", b[idx[2]:idx[3]])...)
-
-		previous = idx[1]
-	}
-
-	// Finally, copy everything after the last match.
-	nb = append(nb, b[previous:]...)
-
-	return string(nb)
-}
-
 var whitespaceBetweenTagsRe = regexp.MustCompile(`>\s+<`)
 
 // Remove all whitespace (including newlines, tabs, and spaces) between XML tags
@@ -399,6 +348,8 @@ func canonicalizeXmlForComparison(text string) (xmlComparison, error) {
 		return marker
 	}
 	var protected bytes.Buffer
+	// Track the buffered end of a start tag followed only by formatting whitespace.
+	openingTagEnd := 0
 	decoder := xml.NewDecoder(strings.NewReader(text))
 	for {
 		start := decoder.InputOffset()
@@ -412,6 +363,7 @@ func canonicalizeXmlForComparison(text string) (xmlComparison, error) {
 		original := text[start:decoder.InputOffset()]
 		switch token.(type) {
 		case xml.Comment, xml.ProcInst, xml.Directive:
+			openingTagEnd = 0
 			protected.WriteString(protectLiteral(original, true))
 		case xml.StartElement:
 			// Quoted attribute values can contain '>' and the other quote character.
@@ -436,14 +388,30 @@ func canonicalizeXmlForComparison(text string) (xmlComparison, error) {
 				i = end
 			}
 			protected.WriteString(original[cursor:])
+			openingTagEnd = protected.Len()
+		case xml.CharData:
+			// Check the source spelling so whitespace references and CDATA still count.
+			if strings.Trim(original, " \t\r\n") != "" {
+				openingTagEnd = 0
+			}
+			protected.WriteString(original)
+		case xml.EndElement:
+			// An already self-closing tag produces an end token without source bytes.
+			if openingTagEnd > 0 && original != "" {
+				protected.Truncate(openingTagEnd - 1)
+				protected.WriteString("/>")
+			} else {
+				protected.WriteString(original)
+			}
+			openingTagEnd = 0
 		default:
+			openingTagEnd = 0
 			protected.WriteString(original)
 		}
 	}
 	text = protected.String()
 	text = strings.ReplaceAll(text, "\r", "")
 	text = removeWhitespaceBetweenTags(text)
-	text = forceSelfClosingTags(text)
 	text = removeWhitespaceWithinTags(text)
 	if len(replacements) > 0 {
 		text = strings.NewReplacer(replacements...).Replace(text)
@@ -462,6 +430,26 @@ func TestXmlComparisonPreservesText(t *testing.T) {
 		actual   string
 		equal    bool
 	}{
+		{"empty_prefixed", `<p:v xmlns:p="urn:test"></p:v>`, `<p:v xmlns:p="urn:test"/>`, true},
+		{"empty_tag_space", `<v ></v>`, `<v/>`, true},
+		{"empty_indented", "<v>\n\t</v>", `<v/>`, true},
+		{"empty_siblings", `<root><v></v><v /><v ></v></root>`, `<root><v/><v/><v/></root>`, true},
+		{
+			"empty_prefixed_attribute",
+			`<p:v xmlns:p="urn:test" label="a >b"></p:v>`,
+			`<p:v xmlns:p="urn:test" label="a >b"/>`, true,
+		},
+		{
+			"empty_prefixed_changed_attribute",
+			`<p:v xmlns:p="urn:test" label="a >b"></p:v>`,
+			`<p:v xmlns:p="urn:test" label="a>b"/>`, false,
+		},
+		{"empty_vs_text", `<v>x</v>`, `<v/>`, false},
+		{"empty_vs_reference", `<v>&#32;</v>`, `<v/>`, false},
+		{"empty_vs_cdata_space", `<v><![CDATA[ ]]></v>`, `<v/>`, false},
+		{"empty_vs_comment", `<v><!--note--></v>`, `<v/>`, false},
+		{"empty_vs_instruction", `<v><?p note?></v>`, `<v/>`, false},
+		{"empty_vs_child", `<v><child/></v>`, `<v/>`, false},
 		{"equivalent_escaping", `<v>x ></v>`, `<v>x &gt;</v>`, true},
 		{"lost_space", `<v>x ></v>`, `<v>x&gt;</v>`, false},
 		{"numeric_reference", `<v>x ></v>`, `<v>x &#62;</v>`, true},
